@@ -1,0 +1,54 @@
+{
+  "name": "@grepmind/agent",
+  "version": "0.1.0-alpha.1",
+  "description": "Local branch-aware agent runtime backed by PGlite",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "grepmind-agent": "dist/index.js"
+  },
+  "exports": {
+    ".": {
+      "import": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist/*.js",
+    "README.md",
+    "LICENSE"
+  ],
+  "license": "Apache-2.0",
+  "author": "Zaytra",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zaytra-labs/grepmind.git"
+  },
+  "homepage": "https://github.com/zaytra-labs/grepmind#readme",
+  "bugs": {
+    "url": "https://github.com/zaytra-labs/grepmind/issues"
+  },
+  "scripts": {
+    "build": "node build.mjs",
+    "build:publish": "node build.mjs",
+    "release": "node ../../tools/release-package.mjs --workspace @grepmind/agent",
+    "release:dry-run": "node ../../tools/release-package.mjs --workspace @grepmind/agent --dry-run",
+    "dev": "tsc -p tsconfig.json --watch",
+    "start": "node dist/index.js",
+    "dev:cli": "tsx src/cli.ts",
+    "build:migrations": "node ./scripts/generate-embedded-migrations.mjs",
+    "db:generate": "node --require tsx/cjs ../../node_modules/drizzle-kit/bin.cjs generate",
+    "db:migrate": "node --require tsx/cjs ../../node_modules/drizzle-kit/bin.cjs migrate",
+    "clean": "rm -rf dist .build"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "^0.3.8",
+    "drizzle-orm": "^0.38.0"
+  },
+  "devDependencies": {
+    "drizzle-kit": "^0.30.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "name": "grepmind",
+  "version": "0.1.0-alpha.0",
+  "description": "Grepmind command-line utility",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "grepmind": "./dist/index.js"
+  },
+  "exports": {
+    ".": {
+      "import": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist/*.js",
+    "README.md",
+    "LICENSE"
+  ],
+  "license": "Apache-2.0",
+  "author": "Zaytra",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zaytra-labs/grepmind.git"
+  },
+  "homepage": "https://github.com/zaytra-labs/grepmind#readme",
+  "bugs": {
+    "url": "https://github.com/zaytra-labs/grepmind/issues"
+  },
+  "scripts": {
+    "build": "node build.mjs",
+    "build:publish": "node build.mjs",
+    "release": "node ../../tools/release-package.mjs --workspace grepmind",
+    "release:dry-run": "node ../../tools/release-package.mjs --workspace grepmind --dry-run"
+  },
+  "dependencies": {
+    "@grepmind/agent": "0.1.0-alpha.1"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
