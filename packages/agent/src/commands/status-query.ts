@@ -1,4 +1,8 @@
-import type { SearchTarget } from '../backend/contracts/index.js';
+import type {
+  AgentStatusQuery,
+  AgentStatusSnapshot,
+  SearchTarget,
+} from '@grepmind/agent-rpc';
 import type { AgentDb } from '../db/schema.js';
 
 interface StatusAttachmentRow {
@@ -32,52 +36,6 @@ interface StatusMaterializationRow {
   artifact_schema_version: number | string;
   status: string;
   materialized_at: string;
-}
-
-export interface AgentStatusQuery {
-  bindingId?: number;
-  branch?: string;
-  commitSha?: string;
-  limit?: number;
-}
-
-export interface AgentStatusSnapshot {
-  filters: {
-    bindingId: number | null;
-    branch: string | null;
-    commitSha: string | null;
-    limit: number;
-  };
-  attachments: Array<{
-    bindingId: number;
-    attachmentId: number;
-    revisionId: number;
-    branch: string;
-    visibility: 'canonical' | 'binding_private';
-    ownerBindingId: number | null;
-    sourceKind: 'remote_branch' | 'agent_snapshot';
-    commitSha: string;
-    filesSynced: boolean;
-  }>;
-  payloads: Array<{
-    bindingId: number;
-    revisionId: number;
-    commitSha: string;
-    ingestedAt: string;
-    fileCount: number;
-    totalBytes: number;
-    needsFilesSync: boolean;
-  }>;
-  materializations: Array<{
-    bindingId: number;
-    revisionId: number;
-    branch: string;
-    target: SearchTarget;
-    profileVersion: number;
-    artifactSchemaVersion: number;
-    status: string;
-    materializedAt: string;
-  }>;
 }
 
 export async function loadAgentStatusSnapshot(

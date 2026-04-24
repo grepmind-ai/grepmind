@@ -80,7 +80,7 @@ export async function stopCommand(args: ParsedArgs): Promise<void> {
   const client = new AgentRuntimeClient(config.dataDir);
 
   try {
-    await client.request('shutdown', {
+    await client.shutdown({
       idempotencyKey: randomUUID(),
     });
   } catch (error) {

@@ -42,6 +42,7 @@
     "clean": "rm -rf dist .build"
   },
   "dependencies": {
+    "@grepmind/agent-rpc": "0.1.0-alpha.0",
     "@electric-sql/pglite": "^0.3.8",
     "drizzle-orm": "^0.38.0"
   },

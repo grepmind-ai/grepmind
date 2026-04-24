@@ -1,36 +1,21 @@
-import type { SearchTarget } from '../backend/contracts/index.js';
+import type {
+  AgentStatusQuery,
+  AgentStatusSnapshot,
+  CleanProjectCommandResult,
+  ListProjectsCommandResult,
+  RegisterProjectCommandResult,
+  SearchTarget,
+  SyncProjectCommandResult,
+} from '@grepmind/agent-rpc';
 import type { AgentRuntime } from '../runtime/agent-runtime.js';
-import type { LocalProjectRecord, LocalProjectSnapshot } from '../db/schema.js';
-import type { SyncProjectResult } from '../services/project-sync-service.js';
 import type { RegisterLocalProjectInput } from '../services/project-registry-service.js';
-import {
-  loadAgentStatusSnapshot,
-  type AgentStatusQuery,
-  type AgentStatusSnapshot,
-} from './status-query.js';
+import { loadAgentStatusSnapshot } from './status-query.js';
 
-export type { AgentStatusQuery, AgentStatusSnapshot } from './status-query.js';
-
-export interface RegisterProjectCommandResult {
-  snapshot: LocalProjectSnapshot;
-  projectionVersion: number;
-}
-
-export interface ListProjectsCommandResult {
-  items: LocalProjectRecord[];
-}
+export type { AgentStatusQuery, AgentStatusSnapshot } from '@grepmind/agent-rpc';
 
 export interface SyncProjectCommandInput {
   bindingId?: number;
   targets?: SearchTarget[];
-}
-
-export interface SyncProjectCommandResult {
-  results: SyncProjectResult[];
-}
-
-export interface CleanProjectCommandResult {
-  project: LocalProjectRecord;
 }
 
 export class AgentCommandExecutor {

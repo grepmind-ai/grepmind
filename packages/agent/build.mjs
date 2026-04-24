@@ -10,6 +10,7 @@ const require = createRequire(import.meta.url);
 const packageDir = path.dirname(fileURLToPath(import.meta.url));
 const distDir = path.join(packageDir, 'dist');
 const tscBin = require.resolve('typescript/bin/tsc');
+const agentRpcEntry = path.join(packageDir, '../agent-rpc/src/index.ts');
 
 console.log('Cleaning build output...');
 rmSync(distDir, { recursive: true, force: true });
@@ -41,6 +42,16 @@ await esbuild.build({
   legalComments: 'none',
   minifyWhitespace: true,
   logLevel: 'info',
+  plugins: [
+    {
+      name: 'agent-rpc-workspace',
+      setup(build) {
+        build.onResolve({ filter: /^@grepmind\/agent-rpc$/ }, () => ({
+          path: agentRpcEntry,
+        }));
+      },
+    },
+  ],
   external: [
     '@electric-sql/pglite',
     '@electric-sql/pglite/vector',

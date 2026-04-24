@@ -14,7 +14,7 @@ import type { ParsedArgs } from '../parse-args.js';
 
 export async function stateCommand(args: ParsedArgs): Promise<void> {
   const result = await executeSocketPreferredCommand(args, {
-    rpc: (client) => client.request('status', {
+    rpc: (client) => client.status({
       bindingId: getIntegerFlag(args, 'binding-id'),
       branch: getStringFlag(args, 'branch'),
       commitSha: getStringFlag(args, 'commit-sha'),
@@ -38,7 +38,7 @@ export async function searchHeadCommand(args: ParsedArgs): Promise<void> {
   const rerank = hasBooleanFlag(args, 'no-rerank') ? false : undefined;
 
   const result = await executeSocketPreferredCommand(args, {
-    rpc: (client) => client.request('searchHead', {
+    rpc: (client) => client.searchHead({
       bindingId,
       workspacePath,
       query,

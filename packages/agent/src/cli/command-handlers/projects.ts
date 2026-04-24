@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
-import type { LocalProjectRecord } from '../../db/schema.js';
+import type { LocalProjectRecord } from '@grepmind/agent-rpc';
 import { createAgentConsole } from '../cli-context.js';
 import {
   executeSocketPreferredCommand,
@@ -28,7 +28,7 @@ export async function registerCommand(args: ParsedArgs): Promise<void> {
   const requestId = randomUUID();
 
   const result = await executeSocketPreferredCommand(args, {
-    rpc: (client) => client.request('registerProject', {
+    rpc: (client) => client.registerProject({
       remoteFingerprint,
       displayName,
       workspacePath,
@@ -47,7 +47,7 @@ export async function registerCommand(args: ParsedArgs): Promise<void> {
 export async function listProjectsCommand(args: ParsedArgs): Promise<void> {
   const agentConsole = createAgentConsole(args);
   const result = await executeSocketPreferredCommand(args, {
-    rpc: (client) => client.request('listProjects', undefined),
+    rpc: (client) => client.listProjects(),
   });
 
   if (result.items.length === 0) {
@@ -69,7 +69,7 @@ export async function removeProjectCommand(args: ParsedArgs): Promise<void> {
   const requestId = randomUUID();
 
   await executeSocketPreferredCommand(args, {
-    rpc: (client) => client.request('unbindProject', {
+    rpc: (client) => client.unbindProject({
       bindingId,
       idempotencyKey: requestId,
     }),
@@ -82,7 +82,7 @@ export async function cleanProjectCommand(args: ParsedArgs): Promise<void> {
   const agentConsole = createAgentConsole(args);
   const targets = await executeSocketPreferredCommand(args, {
     rpc: async (client) => {
-      const projects = await client.request('listProjects', undefined);
+      const projects = await client.listProjects();
       return resolveProjectsForClean(args, projects.items);
     },
   });
@@ -98,7 +98,7 @@ export async function cleanProjectCommand(args: ParsedArgs): Promise<void> {
       const cleaned: LocalProjectRecord[] = [];
 
       for (const target of targets) {
-        const result = await client.request('cleanProject', {
+        const result = await client.cleanProject({
           bindingId: target.bindingId,
           idempotencyKey: randomUUID(),
         });
