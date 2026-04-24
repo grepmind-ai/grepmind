@@ -28,7 +28,7 @@
     "url": "https://github.com/zaytra-labs/grepmind/issues"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "rm -rf dist tsconfig.tsbuildinfo && tsc -p tsconfig.json && node scripts/bundle-declarations.mjs",
     "release": "node ../../tools/release-package.mjs --workspace @grepmind/agent-rpc",
     "release:dry-run": "node ../../tools/release-package.mjs --workspace @grepmind/agent-rpc --dry-run",
     "clean": "rm -rf dist"
