@@ -21,6 +21,9 @@
     "LICENSE"
   ],
   "license": "Apache-2.0",
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "node ../../tools/build-package.mjs",
     "lint": "oxlint --deny-warnings src",

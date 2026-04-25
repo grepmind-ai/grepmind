@@ -18,6 +18,9 @@
     "LICENSE"
   ],
   "license": "Apache-2.0",
+  "publishConfig": {
+    "access": "public"
+  },
   "author": "Zaytra",
   "repository": {
     "type": "git",
