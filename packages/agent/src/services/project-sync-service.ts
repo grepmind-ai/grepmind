@@ -3,7 +3,6 @@ import type {
   InvalidationHint,
   MaterializationPlan,
   RevisionTombstone,
-  SearchTarget,
 } from '../backend/contracts/index.js';
 import type { AgentDb } from '../db/schema.js';
 import { ArtifactImportService } from './artifact-import-service.js';
@@ -25,10 +24,16 @@ import {
   markSyncErrored,
   markSyncStarted,
 } from './project-sync/sync-state.js';
-import type { SyncProjectOptions, SyncProjectResult } from './project-sync/types.js';
+import type {
+  SyncProjectOptions,
+  SyncProjectResult,
+} from './project-sync/types.js';
 import { ProjectRegistryService } from './project-registry-service.js';
 
-export type { SyncProjectOptions, SyncProjectResult } from './project-sync/types.js';
+export type {
+  SyncProjectOptions,
+  SyncProjectResult,
+} from './project-sync/types.js';
 
 export class ProjectSyncService {
   private readonly artifactImportService: ArtifactImportService;
@@ -103,17 +108,20 @@ export class ProjectSyncService {
         cursor = page.nextCursor;
       } while (cursor);
 
-      await applyInvalidations(
-        this.artifactImportService,
+      await applyInvalidations(this.artifactImportService, bindingId, [
+        ...invalidations.values(),
+      ]);
+      await applyStaleRevisions(this.db, bindingId, [
+        ...staleAttachments.values(),
+      ]);
+      await clearCompletedAttachmentState(
+        this.db,
         bindingId,
-        [...invalidations.values()],
+        completedAttachmentIds,
       );
-      await applyStaleRevisions(this.db, bindingId, [...staleAttachments.values()]);
-      await clearCompletedAttachmentState(this.db, bindingId, completedAttachmentIds);
-      await this.artifactImportService.materializePlans(
-        bindingId,
-        [...materializationPlans.values()],
-      );
+      await this.artifactImportService.materializePlans(bindingId, [
+        ...materializationPlans.values(),
+      ]);
 
       const completedAt = new Date().toISOString();
       await markSyncCompleted(this.db, bindingId, completedAt);
@@ -126,13 +134,16 @@ export class ProjectSyncService {
         syncedAt: completedAt,
       };
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown sync error';
+      const message =
+        error instanceof Error ? error.message : 'Unknown sync error';
       await markSyncErrored(this.db, bindingId, message);
       throw error;
     }
   }
 
-  async syncAllProjects(options: SyncProjectOptions = {}): Promise<SyncProjectResult[]> {
+  async syncAllProjects(
+    options: SyncProjectOptions = {},
+  ): Promise<SyncProjectResult[]> {
     const projects = await this.projectRegistry.listProjects();
     const results: SyncProjectResult[] = [];
     for (const project of projects) {

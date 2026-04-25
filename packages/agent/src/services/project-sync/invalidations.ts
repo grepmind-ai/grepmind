@@ -1,4 +1,7 @@
-import type { InvalidationHint, RevisionTombstone } from '../../backend/contracts/index.js';
+import type {
+  InvalidationHint,
+  RevisionTombstone,
+} from '../../backend/contracts/index.js';
 import type { AgentDb } from '../../db/schema.js';
 import { ArtifactImportService } from '../artifact-import-service.js';
 

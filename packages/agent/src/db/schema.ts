@@ -1,5 +1,8 @@
 import type { PGlite } from '@electric-sql/pglite';
-import type { BranchDescriptor, EmbeddingProfileDescriptor } from '../backend/contracts/index.js';
+import type {
+  BranchDescriptor,
+  EmbeddingProfileDescriptor,
+} from '../backend/contracts/index.js';
 
 export type AgentDb = PGlite;
 

@@ -73,7 +73,9 @@ export async function searchCode(params: {
   tags?: string[];
 }): Promise<SearchResponse> {
   if (params.mode !== 'semantic') {
-    throw new Error('Local agent MCP search supports semantic mode only. Use code_search.');
+    throw new Error(
+      'Local agent MCP search supports semantic mode only. Use code_search.',
+    );
   }
 
   try {
@@ -131,16 +133,25 @@ function toSearchResult(item: SearchResultItem): SearchResult {
   };
 }
 
-function matchesPathFilter(item: SearchResultItem, pathFilter: string | undefined): boolean {
+function matchesPathFilter(
+  item: SearchResultItem,
+  pathFilter: string | undefined,
+): boolean {
   const normalized = pathFilter?.trim().replace(/^\/+/, '');
   if (!normalized) {
     return true;
   }
 
-  return item.relativePath === normalized || item.relativePath.startsWith(`${normalized}/`);
+  return (
+    item.relativePath === normalized ||
+    item.relativePath.startsWith(`${normalized}/`)
+  );
 }
 
-function matchesTagsFilter(item: SearchResultItem, tagsFilter: string[] | undefined): boolean {
+function matchesTagsFilter(
+  item: SearchResultItem,
+  tagsFilter: string[] | undefined,
+): boolean {
   const normalized = normalizeTags(tagsFilter);
   if (normalized.length === 0) {
     return true;
@@ -155,22 +166,27 @@ function normalizeTags(tags: string[] | undefined): string[] {
     return [];
   }
 
-  return [...new Set(
-    tags
-      .map((tag) => tag.trim().toLowerCase())
-      .filter((tag) => tag.length > 0),
-  )];
+  return [
+    ...new Set(
+      tags
+        .map((tag) => tag.trim().toLowerCase())
+        .filter((tag) => tag.length > 0),
+    ),
+  ];
 }
 
-function normalizeAgentSearchError(error: unknown, workspacePath: string): Error {
+function normalizeAgentSearchError(
+  error: unknown,
+  workspacePath: string,
+): Error {
   const resolvedWorkspacePath = path.resolve(workspacePath);
 
   if (isRuntimeUnavailableError(error)) {
     const dataDir = getAgentDataDir();
     return new Error(
-      `Local Grepmind agent runtime is not running for ${dataDir}. `
-      + `Start it with "grepmind agent run --data-dir ${dataDir}" and retry. `
-      + 'If this workspace is not registered yet, register it with "grepmind agent register --workspace <path>".',
+      `Local Grepmind agent runtime is not running for ${dataDir}. ` +
+        `Start it with "grepmind agent run --data-dir ${dataDir}" and retry. ` +
+        'If this workspace is not registered yet, register it with "grepmind agent register --workspace <path>".',
     );
   }
 

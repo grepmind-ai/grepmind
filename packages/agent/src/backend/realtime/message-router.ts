@@ -29,26 +29,33 @@ export interface RealtimeMessageRouterInput {
   rejectPendingSearchRun(error: SearchErrorPayload): void;
 }
 
-export async function routeRealtimeMessage(input: RealtimeMessageRouterInput): Promise<void> {
+export async function routeRealtimeMessage(
+  input: RealtimeMessageRouterInput,
+): Promise<void> {
   const payload = parseMessageData(input.rawData);
   if (!payload) {
     return;
   }
 
   try {
-    const message = JSON.parse(payload) as { type?: unknown; data?: Record<string, unknown> };
+    const message = JSON.parse(payload) as {
+      type?: unknown;
+      data?: Record<string, unknown>;
+    };
     switch (message.type) {
       case 'hello.ack': {
-        const heartbeatMs = typeof message.data?.heartbeatMs === 'number'
-          ? message.data.heartbeatMs
-          : input.currentHeartbeatMs;
+        const heartbeatMs =
+          typeof message.data?.heartbeatMs === 'number'
+            ? message.data.heartbeatMs
+            : input.currentHeartbeatMs;
         input.startHeartbeat(heartbeatMs);
         return;
       }
       case 'control.stop_requested': {
-        const commandId = typeof message.data?.commandId === 'string'
-          ? message.data.commandId
-          : null;
+        const commandId =
+          typeof message.data?.commandId === 'string'
+            ? message.data.commandId
+            : null;
         if (!commandId) {
           return;
         }
@@ -65,12 +72,18 @@ export async function routeRealtimeMessage(input: RealtimeMessageRouterInput): P
       case 'search.index.request': {
         const normalized = normalizeSearchIndexRequestPayload(message.data);
         if (!normalized.ok) {
-          input.logger.error('runtime', `Invalid search.index.request payload: ${normalized.error}`);
+          input.logger.error(
+            'runtime',
+            `Invalid search.index.request payload: ${normalized.error}`,
+          );
           input.ws?.close(4002, 'Invalid search.index.request payload');
           return;
         }
         if (!input.onIndexSearchRequested) {
-          input.logger.error('runtime', 'search.index.request received without a local search handler');
+          input.logger.error(
+            'runtime',
+            'search.index.request received without a local search handler',
+          );
           input.ws?.close(1011, 'search.index.request handler is unavailable');
           return;
         }
@@ -82,7 +95,11 @@ export async function routeRealtimeMessage(input: RealtimeMessageRouterInput): P
             items,
           });
         } catch (error) {
-          input.logger.error('runtime', 'Local search.index.request failed', error);
+          input.logger.error(
+            'runtime',
+            'Local search.index.request failed',
+            error,
+          );
           input.ws?.close(1011, 'Local search.index.request failed');
         }
         return;
@@ -90,7 +107,10 @@ export async function routeRealtimeMessage(input: RealtimeMessageRouterInput): P
       case 'search.run.response': {
         const normalized = normalizeSearchResponsePayload(message.data);
         if (!normalized.ok) {
-          input.logger.warn('runtime', `Ignoring invalid search.run.response payload: ${normalized.error}`);
+          input.logger.warn(
+            'runtime',
+            `Ignoring invalid search.run.response payload: ${normalized.error}`,
+          );
           return;
         }
         input.resolvePendingSearchRun(normalized.value);
@@ -99,7 +119,10 @@ export async function routeRealtimeMessage(input: RealtimeMessageRouterInput): P
       case 'search.run.error': {
         const normalized = normalizeSearchErrorPayload(message.data);
         if (!normalized.ok) {
-          input.logger.warn('runtime', `Ignoring invalid search.run.error payload: ${normalized.error}`);
+          input.logger.warn(
+            'runtime',
+            `Ignoring invalid search.run.error payload: ${normalized.error}`,
+          );
           return;
         }
         input.rejectPendingSearchRun(normalized.value);
@@ -109,6 +132,9 @@ export async function routeRealtimeMessage(input: RealtimeMessageRouterInput): P
         return;
     }
   } catch (error) {
-    input.logger.warn('runtime', `Failed to parse realtime message: ${error instanceof Error ? error.message : String(error)}`);
+    input.logger.warn(
+      'runtime',
+      `Failed to parse realtime message: ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
 }

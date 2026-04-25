@@ -1,5 +1,13 @@
 import { createHash } from 'node:crypto';
-import { chmod, mkdir, open, readFile, stat, unlink, writeFile } from 'node:fs/promises';
+import {
+  chmod,
+  mkdir,
+  open,
+  readFile,
+  stat,
+  unlink,
+  writeFile,
+} from 'node:fs/promises';
 import { createConnection } from 'node:net';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -20,7 +28,10 @@ export interface AgentRuntimeLock {
 }
 
 export function getAgentSocketPath(dataDir: string): string {
-  const socketId = createHash('sha256').update(dataDir).digest('hex').slice(0, 24);
+  const socketId = createHash('sha256')
+    .update(dataDir)
+    .digest('hex')
+    .slice(0, 24);
   return path.join(tmpdir(), AGENT_SOCKET_DIRNAME, `${socketId}.sock`);
 }
 
@@ -45,7 +56,9 @@ export async function ensurePrivateDataDir(dataDir: string): Promise<void> {
   await ensurePrivateSocketDir(dataDir);
 }
 
-export async function acquireAgentRuntimeLock(dataDir: string): Promise<AgentRuntimeLock> {
+export async function acquireAgentRuntimeLock(
+  dataDir: string,
+): Promise<AgentRuntimeLock> {
   await ensurePrivateDataDir(dataDir);
   const lockPath = getAgentLockPath(dataDir);
 
@@ -90,7 +103,9 @@ export async function acquireAgentRuntimeLock(dataDir: string): Promise<AgentRun
   }
 }
 
-export async function cleanupStaleRuntimeArtifacts(dataDir: string): Promise<void> {
+export async function cleanupStaleRuntimeArtifacts(
+  dataDir: string,
+): Promise<void> {
   const pidPath = getAgentPidPath(dataDir);
   const pid = await readPidFile(pidPath);
   if (pid != null && !isProcessAlive(pid)) {
@@ -105,27 +120,42 @@ export async function cleanupStaleRuntimeArtifacts(dataDir: string): Promise<voi
 }
 
 export async function cleanupSocketAndPidFiles(dataDir: string): Promise<void> {
-  await unlink(getAgentSocketPath(dataDir)).catch((error: NodeJS.ErrnoException) => {
-    if (error.code !== 'ENOENT') {
-      throw error;
-    }
-  });
-  await unlink(getAgentPidPath(dataDir)).catch((error: NodeJS.ErrnoException) => {
-    if (error.code !== 'ENOENT') {
-      throw error;
-    }
-  });
+  await unlink(getAgentSocketPath(dataDir)).catch(
+    (error: NodeJS.ErrnoException) => {
+      if (error.code !== 'ENOENT') {
+        throw error;
+      }
+    },
+  );
+  await unlink(getAgentPidPath(dataDir)).catch(
+    (error: NodeJS.ErrnoException) => {
+      if (error.code !== 'ENOENT') {
+        throw error;
+      }
+    },
+  );
 }
 
-export async function writeAgentPidFile(dataDir: string, pid: number): Promise<void> {
+export async function writeAgentPidFile(
+  dataDir: string,
+  pid: number,
+): Promise<void> {
   await writeSecureFile(getAgentPidPath(dataDir), `${pid}\n`);
 }
 
-export async function writeAgentMetaFile(dataDir: string, meta: AgentRuntimeMeta): Promise<void> {
-  await writeSecureFile(getAgentMetaPath(dataDir), `${JSON.stringify(meta, null, 2)}\n`);
+export async function writeAgentMetaFile(
+  dataDir: string,
+  meta: AgentRuntimeMeta,
+): Promise<void> {
+  await writeSecureFile(
+    getAgentMetaPath(dataDir),
+    `${JSON.stringify(meta, null, 2)}\n`,
+  );
 }
 
-export async function readAgentMetaFile(dataDir: string): Promise<AgentRuntimeMeta | null> {
+export async function readAgentMetaFile(
+  dataDir: string,
+): Promise<AgentRuntimeMeta | null> {
   try {
     const raw = await readFile(getAgentMetaPath(dataDir), 'utf8');
     return JSON.parse(raw) as AgentRuntimeMeta;
@@ -138,7 +168,9 @@ export async function readAgentMetaFile(dataDir: string): Promise<AgentRuntimeMe
   }
 }
 
-export async function assertSocketOwnedByCurrentUser(socketPath: string): Promise<void> {
+export async function assertSocketOwnedByCurrentUser(
+  socketPath: string,
+): Promise<void> {
   const currentUid = process.getuid?.();
   if (currentUid == null) {
     return;
@@ -146,7 +178,9 @@ export async function assertSocketOwnedByCurrentUser(socketPath: string): Promis
 
   const socketStat = await stat(socketPath);
   if (typeof socketStat.uid === 'number' && socketStat.uid !== currentUid) {
-    throw new Error(`Refusing to use socket not owned by the current user: ${socketPath}`);
+    throw new Error(
+      `Refusing to use socket not owned by the current user: ${socketPath}`,
+    );
   }
 }
 
@@ -194,7 +228,11 @@ async function probeSocket(socketPath: string): Promise<'active' | 'stale'> {
     socket.setTimeout(500, () => finish('stale'));
     socket.on('connect', () => finish('active'));
     socket.on('error', (error: NodeJS.ErrnoException) => {
-      if (error.code === 'ECONNREFUSED' || error.code === 'ENOENT' || error.code === 'EPIPE') {
+      if (
+        error.code === 'ECONNREFUSED' ||
+        error.code === 'ENOENT' ||
+        error.code === 'EPIPE'
+      ) {
         finish('stale');
         return;
       }
@@ -207,8 +245,9 @@ async function probeSocket(socketPath: string): Promise<'active' | 'stale'> {
 }
 
 async function isExistingLockStale(dataDir: string): Promise<boolean> {
-  const pid = await readPidFile(getAgentPidPath(dataDir))
-    ?? await readPidFile(getAgentLockPath(dataDir));
+  const pid =
+    (await readPidFile(getAgentPidPath(dataDir))) ??
+    (await readPidFile(getAgentLockPath(dataDir)));
 
   if (pid == null) {
     return true;
@@ -247,7 +286,10 @@ function isProcessAlive(pid: number): boolean {
   }
 }
 
-async function writeSecureFile(filePath: string, contents: string): Promise<void> {
+async function writeSecureFile(
+  filePath: string,
+  contents: string,
+): Promise<void> {
   await writeFile(filePath, contents, {
     encoding: 'utf8',
     mode: PRIVATE_FILE_MODE,

@@ -85,10 +85,9 @@ export class ArtifactImportService {
         [bindingId],
       );
     }
-    await this.db.query(
-      `DELETE FROM ${tableName} WHERE binding_id = $1`,
-      [bindingId],
-    );
+    await this.db.query(`DELETE FROM ${tableName} WHERE binding_id = $1`, [
+      bindingId,
+    ]);
     await this.db.query(
       `
       DELETE FROM project_materializations
@@ -104,7 +103,11 @@ export class ArtifactImportService {
     plan: MaterializationPlan,
   ): Promise<void> {
     if (plan.replaceRevisionId != null) {
-      await this.clearMaterialization(bindingId, plan.replaceRevisionId, plan.target);
+      await this.clearMaterialization(
+        bindingId,
+        plan.replaceRevisionId,
+        plan.target,
+      );
     }
 
     const branch = plan.branch;
@@ -115,9 +118,19 @@ export class ArtifactImportService {
       );
     }
 
-    const refs = await this.listArtifactRefs(bindingId, plan.revisionId, plan.target);
+    const refs = await this.listArtifactRefs(
+      bindingId,
+      plan.revisionId,
+      plan.target,
+    );
     if (refs.length === 0) {
-      await this.upsertMaterialization(bindingId, plan.revisionId, branch, plan.target, profile);
+      await this.upsertMaterialization(
+        bindingId,
+        plan.revisionId,
+        branch,
+        plan.target,
+        profile,
+      );
       return;
     }
 
@@ -140,7 +153,13 @@ export class ArtifactImportService {
       }
     }
 
-    await this.upsertMaterialization(bindingId, plan.revisionId, branch, plan.target, profile);
+    await this.upsertMaterialization(
+      bindingId,
+      plan.revisionId,
+      branch,
+      plan.target,
+      profile,
+    );
   }
 
   private async importItem(
@@ -173,7 +192,13 @@ export class ArtifactImportService {
               updated_at = excluded.updated_at
           `,
           [
-            buildChunkRowId(bindingId, item.target, item.revisionId, item.fileId, chunk.chunkId),
+            buildChunkRowId(
+              bindingId,
+              item.target,
+              item.revisionId,
+              item.fileId,
+              chunk.chunkId,
+            ),
             bindingId,
             item.revisionId,
             item.fileId,
@@ -188,7 +213,13 @@ export class ArtifactImportService {
     }
 
     for (const chunk of item.chunks) {
-      const rowId = buildChunkRowId(bindingId, item.target, item.revisionId, item.fileId, chunk.chunkId);
+      const rowId = buildChunkRowId(
+        bindingId,
+        item.target,
+        item.revisionId,
+        item.fileId,
+        chunk.chunkId,
+      );
       await this.db.query(
         `
         INSERT INTO docs_chunks (
@@ -478,8 +509,12 @@ function chunkArray<T>(items: T[], size: number): T[][] {
   return chunks;
 }
 
-function isArtifactBatchLimitExceeded(error: unknown): error is AgentBackendClientError {
-  return error instanceof AgentBackendClientError && error.code === 'LIMIT_EXCEEDED';
+function isArtifactBatchLimitExceeded(
+  error: unknown,
+): error is AgentBackendClientError {
+  return (
+    error instanceof AgentBackendClientError && error.code === 'LIMIT_EXCEEDED'
+  );
 }
 
 function describeArtifactRef(ref: ArtifactBatchRef): string {
@@ -490,16 +525,20 @@ function describeArtifactRef(ref: ArtifactBatchRef): string {
   return `${ref.revisionId}:${ref.fileId}`;
 }
 
-function getChunkTableName(target: SearchTarget): 'code_chunks' | 'docs_chunks' {
+function getChunkTableName(
+  target: SearchTarget,
+): 'code_chunks' | 'docs_chunks' {
   return target === 'code' ? 'code_chunks' : 'docs_chunks';
 }
 
 function normalizeTags(value: string[]): string[] {
-  return [...new Set(
-    value
-      .map((entry) => entry.trim().toLowerCase())
-      .filter((entry) => entry.length > 0),
-  )];
+  return [
+    ...new Set(
+      value
+        .map((entry) => entry.trim().toLowerCase())
+        .filter((entry) => entry.length > 0),
+    ),
+  ];
 }
 
 function toVectorLiteral(vector: number[]): string {

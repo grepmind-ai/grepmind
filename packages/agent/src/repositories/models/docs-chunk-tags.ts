@@ -13,7 +13,11 @@ export const docsChunkTags = pgTable(
   },
   (table) => [
     primaryKey({ columns: [table.rowId, table.tag] }),
-    index('docs_chunk_tags_binding_revision_tag_idx').on(table.bindingId, table.revisionId, table.tag),
+    index('docs_chunk_tags_binding_revision_tag_idx').on(
+      table.bindingId,
+      table.revisionId,
+      table.tag,
+    ),
     index('docs_chunk_tags_binding_revision_chunk_idx').on(
       table.bindingId,
       table.revisionId,

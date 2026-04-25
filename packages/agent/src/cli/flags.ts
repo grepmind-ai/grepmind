@@ -1,16 +1,26 @@
 import type { AgentCommandMode } from '../runtime/rpc/protocol.js';
 import type { ParsedArgs } from './parse-args.js';
 
-export function getStringFlag(args: ParsedArgs, name: string): string | undefined {
+export function getStringFlag(
+  args: ParsedArgs,
+  name: string,
+): string | undefined {
   const value = args.flags.get(name);
   return typeof value === 'string' ? value : undefined;
 }
 
-export function hasBooleanFlag(args: ParsedArgs | undefined, name: string): boolean {
+export function hasBooleanFlag(
+  args: ParsedArgs | undefined,
+  name: string,
+): boolean {
   return args?.flags.get(name) === true;
 }
 
-export function requireStringFlag(args: ParsedArgs, name: string, fallback?: string): string {
+export function requireStringFlag(
+  args: ParsedArgs,
+  name: string,
+  fallback?: string,
+): string {
   const value = getStringFlag(args, name) ?? fallback;
   if (!value) {
     throw new Error(`--${name} is required`);
@@ -19,12 +29,18 @@ export function requireStringFlag(args: ParsedArgs, name: string, fallback?: str
   return value;
 }
 
-export function getIntegerFlag(args: ParsedArgs, name: string): number | undefined {
+export function getIntegerFlag(
+  args: ParsedArgs,
+  name: string,
+): number | undefined {
   const value = getStringFlag(args, name);
   return toInteger(value);
 }
 
-export function getOptionalIntegerFlagStrict(args: ParsedArgs, name: string): number | undefined {
+export function getOptionalIntegerFlagStrict(
+  args: ParsedArgs,
+  name: string,
+): number | undefined {
   const value = getStringFlag(args, name);
   if (value == null) {
     return undefined;
@@ -38,7 +54,10 @@ export function getOptionalIntegerFlagStrict(args: ParsedArgs, name: string): nu
   return parsed;
 }
 
-export function getOptionalNumberFlagStrict(args: ParsedArgs, name: string): number | undefined {
+export function getOptionalNumberFlagStrict(
+  args: ParsedArgs,
+  name: string,
+): number | undefined {
   const value = getStringFlag(args, name);
   if (value == null) {
     return undefined;
@@ -46,13 +65,16 @@ export function getOptionalNumberFlagStrict(args: ParsedArgs, name: string): num
 
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) {
-    throw new Error(`--${name} must be a number`);
+    throw new TypeError(`--${name} must be a number`);
   }
 
   return parsed;
 }
 
-export function getOptionalSearchTargetFlag(args: ParsedArgs, name: string): 'code' | 'docs' | undefined {
+export function getOptionalSearchTargetFlag(
+  args: ParsedArgs,
+  name: string,
+): 'code' | 'docs' | undefined {
   const value = getStringFlag(args, name);
   if (value == null) {
     return undefined;
@@ -79,12 +101,16 @@ export function toInteger(value: string | undefined): number | undefined {
   }
 
   const parsed = Number.parseInt(value, 10);
-  return Number.isFinite(parsed) ? parsed : undefined;
+  if (!Number.isFinite(parsed)) {
+    return undefined;
+  }
+
+  return parsed;
 }
 
 export function nonEmptyString(value: string | undefined): string | undefined {
   const normalized = value?.trim();
-  return normalized ? normalized : undefined;
+  return normalized || undefined;
 }
 
 export function getCommandMode(args: ParsedArgs): AgentCommandMode {

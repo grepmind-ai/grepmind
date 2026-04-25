@@ -4,11 +4,14 @@ import { projectRevisions } from './models/project-revisions.js';
 import { projectRevisionAttachments } from './models/project-revision-attachments.js';
 import { AgentBindingTableRepository } from './table-repository.js';
 
-export type ProjectRevisionAttachmentRow = typeof projectRevisionAttachments.$inferSelect;
-export type ProjectRevisionAttachmentInsert = typeof projectRevisionAttachments.$inferInsert;
+export type ProjectRevisionAttachmentRow =
+  typeof projectRevisionAttachments.$inferSelect;
+export type ProjectRevisionAttachmentInsert =
+  typeof projectRevisionAttachments.$inferInsert;
 
-export class ProjectRevisionAttachmentRepository
-  extends AgentBindingTableRepository<typeof projectRevisionAttachments> {
+export class ProjectRevisionAttachmentRepository extends AgentBindingTableRepository<
+  typeof projectRevisionAttachments
+> {
   constructor(db: AgentDatabase) {
     super(db, projectRevisionAttachments);
   }
@@ -27,7 +30,10 @@ export class ProjectRevisionAttachmentRepository
         projectRevisions,
         and(
           eq(projectRevisions.bindingId, projectRevisionAttachments.bindingId),
-          eq(projectRevisions.revisionId, projectRevisionAttachments.revisionId),
+          eq(
+            projectRevisions.revisionId,
+            projectRevisionAttachments.revisionId,
+          ),
         ),
       )
       .where(

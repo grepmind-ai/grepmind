@@ -14,8 +14,14 @@ export const codeChunks = pgTable(
     updatedAt: text('updated_at').notNull(),
   },
   (table) => [
-    index('code_chunks_binding_revision_idx').on(table.bindingId, table.revisionId),
-    index('code_chunks_binding_profile_idx').on(table.bindingId, table.profileVersion),
+    index('code_chunks_binding_revision_idx').on(
+      table.bindingId,
+      table.revisionId,
+    ),
+    index('code_chunks_binding_profile_idx').on(
+      table.bindingId,
+      table.profileVersion,
+    ),
   ],
 );
 
@@ -32,7 +38,13 @@ export const docsChunks = pgTable(
     updatedAt: text('updated_at').notNull(),
   },
   (table) => [
-    index('docs_chunks_binding_revision_idx').on(table.bindingId, table.revisionId),
-    index('docs_chunks_binding_profile_idx').on(table.bindingId, table.profileVersion),
+    index('docs_chunks_binding_revision_idx').on(
+      table.bindingId,
+      table.revisionId,
+    ),
+    index('docs_chunks_binding_profile_idx').on(
+      table.bindingId,
+      table.profileVersion,
+    ),
   ],
 );

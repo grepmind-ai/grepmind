@@ -1,4 +1,12 @@
-import { bigint, boolean, index, pgTable, primaryKey, text, uniqueIndex } from 'drizzle-orm/pg-core';
+import {
+  bigint,
+  boolean,
+  index,
+  pgTable,
+  primaryKey,
+  text,
+  uniqueIndex,
+} from 'drizzle-orm/pg-core';
 
 export const projectBranches = pgTable(
   'project_branches',
@@ -20,7 +28,10 @@ export const projectBranches = pgTable(
   },
   (table) => [
     primaryKey({ columns: [table.bindingId, table.branch] }),
-    uniqueIndex('project_branches_binding_repo_branch_uq').on(table.bindingId, table.repoBranchId),
+    uniqueIndex('project_branches_binding_repo_branch_uq').on(
+      table.bindingId,
+      table.repoBranchId,
+    ),
     index('project_branches_binding_active_idx').on(
       table.bindingId,
       table.isActiveForUser,

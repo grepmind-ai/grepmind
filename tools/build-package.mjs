@@ -3,7 +3,10 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { build } from 'tsdown';
 
-const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const rootDir = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '..',
+);
 const packageDir = process.cwd();
 const packageJsonPath = path.join(packageDir, 'package.json');
 const packageJson = JSON.parse(await readFile(packageJsonPath, 'utf8'));
@@ -21,7 +24,9 @@ await rm(path.join(packageDir, 'tsconfig.tsbuildinfo'), { force: true });
 
 if (packageName === '@grepmind/agent') {
   const { generateAgentMigrations } = await import(
-    pathToFileURL(path.join(packageDir, 'scripts/generate-embedded-migrations.mjs'))
+    pathToFileURL(
+      path.join(packageDir, 'scripts/generate-embedded-migrations.mjs'),
+    )
   );
 
   await generateAgentMigrations();

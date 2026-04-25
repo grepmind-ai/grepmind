@@ -1,6 +1,9 @@
 import process from 'node:process';
 import type { SearchHeadRpcResult } from '../../runtime/rpc/protocol.js';
-import { executeSocketPreferredCommand, resolveWorkspacePath } from '../command-support.js';
+import {
+  executeSocketPreferredCommand,
+  resolveWorkspacePath,
+} from '../command-support.js';
 import {
   getIntegerFlag,
   getOptionalIntegerFlagStrict,
@@ -14,12 +17,13 @@ import type { ParsedArgs } from '../parse-args.js';
 
 export async function stateCommand(args: ParsedArgs): Promise<void> {
   const result = await executeSocketPreferredCommand(args, {
-    rpc: (client) => client.status({
-      bindingId: getIntegerFlag(args, 'binding-id'),
-      branch: getStringFlag(args, 'branch'),
-      commitSha: getStringFlag(args, 'commit-sha'),
-      limit: getIntegerFlag(args, 'limit') ?? 100,
-    }),
+    rpc: (client) =>
+      client.status({
+        bindingId: getIntegerFlag(args, 'binding-id'),
+        branch: getStringFlag(args, 'branch'),
+        commitSha: getStringFlag(args, 'commit-sha'),
+        limit: getIntegerFlag(args, 'limit') ?? 100,
+      }),
   });
 
   process.stdout.write(`${JSON.stringify(result)}\n`);
@@ -29,24 +33,26 @@ export async function searchHeadCommand(args: ParsedArgs): Promise<void> {
   const query = requireStringFlag(args, 'query');
   const bindingId = getOptionalIntegerFlagStrict(args, 'binding-id');
   const workspaceFlag = getStringFlag(args, 'workspace');
-  const workspacePath = bindingId == null
-    ? await resolveWorkspacePath(workspaceFlag ?? process.cwd())
-    : undefined;
+  const workspacePath =
+    bindingId == null
+      ? await resolveWorkspacePath(workspaceFlag ?? process.cwd())
+      : undefined;
   const target = getOptionalSearchTargetFlag(args, 'target');
   const limit = getOptionalIntegerFlagStrict(args, 'limit');
   const threshold = getOptionalNumberFlagStrict(args, 'threshold');
   const rerank = hasBooleanFlag(args, 'no-rerank') ? false : undefined;
 
   const result = await executeSocketPreferredCommand(args, {
-    rpc: (client) => client.searchHead({
-      bindingId,
-      workspacePath,
-      query,
-      target,
-      limit,
-      threshold,
-      rerank,
-    }),
+    rpc: (client) =>
+      client.searchHead({
+        bindingId,
+        workspacePath,
+        query,
+        target,
+        limit,
+        threshold,
+        rerank,
+      }),
   });
 
   if (hasBooleanFlag(args, 'json')) {
@@ -87,7 +93,9 @@ function formatSearchHeadTextOutput(result: SearchHeadRpcResult): string {
   return `${lines.join('\n')}\n`;
 }
 
-function formatSearchResultSymbol(result: SearchHeadRpcResult['items'][number]): string {
+function formatSearchResultSymbol(
+  result: SearchHeadRpcResult['items'][number],
+): string {
   const symbolType = result.symbol.type.trim();
   const symbolName = result.symbol.name.trim();
   if (symbolType && symbolName) {
@@ -104,7 +112,7 @@ function formatSearchResultSymbol(result: SearchHeadRpcResult['items'][number]):
 }
 
 function shortenPreview(value: string, maxLength = 140): string {
-  const normalized = value.replace(/\s+/g, ' ').trim();
+  const normalized = value.replaceAll(/\s+/g, ' ').trim();
   if (normalized.length <= maxLength) {
     return normalized;
   }

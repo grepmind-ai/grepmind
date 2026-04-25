@@ -1,4 +1,11 @@
-import { bigint, boolean, index, pgTable, primaryKey, text } from 'drizzle-orm/pg-core';
+import {
+  bigint,
+  boolean,
+  index,
+  pgTable,
+  primaryKey,
+  text,
+} from 'drizzle-orm/pg-core';
 
 export const projectAttachmentSyncState = pgTable(
   'project_attachment_sync_state',
@@ -12,7 +19,10 @@ export const projectAttachmentSyncState = pgTable(
   },
   (table) => [
     primaryKey({ columns: [table.bindingId, table.attachmentId] }),
-    index('project_attachment_sync_state_binding_updated_idx').on(table.bindingId, table.updatedAt),
+    index('project_attachment_sync_state_binding_updated_idx').on(
+      table.bindingId,
+      table.updatedAt,
+    ),
     index('project_attachment_sync_state_binding_revision_idx').on(
       table.bindingId,
       table.revisionId,

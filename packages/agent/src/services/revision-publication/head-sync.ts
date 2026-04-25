@@ -13,7 +13,9 @@ export interface SyncHeadInput {
   logger: AgentLogger;
 }
 
-export async function syncHead(input: SyncHeadInput): Promise<HeadSyncResponse> {
+export async function syncHead(
+  input: SyncHeadInput,
+): Promise<HeadSyncResponse> {
   input.logger.trace(
     'publish',
     `request bindingId=${input.bindingId} attachEpoch=${input.state.attachEpoch} branch=${input.observedHead.branch} commit=${input.observedHead.headCommitSha}`,
@@ -27,7 +29,11 @@ export async function syncHead(input: SyncHeadInput): Promise<HeadSyncResponse> 
       remoteFingerprint: input.observedHead.remoteFingerprint,
     });
   } catch (error) {
-    input.logger.error('publish', `syncHead failed for binding #${input.bindingId}`, error);
+    input.logger.error(
+      'publish',
+      `syncHead failed for binding #${input.bindingId}`,
+      error,
+    );
     throw error;
   }
 }
@@ -89,14 +95,20 @@ export function logHeadDecision(input: LogHeadDecisionInput): void {
     `response bindingId=${input.bindingId} decision=${input.response.decision} revisionId=${input.response.revisionId ?? 'none'} attachmentId=${input.response.attachmentId ?? 'none'} jobId=${input.response.jobId ?? 'none'}`,
   );
 
-  const revisionRef = formatRevisionRef(input.observedHead.branch, input.observedHead.headCommitSha);
+  const revisionRef = formatRevisionRef(
+    input.observedHead.branch,
+    input.observedHead.headCommitSha,
+  );
   switch (input.response.decision) {
     case 'queued': {
-      const sameQueuedHead = input.previousQueuedHead
-        && input.previousQueuedHead.attachEpoch === input.stateByBindingId.get(input.bindingId)?.attachEpoch
-        && input.previousQueuedHead.branch === input.observedHead.branch
-        && input.previousQueuedHead.headCommitSha === input.observedHead.headCommitSha
-        && input.previousQueuedHead.jobId === input.response.jobId;
+      const sameQueuedHead =
+        input.previousQueuedHead &&
+        input.previousQueuedHead.attachEpoch ===
+          input.stateByBindingId.get(input.bindingId)?.attachEpoch &&
+        input.previousQueuedHead.branch === input.observedHead.branch &&
+        input.previousQueuedHead.headCommitSha ===
+          input.observedHead.headCommitSha &&
+        input.previousQueuedHead.jobId === input.response.jobId;
       if (sameQueuedHead) {
         input.logger.trace(
           'publish',
@@ -114,7 +126,11 @@ export function logHeadDecision(input: LogHeadDecisionInput): void {
     case 'materialized':
       input.logger.success(
         'publish',
-        `Head materialized for ${input.projectName} (#${input.bindingId}) at ${revisionRef}${input.response.revisionId != null ? ` as revision #${input.response.revisionId}` : ''}`,
+        `Head materialized for ${input.projectName} (#${input.bindingId}) at ${revisionRef}${
+          input.response.revisionId == null
+            ? ''
+            : ` as revision #${input.response.revisionId}`
+        }`,
       );
       return;
     case 'stale_rejected':

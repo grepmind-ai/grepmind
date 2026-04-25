@@ -32,6 +32,8 @@
   },
   "scripts": {
     "build": "node ../../tools/build-package.mjs",
+    "lint": "oxlint --deny-warnings src",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
     "build:publish": "node ../../tools/build-package.mjs"
   },
   "dependencies": {

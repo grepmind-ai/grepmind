@@ -2,15 +2,18 @@ import process from 'node:process';
 import { createInterface } from 'node:readline/promises';
 import type { LocalProjectRecord } from '../db/schema.js';
 
-export async function confirmCleanProjects(projects: LocalProjectRecord[]): Promise<boolean> {
+export async function confirmCleanProjects(
+  projects: LocalProjectRecord[],
+): Promise<boolean> {
   if (!process.stdin.isTTY || !process.stdout.isTTY) {
     throw new Error('clean requires an interactive terminal confirmation');
   }
 
   const workspacePath = projects[0]!.workspacePath;
-  const summary = projects.length === 1
-    ? `1 local project registration`
-    : `${projects.length} local project registrations`;
+  const summary =
+    projects.length === 1
+      ? `1 local project registration`
+      : `${projects.length} local project registrations`;
 
   process.stdout.write(
     [
@@ -31,7 +34,9 @@ export async function confirmCleanProjects(projects: LocalProjectRecord[]): Prom
 
   try {
     while (true) {
-      const answer = (await rl.question('Continue? [y/n]: ')).trim().toLowerCase();
+      const answer = (await rl.question('Continue? [y/n]: '))
+        .trim()
+        .toLowerCase();
       if (answer === 'y' || answer === 'yes') {
         return true;
       }

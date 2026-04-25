@@ -32,7 +32,9 @@ export class ProjectRegistryService {
     private readonly backend: AgentBackendClient,
   ) {}
 
-  async registerProject(input: RegisterLocalProjectInput): Promise<LocalProjectSnapshot> {
+  async registerProject(
+    input: RegisterLocalProjectInput,
+  ): Promise<LocalProjectSnapshot> {
     const remoteProject = await this.backend.registerProject({
       remoteFingerprint: input.remoteFingerprint,
       displayName: input.displayName,
@@ -84,7 +86,9 @@ export class ProjectRegistryService {
     return project;
   }
 
-  async upsertProjectProjection(input: UpsertProjectProjectionInput): Promise<void> {
+  async upsertProjectProjection(
+    input: UpsertProjectProjectionInput,
+  ): Promise<void> {
     const existing = await this.getProject(input.project.bindingId);
     const workspacePath = input.workspacePath ?? existing?.workspacePath;
     if (!workspacePath) {
@@ -93,15 +97,25 @@ export class ProjectRegistryService {
       );
     }
 
-    const workspaceFingerprint = input.workspaceFingerprint ?? existing?.workspaceFingerprint ?? null;
+    const workspaceFingerprint =
+      input.workspaceFingerprint ?? existing?.workspaceFingerprint ?? null;
     const createdAt = existing?.createdAt ?? new Date().toISOString();
     const lastSyncedAt = input.lastSyncedAt ?? existing?.lastSyncedAt ?? null;
     const branches = input.branches ?? input.project.branches;
-    const embeddingProfiles = input.embeddingProfiles ?? input.project.embeddingProfiles;
-    const localActiveBranch = input.localActiveBranch ?? existing?.activeBranch ?? input.project.activeBranch;
-    const updatedAt = latestTimestamp(existing?.updatedAt, input.project.updatedAt);
+    const embeddingProfiles =
+      input.embeddingProfiles ?? input.project.embeddingProfiles;
+    const localActiveBranch =
+      input.localActiveBranch ??
+      existing?.activeBranch ??
+      input.project.activeBranch;
+    const updatedAt = latestTimestamp(
+      existing?.updatedAt,
+      input.project.updatedAt,
+    );
     const existingBranchRows = existing
-      ? await this.repositories.projectBranches.listByBindingId(input.project.bindingId)
+      ? await this.repositories.projectBranches.listByBindingId(
+          input.project.bindingId,
+        )
       : [];
     const observedBranches = buildObservedBranchDescriptors({
       project: input.project,
@@ -111,20 +125,23 @@ export class ProjectRegistryService {
     });
 
     await this.db.transaction(async (tx) => {
-      await this.repositories.projects.upsertProjection({
-        bindingId: input.project.bindingId,
-        repoId: input.project.repoId,
-        userRepoId: input.project.userRepoId ?? null,
-        repoFullName: input.project.repoFullName,
-        displayName: input.project.displayName,
-        workspacePath,
-        workspaceFingerprint,
-        defaultBranch: input.project.defaultBranch,
-        activeBranch: localActiveBranch,
-        lastSyncedAt,
-        createdAt,
-        updatedAt,
-      }, tx);
+      await this.repositories.projects.upsertProjection(
+        {
+          bindingId: input.project.bindingId,
+          repoId: input.project.repoId,
+          userRepoId: input.project.userRepoId ?? null,
+          repoFullName: input.project.repoFullName,
+          displayName: input.project.displayName,
+          workspacePath,
+          workspaceFingerprint,
+          defaultBranch: input.project.defaultBranch,
+          activeBranch: localActiveBranch,
+          lastSyncedAt,
+          createdAt,
+          updatedAt,
+        },
+        tx,
+      );
 
       await this.repositories.projectBranches.replaceForBinding(
         input.project.bindingId,
@@ -147,8 +164,12 @@ export class ProjectRegistryService {
 
   async observeBranch(bindingId: number, branch: string): Promise<void> {
     const project = await this.requireProject(bindingId);
-    const existingBranchRows = await this.repositories.projectBranches.listByBindingId(bindingId);
-    const updatedAt = latestTimestamp(project.updatedAt, new Date().toISOString());
+    const existingBranchRows =
+      await this.repositories.projectBranches.listByBindingId(bindingId);
+    const updatedAt = latestTimestamp(
+      project.updatedAt,
+      new Date().toISOString(),
+    );
     const observedBranches = buildObservedBranchDescriptors({
       project: {
         defaultBranch: project.defaultBranch,
@@ -160,20 +181,23 @@ export class ProjectRegistryService {
     });
 
     await this.db.transaction(async (tx) => {
-      await this.repositories.projects.upsertProjection({
-        bindingId: project.bindingId,
-        repoId: project.repoId,
-        userRepoId: project.userRepoId,
-        repoFullName: project.repoFullName,
-        displayName: project.displayName,
-        workspacePath: project.workspacePath,
-        workspaceFingerprint: project.workspaceFingerprint,
-        defaultBranch: project.defaultBranch,
-        activeBranch: branch,
-        lastSyncedAt: project.lastSyncedAt,
-        createdAt: project.createdAt,
-        updatedAt,
-      }, tx);
+      await this.repositories.projects.upsertProjection(
+        {
+          bindingId: project.bindingId,
+          repoId: project.repoId,
+          userRepoId: project.userRepoId,
+          repoFullName: project.repoFullName,
+          displayName: project.displayName,
+          workspacePath: project.workspacePath,
+          workspaceFingerprint: project.workspaceFingerprint,
+          defaultBranch: project.defaultBranch,
+          activeBranch: branch,
+          lastSyncedAt: project.lastSyncedAt,
+          createdAt: project.createdAt,
+          updatedAt,
+        },
+        tx,
+      );
 
       await this.repositories.projectBranches.replaceForBinding(
         bindingId,
@@ -201,7 +225,9 @@ export class ProjectRegistryService {
     return project;
   }
 
-  async getProjectSnapshot(bindingId: number): Promise<LocalProjectSnapshot | null> {
+  async getProjectSnapshot(
+    bindingId: number,
+  ): Promise<LocalProjectSnapshot | null> {
     const project = await this.getProject(bindingId);
     if (!project) {
       return null;
@@ -214,7 +240,9 @@ export class ProjectRegistryService {
     };
   }
 
-  async requireProjectSnapshot(bindingId: number): Promise<LocalProjectSnapshot> {
+  async requireProjectSnapshot(
+    bindingId: number,
+  ): Promise<LocalProjectSnapshot> {
     const snapshot = await this.getProjectSnapshot(bindingId);
     if (!snapshot) {
       throw new Error(`Local project ${bindingId} is not registered`);
@@ -224,32 +252,54 @@ export class ProjectRegistryService {
   }
 
   async listBranches(bindingId: number): Promise<BranchDescriptor[]> {
-    return (await this.repositories.projectBranches.listByBindingId(bindingId)).map(
-      toBranchDescriptor,
-    );
+    return (
+      await this.repositories.projectBranches.listByBindingId(bindingId)
+    ).map(toBranchDescriptor);
   }
 
-  async listEmbeddingProfiles(bindingId: number): Promise<EmbeddingProfileDescriptor[]> {
-    return (await this.repositories.embeddingProfiles.listByBindingId(bindingId)).map(
-      toEmbeddingProfileDescriptor,
-    );
+  async listEmbeddingProfiles(
+    bindingId: number,
+  ): Promise<EmbeddingProfileDescriptor[]> {
+    return (
+      await this.repositories.embeddingProfiles.listByBindingId(bindingId)
+    ).map(toEmbeddingProfileDescriptor);
   }
 
   async listSearchableBranches(bindingId: number): Promise<string[]> {
-    return this.repositories.projectBranches.listSearchableBranchNames(bindingId);
+    return this.repositories.projectBranches.listSearchableBranchNames(
+      bindingId,
+    );
   }
 
   private async deleteLocalProject(bindingId: number): Promise<void> {
     await this.db.transaction(async (tx) => {
       await this.repositories.codeChunks.deleteByBindingId(bindingId, tx);
       await this.repositories.docsChunks.deleteByBindingId(bindingId, tx);
-      await this.repositories.projectRevisionFiles.deleteByBindingId(bindingId, tx);
-      await this.repositories.projectRevisionAttachments.deleteByBindingId(bindingId, tx);
-      await this.repositories.projectAttachmentSyncState.deleteByBindingId(bindingId, tx);
+      await this.repositories.projectRevisionFiles.deleteByBindingId(
+        bindingId,
+        tx,
+      );
+      await this.repositories.projectRevisionAttachments.deleteByBindingId(
+        bindingId,
+        tx,
+      );
+      await this.repositories.projectAttachmentSyncState.deleteByBindingId(
+        bindingId,
+        tx,
+      );
       await this.repositories.projectRevisions.deleteByBindingId(bindingId, tx);
-      await this.repositories.projectMaterializations.deleteByBindingId(bindingId, tx);
-      await this.repositories.projectBindingSyncState.deleteByBindingId(bindingId, tx);
-      await this.repositories.embeddingProfiles.deleteByBindingId(bindingId, tx);
+      await this.repositories.projectMaterializations.deleteByBindingId(
+        bindingId,
+        tx,
+      );
+      await this.repositories.projectBindingSyncState.deleteByBindingId(
+        bindingId,
+        tx,
+      );
+      await this.repositories.embeddingProfiles.deleteByBindingId(
+        bindingId,
+        tx,
+      );
       await this.repositories.projectBranches.deleteByBindingId(bindingId, tx);
       await this.repositories.projects.deleteByBindingId(bindingId, tx);
     });
@@ -260,7 +310,8 @@ function toBranchDescriptor(row: ProjectBranchRow): BranchDescriptor {
   return {
     repoBranchId: row.repoBranchId,
     branch: row.branch,
-    canonicalTrackingMode: row.canonicalTrackingMode as BranchDescriptor['canonicalTrackingMode'],
+    canonicalTrackingMode:
+      row.canonicalTrackingMode as BranchDescriptor['canonicalTrackingMode'],
     isDefault: row.isDefault,
     viewerTracked: row.viewerTracked,
     isActiveForUser: row.isActiveForUser,
@@ -338,17 +389,17 @@ function buildObservedBranchDescriptors(input: {
 }
 
 function latestTimestamp(...values: Array<string | null | undefined>): string {
-  const defined = values.filter((value): value is string => Boolean(value));
+  const defined = values.filter((value): value is string => value != null);
   if (defined.length === 0) {
     return new Date().toISOString();
   }
 
-  return defined.reduce((latest, value) => (
-    value > latest ? value : latest
-  ));
+  return defined.reduce((latest, value) => (value > latest ? value : latest));
 }
 
-function toEmbeddingProfileDescriptor(row: EmbeddingProfileRow): EmbeddingProfileDescriptor {
+function toEmbeddingProfileDescriptor(
+  row: EmbeddingProfileRow,
+): EmbeddingProfileDescriptor {
   return {
     target: row.target as EmbeddingProfileDescriptor['target'],
     profileVersion: row.profileVersion,
@@ -356,7 +407,8 @@ function toEmbeddingProfileDescriptor(row: EmbeddingProfileRow): EmbeddingProfil
     dimensions: row.dimensions,
     embeddingSpace: row.embeddingSpace,
     artifactSchemaVersion: row.artifactSchemaVersion,
-    distanceMetric: row.distanceMetric as EmbeddingProfileDescriptor['distanceMetric'],
+    distanceMetric:
+      row.distanceMetric as EmbeddingProfileDescriptor['distanceMetric'],
     updatedAt: row.updatedAt,
   };
 }

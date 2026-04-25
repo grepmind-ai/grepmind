@@ -3,7 +3,10 @@ import { createServer, type Server, type Socket } from 'node:net';
 import { AgentRunner } from '../../cli/agent-runner.js';
 import type { AgentCliConfig } from '../../cli/config.js';
 import { AgentCommandExecutor } from '../../commands/agent-command-executor.js';
-import { noopAgentLogger, type AgentLogger } from '../../logging/agent-logger.js';
+import {
+  noopAgentLogger,
+  type AgentLogger,
+} from '../../logging/agent-logger.js';
 import { SearchHeadService } from '../../services/search-head-service.js';
 import {
   acquireAgentRuntimeLock,
@@ -116,7 +119,11 @@ export class AgentRuntimeServer {
       });
       this.server.on('error', (error) => {
         if (!this.stopping) {
-          this.logger.error('runtime', 'Agent runtime socket server failed', error);
+          this.logger.error(
+            'runtime',
+            'Agent runtime socket server failed',
+            error,
+          );
           void this.stop();
         }
       });
@@ -128,7 +135,10 @@ export class AgentRuntimeServer {
       this.ownsPidFile = true;
       await writeAgentMetaFile(this.config.dataDir, this.meta);
 
-      this.logger.success('runtime', `Agent runtime ready on ${this.meta.socketPath}`);
+      this.logger.success(
+        'runtime',
+        `Agent runtime ready on ${this.meta.socketPath}`,
+      );
       this.scheduleNextTick(0);
     } catch (error) {
       await this.cleanupAfterFailedStart();
@@ -171,11 +181,19 @@ export class AgentRuntimeServer {
       socket.end();
     }
     await closeServerPromise.catch((error) => {
-      this.logger.error('runtime', 'Failed to close agent runtime server cleanly', error);
+      this.logger.error(
+        'runtime',
+        'Failed to close agent runtime server cleanly',
+        error,
+      );
     });
 
     await this.runner.stop().catch((error) => {
-      this.logger.error('runtime', 'Failed to stop agent runner cleanly', error);
+      this.logger.error(
+        'runtime',
+        'Failed to stop agent runner cleanly',
+        error,
+      );
     });
     if (this.ownsSocket || this.ownsPidFile) {
       await cleanupSocketAndPidFiles(this.config.dataDir).catch((error) => {
@@ -217,7 +235,11 @@ export class AgentRuntimeServer {
     });
     socket.on('error', (error) => {
       if (!this.stopping) {
-        this.logger.error('runtime', 'Agent runtime socket client error', error);
+        this.logger.error(
+          'runtime',
+          'Agent runtime socket client error',
+          error,
+        );
       }
     });
     socket.on('close', () => {
@@ -265,14 +287,19 @@ export class AgentRuntimeServer {
 
     this.tickTimer = setTimeout(() => {
       this.tickTimer = null;
-      void this.queue.enqueue(async () => {
-        if (this.stopping) {
-          return;
-        }
-        await this.runner.runOnce();
-      })
+      void this.queue
+        .enqueue(async () => {
+          if (this.stopping) {
+            return;
+          }
+          await this.runner.runOnce();
+        })
         .catch((error) => {
-          this.logger.error('runtime', 'Agent runtime run iteration failed', error);
+          this.logger.error(
+            'runtime',
+            'Agent runtime run iteration failed',
+            error,
+          );
         })
         .finally(() => {
           this.scheduleNextTick(this.config.headPollIntervalMs);

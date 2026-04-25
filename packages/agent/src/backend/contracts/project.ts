@@ -1,6 +1,10 @@
 import type { SearchTarget } from './search.js';
 
-export type CanonicalTrackingMode = 'default' | 'pinned' | 'manual' | 'disabled';
+export type CanonicalTrackingMode =
+  | 'default'
+  | 'pinned'
+  | 'manual'
+  | 'disabled';
 export type BranchSyncStatus =
   | 'idle'
   | 'queued'

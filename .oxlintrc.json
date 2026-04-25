@@ -1,0 +1,21 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "categories": {
+    "correctness": "error",
+    "suspicious": "error",
+    "perf": "error",
+    "pedantic": "error"
+  },
+  "rules": {
+    "eslint/curly": ["error", "all"],
+    "eslint/eqeqeq": ["error", "always", { "null": "ignore" }],
+    "eslint/max-classes-per-file": "off",
+    "eslint/max-depth": ["error", 4],
+    "eslint/max-lines": ["error", 600],
+    "eslint/max-lines-per-function": ["error", { "max": 200 }],
+    "eslint/max-nested-callbacks": ["error", 4],
+    "eslint/no-await-in-loop": "off",
+    "eslint/require-await": "off",
+    "unicorn/prefer-add-event-listener": "off"
+  }
+}

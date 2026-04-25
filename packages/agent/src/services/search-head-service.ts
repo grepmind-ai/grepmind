@@ -32,9 +32,15 @@ export interface SearchHeadResult extends SearchResponsePayload {
 
 export interface SearchHeadServiceOptions {
   projects: Pick<ProjectRegistryService, 'listProjects' | 'requireProject'>;
-  revisionAttachments: Pick<ProjectRevisionAttachmentRepository, 'findRevisionForHead'>;
+  revisionAttachments: Pick<
+    ProjectRevisionAttachmentRepository,
+    'findRevisionForHead'
+  >;
   searchTransport: {
-    search(input: SearchRequestPayload, options?: { timeoutMs?: number }): Promise<SearchResponsePayload>;
+    search(
+      input: SearchRequestPayload,
+      options?: { timeoutMs?: number },
+    ): Promise<SearchResponsePayload>;
   };
   localHeadService?: LocalHeadService;
 }
@@ -46,23 +52,30 @@ export class SearchHeadService {
     this.localHeadService = options.localHeadService ?? new LocalHeadService();
   }
 
-  async searchByLocalHead(input: SearchHeadCommandInput): Promise<SearchHeadResult> {
+  async searchByLocalHead(
+    input: SearchHeadCommandInput,
+  ): Promise<SearchHeadResult> {
     const query = normalizeQuery(input.query);
     const target = normalizeTarget(input.target);
     const limit = normalizeLimit(input.limit);
     const threshold = normalizeThreshold(input.threshold);
     const project = await this.resolveProject(input);
-    const observedHead = await this.localHeadService.readObservedHead(project.workspacePath);
+    const observedHead = await this.localHeadService.readObservedHead(
+      project.workspacePath,
+    );
 
     if (!observedHead) {
-      throw new Error(`Workspace ${project.workspacePath} is on a detached HEAD; search-head requires a branch checkout`);
+      throw new Error(
+        `Workspace ${project.workspacePath} is on a detached HEAD; search-head requires a branch checkout`,
+      );
     }
 
-    const revisionId = await this.options.revisionAttachments.findRevisionForHead(
-      project.bindingId,
-      observedHead.branch,
-      observedHead.headCommitSha,
-    );
+    const revisionId =
+      await this.options.revisionAttachments.findRevisionForHead(
+        project.bindingId,
+        observedHead.branch,
+        observedHead.headCommitSha,
+      );
 
     if (revisionId == null) {
       throw new Error(
@@ -93,36 +106,50 @@ export class SearchHeadService {
     };
   }
 
-  private async resolveProject(input: SearchHeadCommandInput): Promise<LocalProjectRecord> {
+  private async resolveProject(
+    input: SearchHeadCommandInput,
+  ): Promise<LocalProjectRecord> {
     if (input.bindingId != null) {
       return this.options.projects.requireProject(input.bindingId);
     }
 
     const scopePath = path.resolve(input.workspacePath ?? process.cwd());
     const projects = await this.options.projects.listProjects();
-    const exactMatches = projects.filter((project) => samePath(project.workspacePath, scopePath));
+    const exactMatches = projects.filter((project) =>
+      samePath(project.workspacePath, scopePath),
+    );
 
     if (exactMatches.length === 1) {
       return exactMatches[0]!;
     }
     if (exactMatches.length > 1) {
-      throw new Error(`Multiple local projects match ${scopePath}; use --binding-id to disambiguate`);
+      throw new Error(
+        `Multiple local projects match ${scopePath}; use --binding-id to disambiguate`,
+      );
     }
 
-    const containingMatches = projects.filter((project) => isPathWithin(project.workspacePath, scopePath));
+    const containingMatches = projects.filter((project) =>
+      isPathWithin(project.workspacePath, scopePath),
+    );
     if (containingMatches.length === 0) {
       throw new Error(`No local project is registered for ${scopePath}`);
     }
 
     const longestWorkspacePathLength = Math.max(
-      ...containingMatches.map((project) => path.resolve(project.workspacePath).length),
+      ...containingMatches.map(
+        (project) => path.resolve(project.workspacePath).length,
+      ),
     );
     const narrowedMatches = containingMatches.filter(
-      (project) => path.resolve(project.workspacePath).length === longestWorkspacePathLength,
+      (project) =>
+        path.resolve(project.workspacePath).length ===
+        longestWorkspacePathLength,
     );
 
     if (narrowedMatches.length !== 1) {
-      throw new Error(`Multiple local projects match ${scopePath}; use --binding-id to disambiguate`);
+      throw new Error(
+        `Multiple local projects match ${scopePath}; use --binding-id to disambiguate`,
+      );
     }
 
     return narrowedMatches[0]!;
@@ -138,7 +165,9 @@ function normalizeQuery(query: string): string {
   return normalized;
 }
 
-function normalizeTarget(target: SearchTarget | undefined): SearchTarget | undefined {
+function normalizeTarget(
+  target: SearchTarget | undefined,
+): SearchTarget | undefined {
   if (target == null) {
     return undefined;
   }
@@ -176,6 +205,12 @@ function samePath(left: string, right: string): boolean {
 }
 
 function isPathWithin(workspacePath: string, candidatePath: string): boolean {
-  const relative = path.relative(path.resolve(workspacePath), path.resolve(candidatePath));
-  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
+  const relative = path.relative(
+    path.resolve(workspacePath),
+    path.resolve(candidatePath),
+  );
+  return (
+    relative === '' ||
+    (!relative.startsWith('..') && !path.isAbsolute(relative))
+  );
 }

@@ -1,4 +1,7 @@
-import type { SearchTarget, SyncProjectRequest } from '../../backend/contracts/index.js';
+import type {
+  SearchTarget,
+  SyncProjectRequest,
+} from '../../backend/contracts/index.js';
 
 export interface SyncCompleteness {
   filesSynced: boolean;

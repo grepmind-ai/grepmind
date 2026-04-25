@@ -46,16 +46,19 @@ export interface EnsureAttachedInput {
   logger: AgentLogger;
 }
 
-export async function ensureAttached(input: EnsureAttachedInput): Promise<ActiveAttachState> {
+export async function ensureAttached(
+  input: EnsureAttachedInput,
+): Promise<ActiveAttachState> {
   const active = input.stateByBindingId.get(input.bindingId);
 
   if (!active) {
     return attachSource(input);
   }
 
-  const mismatch = active.deviceId !== input.deviceId
-    || active.agentRepoRef !== input.observedHead.agentRepoRef
-    || active.remoteFingerprint !== input.observedHead.remoteFingerprint;
+  const mismatch =
+    active.deviceId !== input.deviceId ||
+    active.agentRepoRef !== input.observedHead.agentRepoRef ||
+    active.remoteFingerprint !== input.observedHead.remoteFingerprint;
 
   if (mismatch) {
     input.logger.info(
@@ -68,7 +71,9 @@ export async function ensureAttached(input: EnsureAttachedInput): Promise<Active
   return active;
 }
 
-export async function attachSource(input: EnsureAttachedInput): Promise<ActiveAttachState> {
+export async function attachSource(
+  input: EnsureAttachedInput,
+): Promise<ActiveAttachState> {
   input.logger.info(
     'attach',
     `Attaching source for binding #${input.bindingId} at ${formatRevisionRef(input.observedHead.branch, input.observedHead.headCommitSha)}`,
@@ -99,7 +104,11 @@ export async function attachSource(input: EnsureAttachedInput): Promise<ActiveAt
 
     return next;
   } catch (error) {
-    input.logger.error('attach', `attachSource failed for binding #${input.bindingId}`, error);
+    input.logger.error(
+      'attach',
+      `attachSource failed for binding #${input.bindingId}`,
+      error,
+    );
     throw error;
   }
 }

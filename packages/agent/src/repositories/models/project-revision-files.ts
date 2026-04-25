@@ -11,7 +11,10 @@ export const projectRevisionFiles = pgTable(
   },
   (table) => [
     primaryKey({ columns: [table.bindingId, table.revisionId, table.fileId] }),
-    index('project_revision_files_binding_revision_idx').on(table.bindingId, table.revisionId),
+    index('project_revision_files_binding_revision_idx').on(
+      table.bindingId,
+      table.revisionId,
+    ),
     index('project_revision_files_binding_revision_artifact_idx').on(
       table.bindingId,
       table.revisionId,

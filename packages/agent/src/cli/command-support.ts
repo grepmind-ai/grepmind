@@ -51,29 +51,52 @@ export async function executeSocketPreferredCommand<TResult>(
   }
 }
 
-export async function loadConfigForCommand(args: ParsedArgs): Promise<AgentCliConfig> {
-  const dataDir = resolveDataDir(getStringFlag(args, 'data-dir') ?? process.env.GREPMIND_AGENT_DATA_DIR);
+export async function loadConfigForCommand(
+  args: ParsedArgs,
+): Promise<AgentCliConfig> {
+  const dataDir = resolveDataDir(
+    getStringFlag(args, 'data-dir') ?? process.env.GREPMIND_AGENT_DATA_DIR,
+  );
   await ensureDataDir(dataDir);
   const config = await loadAgentCliConfig(dataDir);
 
   return {
     ...config,
-    apiBaseUrl: getStringFlag(args, 'url') ?? process.env.GREPMIND_AGENT_URL ?? config.apiBaseUrl,
-    accessToken: getStringFlag(args, 'token') ?? process.env.GREPMIND_AGENT_TOKEN ?? config.accessToken,
-    apiKey: getStringFlag(args, 'api-key') ?? process.env.GREPMIND_AGENT_API_KEY ?? config.apiKey,
-    name: getStringFlag(args, 'name') ?? process.env.GREPMIND_AGENT_NAME ?? config.name,
-    pollIntervalMs: getIntegerFlag(args, 'poll-interval-ms')
-      ?? toInteger(process.env.GREPMIND_AGENT_POLL_INTERVAL_MS)
-      ?? config.pollIntervalMs,
-    headPollIntervalMs: getIntegerFlag(args, 'head-poll-interval-ms')
-      ?? toInteger(process.env.GREPMIND_AGENT_HEAD_POLL_INTERVAL_MS)
-      ?? config.headPollIntervalMs,
-    deviceId: nonEmptyString(getStringFlag(args, 'device-id') ?? process.env.GREPMIND_AGENT_DEVICE_ID)
-      ?? config.deviceId,
+    apiBaseUrl:
+      getStringFlag(args, 'url') ??
+      process.env.GREPMIND_AGENT_URL ??
+      config.apiBaseUrl,
+    accessToken:
+      getStringFlag(args, 'token') ??
+      process.env.GREPMIND_AGENT_TOKEN ??
+      config.accessToken,
+    apiKey:
+      getStringFlag(args, 'api-key') ??
+      process.env.GREPMIND_AGENT_API_KEY ??
+      config.apiKey,
+    name:
+      getStringFlag(args, 'name') ??
+      process.env.GREPMIND_AGENT_NAME ??
+      config.name,
+    pollIntervalMs:
+      getIntegerFlag(args, 'poll-interval-ms') ??
+      toInteger(process.env.GREPMIND_AGENT_POLL_INTERVAL_MS) ??
+      config.pollIntervalMs,
+    headPollIntervalMs:
+      getIntegerFlag(args, 'head-poll-interval-ms') ??
+      toInteger(process.env.GREPMIND_AGENT_HEAD_POLL_INTERVAL_MS) ??
+      config.headPollIntervalMs,
+    deviceId:
+      nonEmptyString(
+        getStringFlag(args, 'device-id') ??
+          process.env.GREPMIND_AGENT_DEVICE_ID,
+      ) ?? config.deviceId,
   };
 }
 
-export async function loadOptionalConfig(dataDir: string): Promise<AgentCliConfig | null> {
+export async function loadOptionalConfig(
+  dataDir: string,
+): Promise<AgentCliConfig | null> {
   try {
     return await loadAgentCliConfig(dataDir);
   } catch {
@@ -81,22 +104,30 @@ export async function loadOptionalConfig(dataDir: string): Promise<AgentCliConfi
   }
 }
 
-export async function resolveWorkspacePath(workspacePath: string): Promise<string> {
+export async function resolveWorkspacePath(
+  workspacePath: string,
+): Promise<string> {
   const resolved = path.resolve(process.cwd(), workspacePath);
   await access(resolved);
   return resolved;
 }
 
-export async function resolveWorkspaceRemoteFingerprint(workspacePath: string): Promise<string> {
+export async function resolveWorkspaceRemoteFingerprint(
+  workspacePath: string,
+): Promise<string> {
   try {
-    const { stdout } = await execFileAsync('git', ['remote', 'get-url', 'origin'], {
-      cwd: workspacePath,
-      encoding: 'utf8',
-      env: {
-        ...process.env,
-        GIT_TERMINAL_PROMPT: '0',
+    const { stdout } = await execFileAsync(
+      'git',
+      ['remote', 'get-url', 'origin'],
+      {
+        cwd: workspacePath,
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          GIT_TERMINAL_PROMPT: '0',
+        },
       },
-    });
+    );
     const remote = stdout.trim();
     if (!remote) {
       throw new Error('git remote get-url origin returned empty output');
@@ -123,14 +154,14 @@ export function formatError(error: unknown): string {
   }
 }
 
-export function isIdleSyncResult(
-  result: {
-    revisionCount: number;
-    materializedPlanCount: number;
-    invalidationCount: number;
-  },
-): boolean {
-  return result.revisionCount === 0
-    && result.materializedPlanCount === 0
-    && result.invalidationCount === 0;
+export function isIdleSyncResult(result: {
+  revisionCount: number;
+  materializedPlanCount: number;
+  invalidationCount: number;
+}): boolean {
+  return (
+    result.revisionCount === 0 &&
+    result.materializedPlanCount === 0 &&
+    result.invalidationCount === 0
+  );
 }

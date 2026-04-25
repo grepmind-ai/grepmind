@@ -11,7 +11,10 @@ import type { AgentRuntime } from '../runtime/agent-runtime.js';
 import type { RegisterLocalProjectInput } from '../services/project-registry-service.js';
 import { loadAgentStatusSnapshot } from './status-query.js';
 
-export type { AgentStatusQuery, AgentStatusSnapshot } from '@grepmind/agent-rpc';
+export type {
+  AgentStatusQuery,
+  AgentStatusSnapshot,
+} from '@grepmind/agent-rpc';
 
 export interface SyncProjectCommandInput {
   bindingId?: number;
@@ -21,7 +24,9 @@ export interface SyncProjectCommandInput {
 export class AgentCommandExecutor {
   constructor(private readonly runtime: AgentRuntime) {}
 
-  async registerProject(input: RegisterLocalProjectInput): Promise<RegisterProjectCommandResult> {
+  async registerProject(
+    input: RegisterLocalProjectInput,
+  ): Promise<RegisterProjectCommandResult> {
     const snapshot = await this.runtime.projects.registerProject(input);
 
     return {
@@ -36,7 +41,9 @@ export class AgentCommandExecutor {
     };
   }
 
-  async syncProject(input: SyncProjectCommandInput = {}): Promise<SyncProjectCommandResult> {
+  async syncProject(
+    input: SyncProjectCommandInput = {},
+  ): Promise<SyncProjectCommandResult> {
     if (input.bindingId != null) {
       return {
         results: [

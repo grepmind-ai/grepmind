@@ -16,7 +16,5 @@ export const projects = pgTable(
     createdAt: text('created_at').notNull(),
     updatedAt: text('updated_at').notNull(),
   },
-  (table) => [
-    index('projects_repo_idx').on(table.repoId),
-  ],
+  (table) => [index('projects_repo_idx').on(table.repoId)],
 );

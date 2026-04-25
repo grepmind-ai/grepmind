@@ -25,7 +25,10 @@ export async function runCommand(
       traceEnabled: agentConsole.traceEnabled,
     });
     await waitForAgentRuntimeReady(config.dataDir);
-    agentConsole.success('runtime', `Agent runtime started in background for ${config.dataDir}`);
+    agentConsole.success(
+      'runtime',
+      `Agent runtime started in background for ${config.dataDir}`,
+    );
     return;
   }
 
@@ -85,12 +88,13 @@ export async function stopCommand(args: ParsedArgs): Promise<void> {
     });
   } catch (error) {
     if (isRuntimeUnavailableError(error)) {
-      throw new Error(
-        `Agent runtime is not running for ${config.dataDir}`,
-      );
+      throw new Error(`Agent runtime is not running for ${config.dataDir}`);
     }
     throw error;
   }
 
-  agentConsole.info('runtime', `Agent runtime stop requested for ${config.dataDir}`);
+  agentConsole.info(
+    'runtime',
+    `Agent runtime stop requested for ${config.dataDir}`,
+  );
 }

@@ -3,7 +3,11 @@ export const AGENT_RUNTIME_PROTOCOL_VERSION = 1;
 export type AgentCommandMode = 'runtime-only';
 export type SearchTarget = 'code' | 'docs';
 
-export type CanonicalTrackingMode = 'default' | 'pinned' | 'manual' | 'disabled';
+export type CanonicalTrackingMode =
+  | 'default'
+  | 'pinned'
+  | 'manual'
+  | 'disabled';
 export type BranchSyncStatus =
   | 'idle'
   | 'queued'
@@ -282,7 +286,9 @@ export interface AgentRpcError {
   details?: unknown;
 }
 
-export interface AgentRpcRequest<TMethod extends AgentRpcMethod = AgentRpcMethod> {
+export interface AgentRpcRequest<
+  TMethod extends AgentRpcMethod = AgentRpcMethod,
+> {
   id: string;
   method: TMethod;
   params: AgentRpcMethodMap[TMethod]['params'];
@@ -291,7 +297,9 @@ export interface AgentRpcRequest<TMethod extends AgentRpcMethod = AgentRpcMethod
   token?: string;
 }
 
-export interface AgentRpcSuccessResponse<TMethod extends AgentRpcMethod = AgentRpcMethod> {
+export interface AgentRpcSuccessResponse<
+  TMethod extends AgentRpcMethod = AgentRpcMethod,
+> {
   id: string;
   ok: true;
   result: AgentRpcMethodMap[TMethod]['result'];
@@ -308,9 +316,11 @@ export type AgentRpcResponse<TMethod extends AgentRpcMethod = AgentRpcMethod> =
   | AgentRpcFailureResponse;
 
 export function isMutatingRpcMethod(method: AgentRpcMethod): boolean {
-  return method === 'registerProject'
-    || method === 'syncProject'
-    || method === 'unbindProject'
-    || method === 'cleanProject'
-    || method === 'shutdown';
+  return (
+    method === 'registerProject' ||
+    method === 'syncProject' ||
+    method === 'unbindProject' ||
+    method === 'cleanProject' ||
+    method === 'shutdown'
+  );
 }

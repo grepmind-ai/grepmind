@@ -32,7 +32,9 @@ export function shouldCountRevisionWork(
     return true;
   }
 
-  const payloadState = localState.payloadStateByRevisionId.get(revision.revisionId);
+  const payloadState = localState.payloadStateByRevisionId.get(
+    revision.revisionId,
+  );
   if (!payloadState) {
     return true;
   }

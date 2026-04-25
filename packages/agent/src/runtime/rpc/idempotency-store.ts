@@ -17,7 +17,9 @@ interface StoredErrorRecord {
   error: AgentRpcError;
 }
 
-export type StoredIdempotentRecord<T> = StoredSuccessRecord<T> | StoredErrorRecord;
+export type StoredIdempotentRecord<T> =
+  | StoredSuccessRecord<T>
+  | StoredErrorRecord;
 
 export class AgentRpcIdempotencyStore {
   constructor(private readonly db: AgentDb) {}
@@ -76,15 +78,14 @@ export class AgentRpcIdempotencyStore {
       SET value = excluded.value,
           updated_at = excluded.updated_at
       `,
-      [
-        buildAgentMetaKey(method, idempotencyKey),
-        JSON.stringify(value),
-        now,
-      ],
+      [buildAgentMetaKey(method, idempotencyKey), JSON.stringify(value), now],
     );
   }
 }
 
-function buildAgentMetaKey(method: AgentRpcMethod, idempotencyKey: string): string {
+function buildAgentMetaKey(
+  method: AgentRpcMethod,
+  idempotencyKey: string,
+): string {
   return `rpc:idempotency:${method}:${Buffer.from(idempotencyKey, 'utf8').toString('base64url')}`;
 }

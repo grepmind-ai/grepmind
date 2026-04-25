@@ -7,7 +7,9 @@ import { AgentBindingTableRepository } from './table-repository.js';
 export type ProjectBranchRow = typeof projectBranches.$inferSelect;
 export type ProjectBranchInsert = typeof projectBranches.$inferInsert;
 
-export class ProjectBranchRepository extends AgentBindingTableRepository<typeof projectBranches> {
+export class ProjectBranchRepository extends AgentBindingTableRepository<
+  typeof projectBranches
+> {
   constructor(db: AgentDatabase) {
     super(db, projectBranches);
   }
@@ -60,39 +62,43 @@ export class ProjectBranchRepository extends AgentBindingTableRepository<typeof 
       );
 
     for (const branch of branches) {
-      await this.insert({
-        bindingId,
-        repoBranchId: branch.repoBranchId ?? null,
-        branch: branch.branch,
-        canonicalTrackingMode: branch.canonicalTrackingMode,
-        isDefault: branch.isDefault,
-        viewerTracked: branch.viewerTracked,
-        isActiveForUser: branch.isActiveForUser,
-        syncStatus: branch.sync.status,
-        syncLastSeenRemoteCommitSha: branch.sync.lastSeenRemoteCommitSha ?? null,
-        syncLastSyncedCommitSha: branch.sync.lastSyncedCommitSha ?? null,
-        syncLastSyncStartedAt: branch.sync.lastSyncStartedAt ?? null,
-        syncLastSyncCompletedAt: branch.sync.lastSyncCompletedAt ?? null,
-        syncErrorMessage: branch.sync.errorMessage ?? null,
-        updatedAt,
-      } satisfies ProjectBranchInsert, executor)
-        .onConflictDoUpdate({
-          target: [projectBranches.bindingId, projectBranches.branch],
-          set: {
-            repoBranchId: branch.repoBranchId ?? null,
-            canonicalTrackingMode: branch.canonicalTrackingMode,
-            isDefault: branch.isDefault,
-            viewerTracked: branch.viewerTracked,
-            isActiveForUser: branch.isActiveForUser,
-            syncStatus: branch.sync.status,
-            syncLastSeenRemoteCommitSha: branch.sync.lastSeenRemoteCommitSha ?? null,
-            syncLastSyncedCommitSha: branch.sync.lastSyncedCommitSha ?? null,
-            syncLastSyncStartedAt: branch.sync.lastSyncStartedAt ?? null,
-            syncLastSyncCompletedAt: branch.sync.lastSyncCompletedAt ?? null,
-            syncErrorMessage: branch.sync.errorMessage ?? null,
-            updatedAt,
-          },
-        });
+      await this.insert(
+        {
+          bindingId,
+          repoBranchId: branch.repoBranchId ?? null,
+          branch: branch.branch,
+          canonicalTrackingMode: branch.canonicalTrackingMode,
+          isDefault: branch.isDefault,
+          viewerTracked: branch.viewerTracked,
+          isActiveForUser: branch.isActiveForUser,
+          syncStatus: branch.sync.status,
+          syncLastSeenRemoteCommitSha:
+            branch.sync.lastSeenRemoteCommitSha ?? null,
+          syncLastSyncedCommitSha: branch.sync.lastSyncedCommitSha ?? null,
+          syncLastSyncStartedAt: branch.sync.lastSyncStartedAt ?? null,
+          syncLastSyncCompletedAt: branch.sync.lastSyncCompletedAt ?? null,
+          syncErrorMessage: branch.sync.errorMessage ?? null,
+          updatedAt,
+        } satisfies ProjectBranchInsert,
+        executor,
+      ).onConflictDoUpdate({
+        target: [projectBranches.bindingId, projectBranches.branch],
+        set: {
+          repoBranchId: branch.repoBranchId ?? null,
+          canonicalTrackingMode: branch.canonicalTrackingMode,
+          isDefault: branch.isDefault,
+          viewerTracked: branch.viewerTracked,
+          isActiveForUser: branch.isActiveForUser,
+          syncStatus: branch.sync.status,
+          syncLastSeenRemoteCommitSha:
+            branch.sync.lastSeenRemoteCommitSha ?? null,
+          syncLastSyncedCommitSha: branch.sync.lastSyncedCommitSha ?? null,
+          syncLastSyncStartedAt: branch.sync.lastSyncStartedAt ?? null,
+          syncLastSyncCompletedAt: branch.sync.lastSyncCompletedAt ?? null,
+          syncErrorMessage: branch.sync.errorMessage ?? null,
+          updatedAt,
+        },
+      });
     }
   }
 }

@@ -5,7 +5,10 @@ import {
   buildRealtimeUrl,
 } from './realtime/connection.js';
 import { createHeartbeatPayload } from './realtime/heartbeat.js';
-import { computeReconnectDelay, DEFAULT_RECONNECT_BASE_MS } from './realtime/reconnect-policy.js';
+import {
+  computeReconnectDelay,
+  DEFAULT_RECONNECT_BASE_MS,
+} from './realtime/reconnect-policy.js';
 import { routeRealtimeMessage } from './realtime/message-router.js';
 import {
   AgentRealtimeSearchError,
@@ -53,7 +56,10 @@ export class AgentBackendRealtimeClient {
   private stopping = false;
   private heartbeatMs: number;
   private stopCommandId: string | null = null;
-  private readonly pendingSearchRuns = new Map<string, PendingSearchRunRequest>();
+  private readonly pendingSearchRuns = new Map<
+    string,
+    PendingSearchRunRequest
+  >();
 
   constructor(options: AgentBackendRealtimeClientOptions) {
     this.baseUrl = options.baseUrl.replace(/\/+$/, '');
@@ -68,13 +74,17 @@ export class AgentBackendRealtimeClient {
     this.capabilities = options.capabilities ?? {};
     this.onStopRequested = options.onStopRequested;
     this.onIndexSearchRequested = options.onIndexSearchRequested;
-    this.searchRequestTimeoutMs = options.searchRequestTimeoutMs ?? DEFAULT_SEARCH_REQUEST_TIMEOUT_MS;
+    this.searchRequestTimeoutMs =
+      options.searchRequestTimeoutMs ?? DEFAULT_SEARCH_REQUEST_TIMEOUT_MS;
   }
 
   start(bindings: AgentBackendRealtimeBinding[]): void {
     if (this.started || !RealtimeWebSocket) {
       if (!RealtimeWebSocket) {
-        this.logger.warn('runtime', 'Global WebSocket is unavailable; agent realtime transport is disabled');
+        this.logger.warn(
+          'runtime',
+          'Global WebSocket is unavailable; agent realtime transport is disabled',
+        );
       }
       return;
     }
@@ -99,7 +109,9 @@ export class AgentBackendRealtimeClient {
       this.ws.close(1000, 'Client stopping');
       this.ws = null;
     }
-    this.rejectPendingSearchRuns('Agent realtime client stopped before search completed');
+    this.rejectPendingSearchRuns(
+      'Agent realtime client stopped before search completed',
+    );
   }
 
   updateBindings(bindings: AgentBackendRealtimeBinding[]): void {
@@ -119,7 +131,10 @@ export class AgentBackendRealtimeClient {
     }
 
     if (this.ws?.readyState !== SOCKET_OPEN_STATE) {
-      throw new AgentRealtimeSearchError('Agent realtime socket is not connected', 'NOT_CONNECTED');
+      throw new AgentRealtimeSearchError(
+        'Agent realtime socket is not connected',
+        'NOT_CONNECTED',
+      );
     }
     if (this.pendingSearchRuns.has(request.value.requestId)) {
       throw new AgentRealtimeSearchError(
@@ -128,7 +143,10 @@ export class AgentBackendRealtimeClient {
       );
     }
 
-    const timeoutMs = Math.max(options.timeoutMs ?? this.searchRequestTimeoutMs, 1_000);
+    const timeoutMs = Math.max(
+      options.timeoutMs ?? this.searchRequestTimeoutMs,
+      1_000,
+    );
     return new Promise<SearchResponsePayload>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pendingSearchRuns.delete(request.value.requestId);
@@ -156,7 +174,9 @@ export class AgentBackendRealtimeClient {
       return;
     }
 
-    const ws = new RealtimeWebSocket(buildRealtimeUrl(this.baseUrl, this.accessToken, this.apiKey));
+    const ws = new RealtimeWebSocket(
+      buildRealtimeUrl(this.baseUrl, this.accessToken, this.apiKey),
+    );
     this.ws = ws;
 
     ws.onopen = () => {
@@ -182,7 +202,9 @@ export class AgentBackendRealtimeClient {
         clearInterval(this.heartbeatTimer);
         this.heartbeatTimer = null;
       }
-      this.rejectPendingSearchRuns('Agent realtime socket closed before search completed');
+      this.rejectPendingSearchRuns(
+        'Agent realtime socket closed before search completed',
+      );
       if (!this.stopping && this.started) {
         this.scheduleReconnect();
       }
@@ -198,7 +220,10 @@ export class AgentBackendRealtimeClient {
       return;
     }
 
-    const delayMs = computeReconnectDelay(this.reconnectBaseMs, this.reconnectAttempts);
+    const delayMs = computeReconnectDelay(
+      this.reconnectBaseMs,
+      this.reconnectAttempts,
+    );
     this.reconnectAttempts += 1;
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
@@ -219,7 +244,8 @@ export class AgentBackendRealtimeClient {
         this.startHeartbeat(heartbeatMs);
       },
       acceptStopCommand: (commandId) => this.acceptStopCommand(commandId),
-      resolvePendingSearchRun: (response) => this.resolvePendingSearchRun(response),
+      resolvePendingSearchRun: (response) =>
+        this.resolvePendingSearchRun(response),
       rejectPendingSearchRun: (error) => this.rejectPendingSearchRun(error),
     });
   }
@@ -260,7 +286,10 @@ export class AgentBackendRealtimeClient {
   private resolvePendingSearchRun(response: SearchResponsePayload): void {
     const pending = this.pendingSearchRuns.get(response.requestId);
     if (!pending) {
-      this.logger.warn('runtime', `Ignoring unexpected search.run.response for ${response.requestId}`);
+      this.logger.warn(
+        'runtime',
+        `Ignoring unexpected search.run.response for ${response.requestId}`,
+      );
       return;
     }
 
@@ -272,7 +301,10 @@ export class AgentBackendRealtimeClient {
   private rejectPendingSearchRun(error: SearchErrorPayload): void {
     const pending = this.pendingSearchRuns.get(error.requestId);
     if (!pending) {
-      this.logger.warn('runtime', `Ignoring unexpected search.run.error for ${error.requestId}`);
+      this.logger.warn(
+        'runtime',
+        `Ignoring unexpected search.run.error for ${error.requestId}`,
+      );
       return;
     }
 
@@ -284,7 +316,9 @@ export class AgentBackendRealtimeClient {
   private rejectPendingSearchRuns(message: string): void {
     for (const pending of this.pendingSearchRuns.values()) {
       clearTimeout(pending.timer);
-      pending.reject(new AgentRealtimeSearchError(message, 'CONNECTION_CLOSED'));
+      pending.reject(
+        new AgentRealtimeSearchError(message, 'CONNECTION_CLOSED'),
+      );
     }
     this.pendingSearchRuns.clear();
   }

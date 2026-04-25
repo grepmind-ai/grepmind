@@ -46,10 +46,7 @@ export interface GetBindingSourceResponse {
   source: AgentGitSourceStatusDto | null;
 }
 
-export type HeadSyncDecision =
-  | 'materialized'
-  | 'queued'
-  | 'stale_rejected';
+export type HeadSyncDecision = 'materialized' | 'queued' | 'stale_rejected';
 
 export interface HeadSyncRequest {
   deviceId: string;

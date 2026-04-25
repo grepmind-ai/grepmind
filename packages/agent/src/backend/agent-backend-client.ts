@@ -21,7 +21,9 @@ import type {
 
 export interface AgentBackendClientOptions {
   baseUrl: AgentBackendBaseUrl;
-  accessToken?: string | (() => string | undefined | Promise<string | undefined>);
+  accessToken?:
+    | string
+    | (() => string | undefined | Promise<string | undefined>);
   defaultHeaders?: Record<string, string>;
   fetchImpl?: typeof fetch;
   logger?: AgentLogger;
@@ -86,20 +88,29 @@ export class AgentBackendClient {
     return this.request<BootstrapResponse>('/api/agent/v1/bootstrap');
   }
 
-  async registerProject(input: RegisterProjectRequest): Promise<RegisterProjectResponse> {
-    return this.request<RegisterProjectResponse>('/api/agent/v1/projects/register', {
-      method: 'POST',
-      body: input,
-    });
+  async registerProject(
+    input: RegisterProjectRequest,
+  ): Promise<RegisterProjectResponse> {
+    return this.request<RegisterProjectResponse>(
+      '/api/agent/v1/projects/register',
+      {
+        method: 'POST',
+        body: input,
+      },
+    );
   }
 
   async listProjects(): Promise<ListProjectsResponse['items']> {
-    const response = await this.request<ListProjectsResponse>('/api/agent/v1/projects');
+    const response = await this.request<ListProjectsResponse>(
+      '/api/agent/v1/projects',
+    );
     return response.items;
   }
 
   async getProject(bindingId: number): Promise<GetProjectResponse> {
-    return this.request<GetProjectResponse>(`/api/agent/v1/projects/${bindingId}`);
+    return this.request<GetProjectResponse>(
+      `/api/agent/v1/projects/${bindingId}`,
+    );
   }
 
   async unregisterProject(bindingId: number): Promise<void> {
@@ -108,35 +119,49 @@ export class AgentBackendClient {
     });
   }
 
-  async syncProject(bindingId: number, input: SyncProjectRequest): Promise<SyncProjectResponse> {
-    return this.request<SyncProjectResponse>(`/api/agent/v1/projects/${bindingId}/sync`, {
-      method: 'POST',
-      body: input,
-    });
+  async syncProject(
+    bindingId: number,
+    input: SyncProjectRequest,
+  ): Promise<SyncProjectResponse> {
+    return this.request<SyncProjectResponse>(
+      `/api/agent/v1/projects/${bindingId}/sync`,
+      {
+        method: 'POST',
+        body: input,
+      },
+    );
   }
 
   async attachSource(
     bindingId: number,
     input: AttachAgentSourceRequest,
   ): Promise<AttachAgentSourceResponse> {
-    return this.request<AttachAgentSourceResponse>(`/api/agent/v1/projects/${bindingId}/source/attach`, {
-      method: 'POST',
-      body: input,
-    });
+    return this.request<AttachAgentSourceResponse>(
+      `/api/agent/v1/projects/${bindingId}/source/attach`,
+      {
+        method: 'POST',
+        body: input,
+      },
+    );
   }
 
   async getSource(bindingId: number): Promise<GetBindingSourceResponse> {
-    return this.request<GetBindingSourceResponse>(`/api/agent/v1/projects/${bindingId}/source`);
+    return this.request<GetBindingSourceResponse>(
+      `/api/agent/v1/projects/${bindingId}/source`,
+    );
   }
 
   async syncHead(
     bindingId: number,
     input: HeadSyncRequest,
   ): Promise<HeadSyncResponse> {
-    return this.request<HeadSyncResponse>(`/api/agent/v1/projects/${bindingId}/head`, {
-      method: 'POST',
-      body: input,
-    });
+    return this.request<HeadSyncResponse>(
+      `/api/agent/v1/projects/${bindingId}/head`,
+      {
+        method: 'POST',
+        body: input,
+      },
+    );
   }
 
   async listRevisionFilesPage(
@@ -185,7 +210,8 @@ export class AgentBackendClient {
     const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
       method,
       headers,
-      body: options.body === undefined ? undefined : JSON.stringify(options.body),
+      body:
+        options.body === undefined ? undefined : JSON.stringify(options.body),
     });
 
     if (!response.ok) {
@@ -212,7 +238,9 @@ export class AgentBackendClient {
     return (await response.json()) as T;
   }
 
-  private async buildHeaders(hasJsonBody: boolean): Promise<Record<string, string>> {
+  private async buildHeaders(
+    hasJsonBody: boolean,
+  ): Promise<Record<string, string>> {
     const headers: Record<string, string> = {
       Accept: 'application/json',
       ...this.defaultHeaders,
@@ -245,13 +273,13 @@ export class AgentBackendClient {
     try {
       payload = (await response.json()) as AgentErrorPayload;
     } catch {
-      fallbackBody = await response.text().catch(() => undefined);
+      fallbackBody = await response.text().catch(() => {});
     }
 
     return new AgentBackendClientError(
-      payload?.error?.message
-      ?? fallbackBody
-      ?? `Agent backend request failed with status ${response.status}`,
+      payload?.error?.message ??
+        fallbackBody ??
+        `Agent backend request failed with status ${response.status}`,
       {
         status: response.status,
         code: payload?.error?.code ?? 'RETRYABLE_BACKEND_ERROR',

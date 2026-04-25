@@ -1,4 +1,8 @@
-import type { BranchDescriptor, EmbeddingProfileDescriptor, ProjectBindingDto } from './project.js';
+import type {
+  BranchDescriptor,
+  EmbeddingProfileDescriptor,
+  ProjectBindingDto,
+} from './project.js';
 import type { SearchTarget } from './search.js';
 
 export interface BranchCursorState {

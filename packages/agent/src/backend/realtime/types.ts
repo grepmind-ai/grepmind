@@ -25,7 +25,9 @@ export interface AgentBackendRealtimeClientOptions {
   logger?: AgentLogger;
   capabilities?: Record<string, unknown>;
   onStopRequested?: (payload: { commandId: string }) => void | Promise<void>;
-  onIndexSearchRequested?: (payload: SearchIndexRequestPayload) => Promise<SearchChunkPointer[]>;
+  onIndexSearchRequested?: (
+    payload: SearchIndexRequestPayload,
+  ) => Promise<SearchChunkPointer[]>;
   searchRequestTimeoutMs?: number;
 }
 

@@ -1,7 +1,10 @@
 import { AgentBackendClientError } from '../../backend/agent-backend-client.js';
 import { AgentCommandExecutor } from '../../commands/agent-command-executor.js';
 import { SearchHeadService } from '../../services/search-head-service.js';
-import { AgentRpcIdempotencyStore, type StoredIdempotentRecord } from '../rpc/idempotency-store.js';
+import {
+  AgentRpcIdempotencyStore,
+  type StoredIdempotentRecord,
+} from '../rpc/idempotency-store.js';
 import {
   AGENT_RUNTIME_PROTOCOL_VERSION,
   type AgentRpcError,
@@ -56,66 +59,104 @@ export class AgentRuntimeRequestDispatcher {
       case 'ping':
         return this.getPingResult() as AgentRpcMethodMap[TMethod]['result'];
       case 'status': {
-        const params = (request.params ?? {}) as AgentRpcMethodMap['status']['params'];
-        const result = await this.enqueue(() => this.requireCommandExecutor().status(params));
+        const params = (request.params ??
+          {}) as AgentRpcMethodMap['status']['params'];
+        const result = await this.enqueue(() =>
+          this.requireCommandExecutor().status(params),
+        );
         return result as AgentRpcMethodMap[TMethod]['result'];
       }
       case 'listProjects': {
-        const result = await this.enqueue(() => this.requireCommandExecutor().listProjects());
+        const result = await this.enqueue(() =>
+          this.requireCommandExecutor().listProjects(),
+        );
         return result as AgentRpcMethodMap[TMethod]['result'];
       }
       case 'registerProject': {
-        const params = request.params as AgentRpcMethodMap['registerProject']['params'];
-        const result = await this.enqueue(() => this.executeIdempotent('registerProject', params.idempotencyKey, async () => (
-          this.requireCommandExecutor().registerProject({
-            remoteFingerprint: params.remoteFingerprint,
-            displayName: params.displayName,
-            workspacePath: params.workspacePath,
-            workspaceFingerprint: params.workspaceFingerprint,
-            preferredActiveBranch: params.preferredActiveBranch,
-          })
-        )));
+        const params =
+          request.params as AgentRpcMethodMap['registerProject']['params'];
+        const result = await this.enqueue(() =>
+          this.executeIdempotent(
+            'registerProject',
+            params.idempotencyKey,
+            async () =>
+              this.requireCommandExecutor().registerProject({
+                remoteFingerprint: params.remoteFingerprint,
+                displayName: params.displayName,
+                workspacePath: params.workspacePath,
+                workspaceFingerprint: params.workspaceFingerprint,
+                preferredActiveBranch: params.preferredActiveBranch,
+              }),
+          ),
+        );
         return result as AgentRpcMethodMap[TMethod]['result'];
       }
       case 'syncProject': {
-        const params = request.params as AgentRpcMethodMap['syncProject']['params'];
-        const result = await this.enqueue(() => this.executeIdempotent('syncProject', params.idempotencyKey, async () => (
-          this.requireCommandExecutor().syncProject({
-            bindingId: params.bindingId,
-            targets: params.targets,
-          })
-        )));
+        const params =
+          request.params as AgentRpcMethodMap['syncProject']['params'];
+        const result = await this.enqueue(() =>
+          this.executeIdempotent(
+            'syncProject',
+            params.idempotencyKey,
+            async () =>
+              this.requireCommandExecutor().syncProject({
+                bindingId: params.bindingId,
+                targets: params.targets,
+              }),
+          ),
+        );
         return result as AgentRpcMethodMap[TMethod]['result'];
       }
       case 'unbindProject': {
-        const params = request.params as AgentRpcMethodMap['unbindProject']['params'];
+        const params =
+          request.params as AgentRpcMethodMap['unbindProject']['params'];
         const result = await this.enqueue(async () => {
-          await this.executeIdempotent('unbindProject', params.idempotencyKey, async () => {
-            await this.requireCommandExecutor().unbindProject(params.bindingId);
-            return {};
-          });
+          await this.executeIdempotent(
+            'unbindProject',
+            params.idempotencyKey,
+            async () => {
+              await this.requireCommandExecutor().unbindProject(
+                params.bindingId,
+              );
+              return {};
+            },
+          );
           return {};
         });
         return result as AgentRpcMethodMap[TMethod]['result'];
       }
       case 'cleanProject': {
-        const params = request.params as AgentRpcMethodMap['cleanProject']['params'];
-        const result = await this.enqueue(() => this.executeIdempotent('cleanProject', params.idempotencyKey, async () => (
-          this.requireCommandExecutor().cleanProject(params.bindingId)
-        )));
+        const params =
+          request.params as AgentRpcMethodMap['cleanProject']['params'];
+        const result = await this.enqueue(() =>
+          this.executeIdempotent(
+            'cleanProject',
+            params.idempotencyKey,
+            async () =>
+              this.requireCommandExecutor().cleanProject(params.bindingId),
+          ),
+        );
         return result as AgentRpcMethodMap[TMethod]['result'];
       }
       case 'searchHead': {
-        const params = request.params as AgentRpcMethodMap['searchHead']['params'];
-        const result = await this.enqueue(() => this.requireSearchHeadService().searchByLocalHead(params));
+        const params =
+          request.params as AgentRpcMethodMap['searchHead']['params'];
+        const result = await this.enqueue(() =>
+          this.requireSearchHeadService().searchByLocalHead(params),
+        );
         return result as AgentRpcMethodMap[TMethod]['result'];
       }
       case 'shutdown': {
-        const params = request.params as AgentRpcMethodMap['shutdown']['params'];
+        const params =
+          request.params as AgentRpcMethodMap['shutdown']['params'];
         const result = await this.enqueue(async () => {
-          const result = await this.executeIdempotent('shutdown', params.idempotencyKey, async () => ({
-            accepted: true as const,
-          }));
+          const result = await this.executeIdempotent(
+            'shutdown',
+            params.idempotencyKey,
+            async () => ({
+              accepted: true as const,
+            }),
+          );
           this.options.onShutdownAccepted();
           return result;
         });
@@ -273,7 +314,9 @@ function validateMethod(method: string): asserts method is AgentRpcMethod {
   }
 }
 
-function fromStoredIdempotentRecord<TResult>(record: StoredIdempotentRecord<TResult>): TResult {
+function fromStoredIdempotentRecord<TResult>(
+  record: StoredIdempotentRecord<TResult>,
+): TResult {
   if (record.kind === 'success') {
     return record.result;
   }

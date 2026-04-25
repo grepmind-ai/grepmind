@@ -5,7 +5,9 @@ import { AgentTableRepository } from './table-repository.js';
 export type AgentMetaRow = typeof agentMeta.$inferSelect;
 export type AgentMetaInsert = typeof agentMeta.$inferInsert;
 
-export class AgentMetaRepository extends AgentTableRepository<typeof agentMeta> {
+export class AgentMetaRepository extends AgentTableRepository<
+  typeof agentMeta
+> {
   constructor(db: AgentDatabase) {
     super(db, agentMeta);
   }

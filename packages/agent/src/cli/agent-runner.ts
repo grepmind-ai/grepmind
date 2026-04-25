@@ -5,7 +5,10 @@ import type {
   SearchRequestPayload,
   SearchResponsePayload,
 } from '../backend/contracts/index.js';
-import { createAgentRuntime, type AgentRuntime } from '../runtime/agent-runtime.js';
+import {
+  createAgentRuntime,
+  type AgentRuntime,
+} from '../runtime/agent-runtime.js';
 import { noopAgentLogger, type AgentLogger } from '../logging/agent-logger.js';
 import { RevisionPublicationService } from '../services/revision-publication-service.js';
 import type { AgentCliConfig } from './config.js';
@@ -88,11 +91,17 @@ export class AgentRunner {
     this.iteration += 1;
     this.syncRealtimeBindings(projects);
 
-    this.logger.trace('runtime', `runOnce.start iteration=${this.iteration} projects=${projects.length} stopping=${this.stopping}`);
+    this.logger.trace(
+      'runtime',
+      `runOnce.start iteration=${this.iteration} projects=${projects.length} stopping=${this.stopping}`,
+    );
 
     if (projects.length === 0) {
       if (!this.loggedNoProjects) {
-        this.logger.info('project', 'No registered projects; waiting for the next poll');
+        this.logger.info(
+          'project',
+          'No registered projects; waiting for the next poll',
+        );
         this.loggedNoProjects = true;
       }
       revisionPublication.dropMissingBindings(new Set<number>());
@@ -105,7 +114,10 @@ export class AgentRunner {
 
     for (const project of projects) {
       if (this.stopping) {
-        this.logger.trace('runtime', `runOnce.stop-requested iteration=${this.iteration}`);
+        this.logger.trace(
+          'runtime',
+          `runOnce.stop-requested iteration=${this.iteration}`,
+        );
         return;
       }
 
@@ -114,15 +126,25 @@ export class AgentRunner {
       try {
         await revisionPublication.ensureAttachedAndSyncHead(project.bindingId);
       } catch (error) {
-        this.logger.error('publish', `Head sync failed for ${project.displayName} (#${project.bindingId})`, error);
+        this.logger.error(
+          'publish',
+          `Head sync failed for ${project.displayName} (#${project.bindingId})`,
+          error,
+        );
       }
 
       if (!this.shouldSyncProject(project.bindingId)) {
-        this.logger.trace('sync', `skipped iteration=${this.iteration} bindingId=${project.bindingId}`);
+        this.logger.trace(
+          'sync',
+          `skipped iteration=${this.iteration} bindingId=${project.bindingId}`,
+        );
         continue;
       }
 
-      this.logger.info('sync', `Syncing ${project.displayName} (#${project.bindingId})`);
+      this.logger.info(
+        'sync',
+        `Syncing ${project.displayName} (#${project.bindingId})`,
+      );
       try {
         const result = await runtime.sync.syncProject(project.bindingId);
         if (isIdleSyncResult(result)) {
@@ -137,7 +159,11 @@ export class AgentRunner {
           );
         }
       } catch (error) {
-        this.logger.error('sync', `Sync failed for ${project.displayName} (#${project.bindingId})`, error);
+        this.logger.error(
+          'sync',
+          `Sync failed for ${project.displayName} (#${project.bindingId})`,
+          error,
+        );
       } finally {
         this.scheduleNextSync(project.bindingId);
       }
@@ -151,7 +177,10 @@ export class AgentRunner {
     }
     this.syncRealtimeBindings(projects);
 
-    this.logger.trace('runtime', `runOnce.done iteration=${this.iteration} activeBindings=${activeBindingIds.size}`);
+    this.logger.trace(
+      'runtime',
+      `runOnce.done iteration=${this.iteration} activeBindings=${activeBindingIds.size}`,
+    );
   }
 
   async runLoop(): Promise<void> {
@@ -187,7 +216,11 @@ export class AgentRunner {
     this.requestStop();
     this.logger.trace('runtime', 'runner.stop requested');
     await this.realtimeClient?.stop().catch((error) => {
-      this.logger.error('runtime', 'Failed to stop realtime client cleanly', error);
+      this.logger.error(
+        'runtime',
+        'Failed to stop realtime client cleanly',
+        error,
+      );
     });
     this.realtimeClient = null;
     if (this.runtime) {
@@ -250,10 +283,15 @@ export class AgentRunner {
   }
 
   private scheduleNextSync(bindingId: number): void {
-    this.nextSyncAtByBinding.set(bindingId, Date.now() + this.config.pollIntervalMs);
+    this.nextSyncAtByBinding.set(
+      bindingId,
+      Date.now() + this.config.pollIntervalMs,
+    );
   }
 
-  private getRealtimeBindings(projects: Array<{ bindingId: number }>): Array<{ bindingId: number; attachEpoch?: number }> {
+  private getRealtimeBindings(
+    projects: Array<{ bindingId: number }>,
+  ): Array<{ bindingId: number; attachEpoch?: number }> {
     if (!this.revisionPublication) {
       return projects.map((project) => ({ bindingId: project.bindingId }));
     }
@@ -272,14 +310,14 @@ function isAbortError(error: unknown): boolean {
   return error instanceof Error && error.name === 'AbortError';
 }
 
-function isIdleSyncResult(
-  result: {
-    revisionCount: number;
-    materializedPlanCount: number;
-    invalidationCount: number;
-  },
-): boolean {
-  return result.revisionCount === 0
-    && result.materializedPlanCount === 0
-    && result.invalidationCount === 0;
+function isIdleSyncResult(result: {
+  revisionCount: number;
+  materializedPlanCount: number;
+  invalidationCount: number;
+}): boolean {
+  return (
+    result.revisionCount === 0 &&
+    result.materializedPlanCount === 0 &&
+    result.invalidationCount === 0
+  );
 }

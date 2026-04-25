@@ -65,9 +65,10 @@ export async function loadAgentStatusSnapshot(
 
   attachmentParams.push(limit);
   const attachmentLimitParam = `$${attachmentParams.length}`;
-  const attachmentWhereSql = attachmentWhereClauses.length > 0
-    ? `WHERE ${attachmentWhereClauses.join(' AND ')}`
-    : '';
+  const attachmentWhereSql =
+    attachmentWhereClauses.length > 0
+      ? `WHERE ${attachmentWhereClauses.join(' AND ')}`
+      : '';
 
   const attachmentsResult = await db.query<StatusAttachmentRow>(
     `
@@ -121,9 +122,10 @@ export async function loadAgentStatusSnapshot(
 
   payloadParams.push(limit);
   const payloadLimitParam = `$${payloadParams.length}`;
-  const payloadWhereSql = payloadWhereClauses.length > 0
-    ? `WHERE ${payloadWhereClauses.join(' AND ')}`
-    : '';
+  const payloadWhereSql =
+    payloadWhereClauses.length > 0
+      ? `WHERE ${payloadWhereClauses.join(' AND ')}`
+      : '';
 
   const payloadsResult = await db.query<StatusPayloadRow>(
     `
@@ -148,22 +150,29 @@ export async function loadAgentStatusSnapshot(
 
   if (input.bindingId != null) {
     materializationParams.push(input.bindingId);
-    materializationWhereClauses.push(`pm.binding_id = $${materializationParams.length}`);
+    materializationWhereClauses.push(
+      `pm.binding_id = $${materializationParams.length}`,
+    );
   }
   if (input.branch) {
     materializationParams.push(input.branch);
-    materializationWhereClauses.push(`pm.branch = $${materializationParams.length}`);
+    materializationWhereClauses.push(
+      `pm.branch = $${materializationParams.length}`,
+    );
   }
   if (input.commitSha) {
     materializationParams.push(input.commitSha);
-    materializationWhereClauses.push(`pr.commit_sha = $${materializationParams.length}`);
+    materializationWhereClauses.push(
+      `pr.commit_sha = $${materializationParams.length}`,
+    );
   }
 
   materializationParams.push(limit);
   const materializationLimitParam = `$${materializationParams.length}`;
-  const materializationWhereSql = materializationWhereClauses.length > 0
-    ? `WHERE ${materializationWhereClauses.join(' AND ')}`
-    : '';
+  const materializationWhereSql =
+    materializationWhereClauses.length > 0
+      ? `WHERE ${materializationWhereClauses.join(' AND ')}`
+      : '';
 
   const materializationsResult = await db.query<StatusMaterializationRow>(
     `
@@ -200,7 +209,8 @@ export async function loadAgentStatusSnapshot(
       revisionId: Number(row.revision_id),
       branch: row.branch,
       visibility: row.visibility,
-      ownerBindingId: row.owner_binding_id == null ? null : Number(row.owner_binding_id),
+      ownerBindingId:
+        row.owner_binding_id == null ? null : Number(row.owner_binding_id),
       sourceKind: row.source_kind,
       commitSha: row.commit_sha,
       filesSynced: toDbBoolean(row.files_synced),
@@ -235,5 +245,9 @@ function toDbBoolean(value: boolean | number | string): boolean {
     return value !== 0;
   }
 
-  return value === '1' || value.toLowerCase() === 'true' || value.toLowerCase() === 't';
+  return (
+    value === '1' ||
+    value.toLowerCase() === 'true' ||
+    value.toLowerCase() === 't'
+  );
 }

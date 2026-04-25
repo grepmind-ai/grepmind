@@ -21,21 +21,27 @@ export async function registerCommand(args: ParsedArgs): Promise<void> {
   const workspacePath = await resolveWorkspacePath(
     requireStringFlag(args, 'workspace'),
   );
-  const remoteFingerprint = await resolveWorkspaceRemoteFingerprint(workspacePath);
-  const displayName = requireStringFlag(args, 'display-name', path.basename(workspacePath));
+  const remoteFingerprint =
+    await resolveWorkspaceRemoteFingerprint(workspacePath);
+  const displayName = requireStringFlag(
+    args,
+    'display-name',
+    path.basename(workspacePath),
+  );
   const workspaceFingerprint = await computeWorkspaceFingerprint(workspacePath);
   const preferredActiveBranch = getStringFlag(args, 'branch');
   const requestId = randomUUID();
 
   const result = await executeSocketPreferredCommand(args, {
-    rpc: (client) => client.registerProject({
-      remoteFingerprint,
-      displayName,
-      workspacePath,
-      workspaceFingerprint,
-      preferredActiveBranch,
-      idempotencyKey: requestId,
-    }),
+    rpc: (client) =>
+      client.registerProject({
+        remoteFingerprint,
+        displayName,
+        workspacePath,
+        workspaceFingerprint,
+        preferredActiveBranch,
+        idempotencyKey: requestId,
+      }),
   });
 
   agentConsole.success(
@@ -69,10 +75,11 @@ export async function removeProjectCommand(args: ParsedArgs): Promise<void> {
   const requestId = randomUUID();
 
   await executeSocketPreferredCommand(args, {
-    rpc: (client) => client.unbindProject({
-      bindingId,
-      idempotencyKey: requestId,
-    }),
+    rpc: (client) =>
+      client.unbindProject({
+        bindingId,
+        idempotencyKey: requestId,
+      }),
   });
 
   agentConsole.warn('project', `Removed binding #${bindingId}`);
@@ -141,7 +148,9 @@ async function resolveProjectsForClean(
   const matches = items.filter((item) => item.workspacePath === workspacePath);
 
   if (matches.length === 0) {
-    throw new Error(`No local project is registered for workspace ${workspacePath}`);
+    throw new Error(
+      `No local project is registered for workspace ${workspacePath}`,
+    );
   }
 
   return matches;

@@ -56,11 +56,17 @@ export class AgentRuntimeClient {
     });
   }
 
-  async status(params: AgentStatusQuery = {}, options: { timeoutMs?: number } = {}) {
+  async status(
+    params: AgentStatusQuery = {},
+    options: { timeoutMs?: number } = {},
+  ) {
     return this.request('status', params, options);
   }
 
-  async registerProject(params: RegisterProjectRpcParams, options: { timeoutMs?: number } = {}) {
+  async registerProject(
+    params: RegisterProjectRpcParams,
+    options: { timeoutMs?: number } = {},
+  ) {
     return this.request('registerProject', params, options);
   }
 
@@ -68,23 +74,38 @@ export class AgentRuntimeClient {
     return this.request('listProjects', undefined, options);
   }
 
-  async syncProject(params: SyncProjectRpcParams, options: { timeoutMs?: number } = {}) {
+  async syncProject(
+    params: SyncProjectRpcParams,
+    options: { timeoutMs?: number } = {},
+  ) {
     return this.request('syncProject', params, options);
   }
 
-  async unbindProject(params: UnbindProjectRpcParams, options: { timeoutMs?: number } = {}) {
+  async unbindProject(
+    params: UnbindProjectRpcParams,
+    options: { timeoutMs?: number } = {},
+  ) {
     return this.request('unbindProject', params, options);
   }
 
-  async cleanProject(params: CleanProjectRpcParams, options: { timeoutMs?: number } = {}) {
+  async cleanProject(
+    params: CleanProjectRpcParams,
+    options: { timeoutMs?: number } = {},
+  ) {
     return this.request('cleanProject', params, options);
   }
 
-  async searchHead(params: SearchHeadRpcParams, options: { timeoutMs?: number } = {}) {
+  async searchHead(
+    params: SearchHeadRpcParams,
+    options: { timeoutMs?: number } = {},
+  ) {
     return this.request('searchHead', params, options);
   }
 
-  async shutdown(params: ShutdownRpcParams, options: { timeoutMs?: number } = {}) {
+  async shutdown(
+    params: ShutdownRpcParams,
+    options: { timeoutMs?: number } = {},
+  ) {
     return this.request('shutdown', params, options);
   }
 
@@ -97,7 +118,9 @@ export class AgentRuntimeClient {
     } = {},
   ): Promise<AgentRpcMethodMap[TMethod]['result']> {
     const includeToken = options.includeToken ?? method !== 'ping';
-    const meta = includeToken ? await loadRuntimeMetaOrThrow(this.dataDir) : null;
+    const meta = includeToken
+      ? await loadRuntimeMetaOrThrow(this.dataDir)
+      : null;
     const socketPath = meta?.socketPath ?? getAgentSocketPath(this.dataDir);
     const timeoutMs = options.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
 
@@ -160,10 +183,13 @@ export class AgentRuntimeClient {
       socket.on('end', () => {
         if (!settled) {
           fail(
-            new AgentRuntimeClientError('Runtime connection closed before a response was received', {
-              code: 'BROKEN_PIPE',
-              retryable: true,
-            }),
+            new AgentRuntimeClientError(
+              'Runtime connection closed before a response was received',
+              {
+                code: 'BROKEN_PIPE',
+                retryable: true,
+              },
+            ),
           );
         }
       });
@@ -198,17 +224,22 @@ export class AgentRuntimeClient {
 }
 
 export function isRuntimeUnavailableError(error: unknown): boolean {
-  return error instanceof AgentRuntimeClientError
-    && (error.code === 'RUNTIME_UNAVAILABLE' || error.code === 'BROKEN_PIPE');
+  return (
+    error instanceof AgentRuntimeClientError &&
+    (error.code === 'RUNTIME_UNAVAILABLE' || error.code === 'BROKEN_PIPE')
+  );
 }
 
 async function loadRuntimeMetaOrThrow(dataDir: string) {
   const meta = await readAgentMetaFile(dataDir);
   if (!meta) {
-    throw new AgentRuntimeClientError(`Agent runtime is not running for ${dataDir}`, {
-      code: 'RUNTIME_UNAVAILABLE',
-      retryable: true,
-    });
+    throw new AgentRuntimeClientError(
+      `Agent runtime is not running for ${dataDir}`,
+      {
+        code: 'RUNTIME_UNAVAILABLE',
+        retryable: true,
+      },
+    );
   }
   if (meta.protocolVersion !== AGENT_RUNTIME_PROTOCOL_VERSION) {
     throw new AgentRuntimeClientError(
@@ -229,10 +260,13 @@ async function assertSocketPath(socketPath: string): Promise<void> {
   } catch (error) {
     const nodeError = error as NodeJS.ErrnoException;
     if (nodeError.code === 'ENOENT') {
-      throw new AgentRuntimeClientError(`Agent runtime socket is not available at ${socketPath}`, {
-        code: 'RUNTIME_UNAVAILABLE',
-        retryable: true,
-      });
+      throw new AgentRuntimeClientError(
+        `Agent runtime socket is not available at ${socketPath}`,
+        {
+          code: 'RUNTIME_UNAVAILABLE',
+          retryable: true,
+        },
+      );
     }
     throw error;
   }

@@ -1,6 +1,10 @@
 import type { PGlite } from '@electric-sql/pglite';
 import type { ExtractTablesWithRelations } from 'drizzle-orm';
-import { drizzle, type PgliteDatabase, type PgliteTransaction } from 'drizzle-orm/pglite';
+import {
+  drizzle,
+  type PgliteDatabase,
+  type PgliteTransaction,
+} from 'drizzle-orm/pglite';
 import * as schema from './models/schema.js';
 
 export type AgentDatabaseSchema = typeof schema;

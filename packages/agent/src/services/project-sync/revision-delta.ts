@@ -20,7 +20,9 @@ export interface ProcessRevisionDeltaInput {
   completedAttachmentIds: Set<number>;
 }
 
-export async function processRevisionDelta(input: ProcessRevisionDeltaInput): Promise<void> {
+export async function processRevisionDelta(
+  input: ProcessRevisionDeltaInput,
+): Promise<void> {
   const {
     db,
     backend,
@@ -42,7 +44,13 @@ export async function processRevisionDelta(input: ProcessRevisionDeltaInput): Pr
   if (isComplete(progress)) {
     markRevisionComplete(localState, completedAttachmentIds, revision);
   } else {
-    await persistAttachmentState(db, bindingId, revision.attachmentId, revision.revisionId, progress);
+    await persistAttachmentState(
+      db,
+      bindingId,
+      revision.attachmentId,
+      revision.revisionId,
+      progress,
+    );
     markRevisionPending(localState, revision, progress);
   }
 
@@ -50,7 +58,13 @@ export async function processRevisionDelta(input: ProcessRevisionDeltaInput): Pr
     await syncRevisionFiles(db, backend, bindingId, revision);
     progress.filesSynced = true;
     progress.needsFilesSync = false;
-    await persistAttachmentState(db, bindingId, revision.attachmentId, revision.revisionId, progress);
+    await persistAttachmentState(
+      db,
+      bindingId,
+      revision.attachmentId,
+      revision.revisionId,
+      progress,
+    );
   }
 
   if (isComplete(progress)) {
@@ -276,13 +290,7 @@ async function persistAttachmentState(
         files_synced = excluded.files_synced,
         updated_at = excluded.updated_at
     `,
-    [
-      bindingId,
-      attachmentId,
-      revisionId,
-      state.filesSynced,
-      now,
-    ],
+    [bindingId, attachmentId, revisionId, state.filesSynced, now],
   );
 }
 

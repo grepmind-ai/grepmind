@@ -12,19 +12,17 @@ export async function syncCommand(args: ParsedArgs): Promise<void> {
   const bindingId = getIntegerFlag(args, 'binding-id');
   const requestId = randomUUID();
   const result = await executeSocketPreferredCommand(args, {
-    rpc: (client) => client.syncProject({
-      bindingId,
-      idempotencyKey: requestId,
-    }),
+    rpc: (client) =>
+      client.syncProject({
+        bindingId,
+        idempotencyKey: requestId,
+      }),
   });
 
   if (bindingId != null) {
     const singleResult = result.results[0];
     if (isIdleSyncResult(singleResult)) {
-      agentConsole.info(
-        'sync',
-        `No new sync deltas for binding #${bindingId}`,
-      );
+      agentConsole.info('sync', `No new sync deltas for binding #${bindingId}`);
     } else {
       agentConsole.success(
         'sync',

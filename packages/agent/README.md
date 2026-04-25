@@ -86,18 +86,18 @@ Commands:
 
 ## Environment Variables
 
-| Variable | Description |
-| --- | --- |
-| `GREPMIND_AGENT_URL` | Backend URL. |
-| `GREPMIND_AGENT_TOKEN` | Access token. |
-| `GREPMIND_AGENT_API_KEY` | API key. |
-| `GREPMIND_AGENT_NAME` | Local agent display name. |
-| `GREPMIND_AGENT_DEVICE_ID` | Stable device id override. |
-| `GREPMIND_AGENT_DATA_DIR` | Local runtime data directory. |
-| `GREPMIND_AGENT_POLL_INTERVAL_MS` | Project sync poll interval. |
-| `GREPMIND_AGENT_HEAD_POLL_INTERVAL_MS` | Local branch HEAD poll interval. |
-| `GREPMIND_AGENT_TRACE=1` | Enable detailed runtime trace output. |
-| `GREPMIND_AGENT_TRACE_HTTP=1` | Include HTTP trace output. |
+| Variable                               | Description                           |
+| -------------------------------------- | ------------------------------------- |
+| `GREPMIND_AGENT_URL`                   | Backend URL.                          |
+| `GREPMIND_AGENT_TOKEN`                 | Access token.                         |
+| `GREPMIND_AGENT_API_KEY`               | API key.                              |
+| `GREPMIND_AGENT_NAME`                  | Local agent display name.             |
+| `GREPMIND_AGENT_DEVICE_ID`             | Stable device id override.            |
+| `GREPMIND_AGENT_DATA_DIR`              | Local runtime data directory.         |
+| `GREPMIND_AGENT_POLL_INTERVAL_MS`      | Project sync poll interval.           |
+| `GREPMIND_AGENT_HEAD_POLL_INTERVAL_MS` | Local branch HEAD poll interval.      |
+| `GREPMIND_AGENT_TRACE=1`               | Enable detailed runtime trace output. |
+| `GREPMIND_AGENT_TRACE_HTTP=1`          | Include HTTP trace output.            |
 
 Defaults: data dir `~/.grepmind-agent`, poll interval `60000ms`, HEAD poll interval `1500ms`.
 

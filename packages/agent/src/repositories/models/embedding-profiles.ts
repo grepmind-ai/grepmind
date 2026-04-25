@@ -1,4 +1,10 @@
-import { bigint, integer, pgTable, primaryKey, text } from 'drizzle-orm/pg-core';
+import {
+  bigint,
+  integer,
+  pgTable,
+  primaryKey,
+  text,
+} from 'drizzle-orm/pg-core';
 
 export const embeddingProfiles = pgTable(
   'embedding_profiles',
@@ -13,7 +19,5 @@ export const embeddingProfiles = pgTable(
     distanceMetric: text('distance_metric').notNull(),
     updatedAt: text('updated_at').notNull(),
   },
-  (table) => [
-    primaryKey({ columns: [table.bindingId, table.target] }),
-  ],
+  (table) => [primaryKey({ columns: [table.bindingId, table.target] })],
 );

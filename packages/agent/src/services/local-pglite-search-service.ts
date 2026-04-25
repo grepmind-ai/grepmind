@@ -30,7 +30,9 @@ export class LocalPgliteSearchService {
     this.logger = options.logger ?? noopAgentLogger;
   }
 
-  async search(input: SearchIndexRequestPayload): Promise<SearchChunkPointer[]> {
+  async search(
+    input: SearchIndexRequestPayload,
+  ): Promise<SearchChunkPointer[]> {
     const request = this.validateRequest(input);
     const target = request.query.target;
     const vectorLiteral = toVectorLiteral(request.query.vector);
@@ -50,10 +52,7 @@ export class LocalPgliteSearchService {
       request.revisionId,
       vectorLiteral,
     ];
-    const whereClauses = [
-      'binding_id = $1',
-      'revision_id = $2',
-    ];
+    const whereClauses = ['binding_id = $1', 'revision_id = $2'];
 
     if (target === 'docs' && request.query.filters.tags.length > 0) {
       const tagPlaceholders = request.query.filters.tags.map((tag) => {
@@ -97,8 +96,11 @@ export class LocalPgliteSearchService {
     }));
   }
 
-  private validateRequest(input: SearchIndexRequestPayload): ValidatedSearchRequest {
-    const requestId = typeof input.requestId === 'string' ? input.requestId.trim() : '';
+  private validateRequest(
+    input: SearchIndexRequestPayload,
+  ): ValidatedSearchRequest {
+    const requestId =
+      typeof input.requestId === 'string' ? input.requestId.trim() : '';
     if (!requestId) {
       throw new Error('search.index.request requires a non-empty requestId');
     }
@@ -123,7 +125,10 @@ interface ValidatedSearchRequest {
   query: ValidatedSearchQuery;
 }
 
-interface ValidatedSearchQuery extends Omit<SearchQuery, 'mode' | 'target' | 'vector' | 'filters' | 'limit'> {
+interface ValidatedSearchQuery extends Omit<
+  SearchQuery,
+  'mode' | 'target' | 'vector' | 'filters' | 'limit'
+> {
   mode: SearchMode;
   target: SearchTarget;
   vector: number[];
@@ -149,18 +154,32 @@ function validateSearchQuery(
   if (query.target !== 'code' && query.target !== 'docs') {
     throw new Error('Local agent search requires a target of code or docs');
   }
-  if (!Array.isArray(query.vector) || query.vector.length === 0 || query.vector.some((entry) => !Number.isFinite(entry))) {
+  if (
+    !Array.isArray(query.vector) ||
+    query.vector.length === 0 ||
+    query.vector.some((entry) => !Number.isFinite(entry))
+  ) {
     throw new Error('Local agent search requires a finite query vector');
   }
 
   const limit = requirePositiveInteger(query.limit, 'query.limit');
-  const filtersBindingId = requirePositiveInteger(query.filters?.bindingId, 'query.filters.bindingId');
-  const filtersRevisionId = requirePositiveInteger(query.filters?.revisionId, 'query.filters.revisionId');
+  const filtersBindingId = requirePositiveInteger(
+    query.filters?.bindingId,
+    'query.filters.bindingId',
+  );
+  const filtersRevisionId = requirePositiveInteger(
+    query.filters?.revisionId,
+    'query.filters.revisionId',
+  );
   if (filtersBindingId !== bindingId) {
-    throw new Error('search.index.request bindingId does not match query.filters.bindingId');
+    throw new Error(
+      'search.index.request bindingId does not match query.filters.bindingId',
+    );
   }
   if (filtersRevisionId !== revisionId) {
-    throw new Error('search.index.request revisionId does not match query.filters.revisionId');
+    throw new Error(
+      'search.index.request revisionId does not match query.filters.revisionId',
+    );
   }
 
   return {
@@ -182,11 +201,15 @@ function normalizeTags(value: string[] | undefined): string[] {
     return [];
   }
 
-  return [...new Set(
-    value
-      .map((entry) => typeof entry === 'string' ? entry.trim().toLowerCase() : '')
-      .filter((entry) => entry.length > 0),
-  )];
+  return [
+    ...new Set(
+      value
+        .map((entry) =>
+          typeof entry === 'string' ? entry.trim().toLowerCase() : '',
+        )
+        .filter((entry) => entry.length > 0),
+    ),
+  ];
 }
 
 function requirePositiveInteger(value: unknown, field: string): number {

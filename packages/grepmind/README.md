@@ -124,17 +124,17 @@ This command asks for `y/n` confirmation before deleting local runtime data. It 
 
 Most configuration can be supplied through environment variables:
 
-| Variable | Description |
-| --- | --- |
-| `GREPMIND_AGENT_URL` | Backend URL. |
-| `GREPMIND_AGENT_TOKEN` | Access token. |
-| `GREPMIND_AGENT_API_KEY` | API key. |
-| `GREPMIND_AGENT_NAME` | Local agent display name. |
-| `GREPMIND_AGENT_DATA_DIR` | Local runtime data directory. |
-| `GREPMIND_AGENT_POLL_INTERVAL_MS` | Project sync poll interval. |
-| `GREPMIND_AGENT_HEAD_POLL_INTERVAL_MS` | Local branch HEAD poll interval. |
-| `GREPMIND_AGENT_TRACE=1` | Enable detailed runtime trace output. |
-| `GREPMIND_AGENT_TRACE_HTTP=1` | Include HTTP trace output. |
+| Variable                               | Description                           |
+| -------------------------------------- | ------------------------------------- |
+| `GREPMIND_AGENT_URL`                   | Backend URL.                          |
+| `GREPMIND_AGENT_TOKEN`                 | Access token.                         |
+| `GREPMIND_AGENT_API_KEY`               | API key.                              |
+| `GREPMIND_AGENT_NAME`                  | Local agent display name.             |
+| `GREPMIND_AGENT_DATA_DIR`              | Local runtime data directory.         |
+| `GREPMIND_AGENT_POLL_INTERVAL_MS`      | Project sync poll interval.           |
+| `GREPMIND_AGENT_HEAD_POLL_INTERVAL_MS` | Local branch HEAD poll interval.      |
+| `GREPMIND_AGENT_TRACE=1`               | Enable detailed runtime trace output. |
+| `GREPMIND_AGENT_TRACE_HTTP=1`          | Include HTTP trace output.            |
 
 By default, local state is stored in `~/.grepmind-agent`.
 

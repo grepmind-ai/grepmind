@@ -2,7 +2,10 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const packageDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const packageDir = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '..',
+);
 const drizzleDir = path.join(packageDir, 'drizzle');
 const journalPath = path.join(drizzleDir, 'meta/_journal.json');
 const outputDir = path.join(packageDir, 'src/generated');
@@ -25,9 +28,10 @@ export async function generateAgentMigrations() {
     `export const AGENT_MIGRATION_JOURNAL = ${JSON.stringify(journal, null, 2)} as const;`,
     '',
     'export const AGENT_MIGRATION_FILES = {',
-    ...Object.entries(files).map(([tag, sql]) => (
-      `  ${JSON.stringify(tag)}: String.raw\`${escapeTemplateLiteral(sql)}\`,`
-    )),
+    ...Object.entries(files).map(
+      ([tag, sql]) =>
+        `  ${JSON.stringify(tag)}: String.raw\`${escapeTemplateLiteral(sql)}\`,`,
+    ),
     '} as const;',
     '',
     'export function readAgentMigrations(): MigrationMeta[] {',
@@ -54,7 +58,5 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
 }
 
 function escapeTemplateLiteral(value) {
-  return value
-    .replaceAll('`', '\\`')
-    .replaceAll('${', '\\${');
+  return value.replaceAll('`', '\\`').replaceAll('${', '\\${');
 }

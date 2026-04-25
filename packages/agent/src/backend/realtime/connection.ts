@@ -6,7 +6,11 @@ export const RealtimeWebSocket = (
 
 export const SOCKET_OPEN_STATE = 1;
 
-export function buildRealtimeUrl(baseUrl: string, accessToken?: string, apiKey?: string): string {
+export function buildRealtimeUrl(
+  baseUrl: string,
+  accessToken?: string,
+  apiKey?: string,
+): string {
   const url = new URL('/api/agent/v1/events', `${baseUrl}/`);
   url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
   if (accessToken) {
@@ -28,7 +32,11 @@ export function parseMessageData(rawData: unknown): string | null {
   }
 
   if (ArrayBuffer.isView(rawData)) {
-    return Buffer.from(rawData.buffer, rawData.byteOffset, rawData.byteLength).toString('utf8');
+    return Buffer.from(
+      rawData.buffer,
+      rawData.byteOffset,
+      rawData.byteLength,
+    ).toString('utf8');
   }
 
   return null;

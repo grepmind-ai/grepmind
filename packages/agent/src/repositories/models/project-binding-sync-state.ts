@@ -11,6 +11,9 @@ export const projectBindingSyncState = pgTable(
     updatedAt: text('updated_at').notNull(),
   },
   (table) => [
-    index('project_binding_sync_state_status_idx').on(table.status, table.updatedAt),
+    index('project_binding_sync_state_status_idx').on(
+      table.status,
+      table.updatedAt,
+    ),
   ],
 );

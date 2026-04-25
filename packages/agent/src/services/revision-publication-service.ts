@@ -14,7 +14,10 @@ import {
   updateSyncedState,
 } from './revision-publication/head-sync.js';
 import { listBindingSubscriptions } from './revision-publication/realtime-bindings.js';
-import type { ActiveAttachState, BindingRealtimeState } from './revision-publication/types.js';
+import type {
+  ActiveAttachState,
+  BindingRealtimeState,
+} from './revision-publication/types.js';
 import type { ProjectRegistryService } from './project-registry-service.js';
 
 export type { BindingRealtimeState } from './revision-publication/types.js';
@@ -47,11 +50,19 @@ export class RevisionPublicationService {
 
   async ensureAttachedAndSyncHead(bindingId: number): Promise<void> {
     const project = await this.projectRegistry.requireProject(bindingId);
-    this.logger.trace('publish', `start bindingId=${bindingId} workspace=${project.workspacePath}`);
-    const observedHead = await this.localHeadService.readObservedHead(project.workspacePath);
+    this.logger.trace(
+      'publish',
+      `start bindingId=${bindingId} workspace=${project.workspacePath}`,
+    );
+    const observedHead = await this.localHeadService.readObservedHead(
+      project.workspacePath,
+    );
     if (!observedHead) {
       clearObservedHead(this.stateByBindingId, bindingId);
-      this.logger.trace('publish', `detached-head bindingId=${bindingId} name=${project.displayName}`);
+      this.logger.trace(
+        'publish',
+        `detached-head bindingId=${bindingId} name=${project.displayName}`,
+      );
       return;
     }
 
@@ -76,10 +87,10 @@ export class RevisionPublicationService {
     );
 
     if (
-      state.lastMaterializedHead
-      && state.lastMaterializedHead.attachEpoch === state.attachEpoch
-      && state.lastMaterializedHead.branch === observedHead.branch
-      && state.lastMaterializedHead.headCommitSha === observedHead.headCommitSha
+      state.lastMaterializedHead &&
+      state.lastMaterializedHead.attachEpoch === state.attachEpoch &&
+      state.lastMaterializedHead.branch === observedHead.branch &&
+      state.lastMaterializedHead.headCommitSha === observedHead.headCommitSha
     ) {
       this.logger.trace(
         'publish',
@@ -147,7 +158,9 @@ export class RevisionPublicationService {
       });
 
       if (syncedHead.decision === 'stale_rejected') {
-        throw new Error(`Stale head sync persists after re-attach for binding #${bindingId}`);
+        throw new Error(
+          `Stale head sync persists after re-attach for binding #${bindingId}`,
+        );
       }
     }
 
@@ -164,7 +177,9 @@ export class RevisionPublicationService {
     dropMissingBindings(this.stateByBindingId, activeBindingIds);
   }
 
-  listBindingSubscriptions(bindingIds: Iterable<number>): BindingRealtimeState[] {
+  listBindingSubscriptions(
+    bindingIds: Iterable<number>,
+  ): BindingRealtimeState[] {
     return listBindingSubscriptions(this.stateByBindingId, bindingIds);
   }
 }

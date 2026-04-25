@@ -8,7 +8,9 @@ export abstract class AgentTableRepository<TTable extends AnyPgTable> {
     readonly table: TTable,
   ) {}
 
-  protected getExecutor(executor?: AgentDatabaseExecutor): AgentDatabaseExecutor {
+  protected getExecutor(
+    executor?: AgentDatabaseExecutor,
+  ): AgentDatabaseExecutor {
     return executor ?? this.db;
   }
 
@@ -21,11 +23,18 @@ export abstract class AgentTableRepository<TTable extends AnyPgTable> {
     executor?: AgentDatabaseExecutor,
   ) {
     const normalized = Array.isArray(values) ? values : [values];
-    return this.getExecutor(executor).insert(this.table).values(normalized as TTable['$inferInsert'][]);
+    return this.getExecutor(executor)
+      .insert(this.table)
+      .values(normalized as TTable['$inferInsert'][]);
   }
 
-  update(values: Partial<TTable['$inferInsert']>, executor?: AgentDatabaseExecutor) {
-    return this.getExecutor(executor).update(this.table).set(values as Record<string, unknown>);
+  update(
+    values: Partial<TTable['$inferInsert']>,
+    executor?: AgentDatabaseExecutor,
+  ) {
+    return this.getExecutor(executor)
+      .update(this.table)
+      .set(values as Record<string, unknown>);
   }
 
   delete(executor?: AgentDatabaseExecutor) {

@@ -21,13 +21,18 @@ export interface UpsertProjectRecordInput {
   updatedAt: string;
 }
 
-export class ProjectRepository extends AgentBindingTableRepository<typeof projects> {
+export class ProjectRepository extends AgentBindingTableRepository<
+  typeof projects
+> {
   constructor(db: AgentDatabase) {
     super(db, projects);
   }
 
   async listAll(): Promise<ProjectRow[]> {
-    return this.select().orderBy(desc(projects.updatedAt), desc(projects.bindingId));
+    return this.select().orderBy(
+      desc(projects.updatedAt),
+      desc(projects.bindingId),
+    );
   }
 
   async findByBindingId(bindingId: number): Promise<ProjectRow | null> {

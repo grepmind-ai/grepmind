@@ -62,16 +62,16 @@ Finds code or documentation by describing what it does in natural language.
 
 Input fields:
 
-| Field | Type | Description |
-| --- | --- | --- |
-| `workspacePath` | `string` | Absolute path to the registered workspace. |
-| `query` | `string` | Natural-language search query. |
-| `target` | `"code" \| "docs"` | Optional target. Defaults to `code`. |
-| `limit` | `number` | Optional maximum result count. Defaults to `10`. |
-| `threshold` | `number` | Optional similarity threshold from `0` to `1`. Defaults to `0.5`. |
-| `path` | `string` | Optional relative path prefix filter, such as `src/api`. |
-| `tags` | `string[]` | Optional docs tag filter. |
-| `compact` | `boolean` | Optional compact output without full previews. |
+| Field           | Type               | Description                                                       |
+| --------------- | ------------------ | ----------------------------------------------------------------- |
+| `workspacePath` | `string`           | Absolute path to the registered workspace.                        |
+| `query`         | `string`           | Natural-language search query.                                    |
+| `target`        | `"code" \| "docs"` | Optional target. Defaults to `code`.                              |
+| `limit`         | `number`           | Optional maximum result count. Defaults to `10`.                  |
+| `threshold`     | `number`           | Optional similarity threshold from `0` to `1`. Defaults to `0.5`. |
+| `path`          | `string`           | Optional relative path prefix filter, such as `src/api`.          |
+| `tags`          | `string[]`         | Optional docs tag filter.                                         |
+| `compact`       | `boolean`          | Optional compact output without full previews.                    |
 
 Example tool input:
 
@@ -87,8 +87,8 @@ Example tool input:
 
 ## Environment Variables
 
-| Variable | Description |
-| --- | --- |
+| Variable                  | Description                                                                            |
+| ------------------------- | -------------------------------------------------------------------------------------- |
 | `GREPMIND_AGENT_DATA_DIR` | Agent data directory used to find the runtime socket. Defaults to `~/.grepmind-agent`. |
 
 The server also loads `.env` through `dotenv/config`, so local environment files can provide the same value.

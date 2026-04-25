@@ -1,5 +1,13 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { chmod, mkdir, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises';
+import {
+  chmod,
+  mkdir,
+  readFile,
+  realpath,
+  rm,
+  stat,
+  writeFile,
+} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import type { AgentBackendClientOptions } from '../backend/agent-backend-client.js';
@@ -43,13 +51,17 @@ export async function ensureDataDir(dataDir: string): Promise<void> {
   await chmod(dataDir, 0o700).catch(() => {});
 }
 
-export async function loadAgentCliConfig(dataDir: string): Promise<AgentCliConfig> {
+export async function loadAgentCliConfig(
+  dataDir: string,
+): Promise<AgentCliConfig> {
   const configPath = getConfigPath(dataDir);
   const raw = await readFile(configPath, 'utf8');
   const parsed = JSON.parse(raw) as Partial<AgentCliConfig>;
 
   if (!parsed.apiBaseUrl || typeof parsed.apiBaseUrl !== 'string') {
-    throw new Error(`Invalid agent config at ${configPath}: apiBaseUrl is required`);
+    throw new Error(
+      `Invalid agent config at ${configPath}: apiBaseUrl is required`,
+    );
   }
   if (!parsed.name || typeof parsed.name !== 'string') {
     throw new Error(`Invalid agent config at ${configPath}: name is required`);
@@ -58,7 +70,8 @@ export async function loadAgentCliConfig(dataDir: string): Promise<AgentCliConfi
   const parsedDeviceId = normalizeDeviceId(parsed.deviceId);
   const config: AgentCliConfig = {
     apiBaseUrl: parsed.apiBaseUrl,
-    accessToken: typeof parsed.accessToken === 'string' ? parsed.accessToken : undefined,
+    accessToken:
+      typeof parsed.accessToken === 'string' ? parsed.accessToken : undefined,
     apiKey: typeof parsed.apiKey === 'string' ? parsed.apiKey : undefined,
     name: parsed.name,
     pollIntervalMs: normalizePollInterval(parsed.pollIntervalMs),
@@ -74,7 +87,9 @@ export async function loadAgentCliConfig(dataDir: string): Promise<AgentCliConfi
   return config;
 }
 
-export async function saveAgentCliConfig(config: AgentCliConfig): Promise<string> {
+export async function saveAgentCliConfig(
+  config: AgentCliConfig,
+): Promise<string> {
   await ensureDataDir(config.dataDir);
   const configPath = getConfigPath(config.dataDir);
   const payload = {
@@ -95,7 +110,10 @@ export async function removeAgentCliConfig(dataDir: string): Promise<void> {
   await rm(getConfigPath(dataDir), { force: true });
 }
 
-export function toBackendOptions(config: AgentCliConfig, logger?: AgentLogger): AgentBackendClientOptions {
+export function toBackendOptions(
+  config: AgentCliConfig,
+  logger?: AgentLogger,
+): AgentBackendClientOptions {
   return {
     baseUrl: stripTrailingSlash(config.apiBaseUrl),
     accessToken: config.accessToken,
@@ -107,7 +125,9 @@ export function toBackendOptions(config: AgentCliConfig, logger?: AgentLogger): 
   };
 }
 
-export async function computeWorkspaceFingerprint(workspacePath: string): Promise<string> {
+export async function computeWorkspaceFingerprint(
+  workspacePath: string,
+): Promise<string> {
   const resolved = await realpath(workspacePath);
   const info = await stat(resolved);
   const hash = createHash('sha256');

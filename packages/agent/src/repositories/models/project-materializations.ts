@@ -1,4 +1,11 @@
-import { bigint, index, integer, pgTable, primaryKey, text } from 'drizzle-orm/pg-core';
+import {
+  bigint,
+  index,
+  integer,
+  pgTable,
+  primaryKey,
+  text,
+} from 'drizzle-orm/pg-core';
 
 export const projectMaterializations = pgTable(
   'project_materializations',

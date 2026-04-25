@@ -54,7 +54,14 @@ export class AgentConsole implements AgentLogger {
     }
 
     const panelBorder = pc.dim(`+${'-'.repeat(SPLASH_PANEL_WIDTH + 2)}+`);
-    const artColors = [pc.cyan, pc.cyan, pc.blue, pc.blue, pc.magenta, pc.magenta] as const;
+    const artColors = [
+      pc.cyan,
+      pc.cyan,
+      pc.blue,
+      pc.blue,
+      pc.magenta,
+      pc.magenta,
+    ] as const;
 
     process.stdout.write('\n');
     SPLASH_ART_LINES.forEach((line, index) => {
@@ -62,7 +69,9 @@ export class AgentConsole implements AgentLogger {
     });
     process.stdout.write('\n');
     process.stdout.write(`${panelBorder}\n`);
-    writeSplashPanelLine(formatSplashSummary('Agent', summary.name), (value) => pc.white(value));
+    writeSplashPanelLine(formatSplashSummary('Agent', summary.name), (value) =>
+      pc.white(value),
+    );
     writeSplashPanelLine(
       formatSplashSummary('Backend', summary.apiBaseUrl),
       (value) => pc.white(value),
@@ -72,8 +81,13 @@ export class AgentConsole implements AgentLogger {
       (value) => pc.white(value),
     );
     writeSplashPanelLine(
-      formatSplashSummary('Trace', summary.traceEnabled ? 'enabled' : 'disabled'),
-      summary.traceEnabled ? (value) => pc.yellow(value) : (value) => pc.green(value),
+      formatSplashSummary(
+        'Trace',
+        summary.traceEnabled ? 'enabled' : 'disabled',
+      ),
+      summary.traceEnabled
+        ? (value) => pc.yellow(value)
+        : (value) => pc.green(value),
     );
     process.stdout.write(`${panelBorder}\n\n`);
   }
@@ -132,9 +146,7 @@ export class AgentConsole implements AgentLogger {
     const timestamp = pc.dim(formatTimestamp(new Date()));
     const label = formatScopeLabel(scope);
     const symbol = formatSymbol(kind);
-    const rendered = kind === 'trace'
-      ? pc.dim(message)
-      : message;
+    const rendered = kind === 'trace' ? pc.dim(message) : message;
     stream.write(`${timestamp} ${symbol} ${label} ${rendered}\n`);
   }
 }
@@ -144,7 +156,9 @@ function formatScopeLabel(scope: AgentLogScope): string {
   return style(` ${scope.toUpperCase().padEnd(7, ' ')} `);
 }
 
-function formatSymbol(kind: 'info' | 'success' | 'warn' | 'error' | 'trace'): string {
+function formatSymbol(
+  kind: 'info' | 'success' | 'warn' | 'error' | 'trace',
+): string {
   switch (kind) {
     case 'info':
       return pc.cyan('i');
@@ -188,7 +202,9 @@ function writeSplashPanelLine(
   value: string,
   render: (value: string) => string = (line) => line,
 ): void {
-  process.stdout.write(`${pc.dim('|')} ${render(fitText(value, SPLASH_PANEL_WIDTH))} ${pc.dim('|')}\n`);
+  process.stdout.write(
+    `${pc.dim('|')} ${render(fitText(value, SPLASH_PANEL_WIDTH))} ${pc.dim('|')}\n`,
+  );
 }
 
 function formatSplashSummary(label: string, value: string): string {
@@ -215,12 +231,4 @@ function truncateText(value: string, width: number): string {
     return '.'.repeat(width);
   }
   return `${value.slice(0, width - 3)}...`;
-}
-
-function centerText(value: string, width: number): string {
-  if (value.length >= width) {
-    return truncateText(value, width);
-  }
-  const leftPadding = Math.floor((width - value.length) / 2);
-  return `${' '.repeat(leftPadding)}${value}`.padEnd(width, ' ');
 }

@@ -1,39 +1,74 @@
 // Code search via local grepmind agent runtime
 
 import { z } from 'zod';
-import { searchCode, estimateTokens, type SearchResult, type ResponseMeta } from './search-client.js';
+import {
+  searchCode,
+  estimateTokens,
+  type SearchResult,
+  type ResponseMeta,
+} from './search-client.js';
 
 export const codeSearchSchema = z.object({
-  workspacePath: z.string().min(1).describe('Absolute path to the agent project root/workspace. Use your current project root, not the MCP server cwd.'),
-  query: z.string().describe('Describe what the code does in natural language (e.g., "validate user input", "handle HTTP errors")'),
-  target: z.enum(['code', 'docs']).optional().describe('Search target in the local agent HEAD: "code" (default) or "docs" (markdown/docs files)'),
+  workspacePath: z
+    .string()
+    .min(1)
+    .describe(
+      'Absolute path to the agent project root/workspace. Use your current project root, not the MCP server cwd.',
+    ),
+  query: z
+    .string()
+    .describe(
+      'Describe what the code does in natural language (e.g., "validate user input", "handle HTTP errors")',
+    ),
+  target: z
+    .enum(['code', 'docs'])
+    .optional()
+    .describe(
+      'Search target in the local agent HEAD: "code" (default) or "docs" (markdown/docs files)',
+    ),
   limit: z.number().optional().describe('Max results (default: 10)'),
-  threshold: z.number().optional().describe('Min similarity 0-1 (default: 0.5). Lower = more results'),
-  path: z.string().optional().describe('Filter by path prefix (e.g., "src/api")'),
-  tags: z.array(z.string()).optional().describe('Filter docs by tags (e.g., ["architecture", "guide"])'),
-  compact: z.boolean().optional().describe('Return only signatures, not full code'),
+  threshold: z
+    .number()
+    .optional()
+    .describe('Min similarity 0-1 (default: 0.5). Lower = more results'),
+  path: z
+    .string()
+    .optional()
+    .describe('Filter by path prefix (e.g., "src/api")'),
+  tags: z
+    .array(z.string())
+    .optional()
+    .describe('Filter docs by tags (e.g., ["architecture", "guide"])'),
+  compact: z
+    .boolean()
+    .optional()
+    .describe('Return only signatures, not full code'),
 });
 
 export type CodeSearchInput = z.infer<typeof codeSearchSchema>;
 
 function formatCompactResult(r: SearchResult, index: number): string {
   const nameInfo = r.symbol.name || r.symbol.path.split('/').pop() || 'unknown';
-  const typeInfo = r.symbol.type !== 'file' ? ` [${r.symbol.type}]` : '';
-  const signatureLine = r.symbol.signature ? `   \`${r.symbol.signature}\`` : '';
+  const typeInfo = r.symbol.type === 'file' ? '' : ` [${r.symbol.type}]`;
+  const signatureLine = r.symbol.signature
+    ? `   \`${r.symbol.signature}\``
+    : '';
   const tagsInfo = r.tags?.length ? ` [${r.tags.join(', ')}]` : '';
 
   const lines = [
     `## ${index + 1}. ${nameInfo}${typeInfo}${tagsInfo} (similarity: ${r.score.toFixed(2)})`,
     `   ${r.symbol.relativePath}:${r.symbol.startLine}`,
   ];
-  if (signatureLine) lines.push(signatureLine);
+  if (signatureLine) {
+    lines.push(signatureLine);
+  }
 
   return lines.join('\n');
 }
 
 function formatFullResult(r: SearchResult, index: number): string {
   const location = `${r.symbol.relativePath}:${r.symbol.startLine}-${r.symbol.endLine}`;
-  const typeInfo = r.symbol.type !== 'file' ? ` [${r.symbol.type}]` : '';
+  const typeInfo = r.symbol.type === 'file' ? '' : ` [${r.symbol.type}]`;
   const nameInfo = r.symbol.name ? ` ${r.symbol.name}` : '';
 
   let text = `## ${index + 1}. ${location}${typeInfo}${nameInfo} (similarity: ${r.score.toFixed(2)})\n`;
@@ -56,7 +91,15 @@ function formatFullResult(r: SearchResult, index: number): string {
 
   // Detect language from file extension
   const ext = r.symbol.path.split('.').pop() || '';
-  const langMap: Record<string, string> = { ts: 'typescript', js: 'javascript', py: 'python', rs: 'rust', go: 'go', java: 'java', rb: 'ruby' };
+  const langMap: Record<string, string> = {
+    ts: 'typescript',
+    js: 'javascript',
+    py: 'python',
+    rs: 'rust',
+    go: 'go',
+    java: 'java',
+    rb: 'ruby',
+  };
   const lang = langMap[ext] || ext;
 
   text += `\n\n\`\`\`${lang}\n${r.content}\n\`\`\``;
@@ -83,7 +126,12 @@ export async function codeSearchTool(input: CodeSearchInput): Promise<{
 
     if (results.length === 0) {
       return {
-        content: [{ type: 'text', text: 'No local agent HEAD results found matching the description. Try rephrasing or lowering threshold.' }],
+        content: [
+          {
+            type: 'text',
+            text: 'No local agent HEAD results found matching the description. Try rephrasing or lowering threshold.',
+          },
+        ],
       };
     }
 

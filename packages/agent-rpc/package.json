@@ -29,6 +29,8 @@
   },
   "scripts": {
     "build": "node ../../tools/build-package.mjs",
+    "lint": "oxlint --deny-warnings src",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
     "clean": "rm -rf dist tsconfig.tsbuildinfo"
   },
   "devDependencies": {

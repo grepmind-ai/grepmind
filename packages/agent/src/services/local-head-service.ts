@@ -14,7 +14,9 @@ export interface ObservedLocalHead {
 }
 
 export class LocalHeadService {
-  async readObservedHead(workspacePath: string): Promise<ObservedLocalHead | null> {
+  async readObservedHead(
+    workspacePath: string,
+  ): Promise<ObservedLocalHead | null> {
     const resolvedWorkspacePath = path.resolve(workspacePath);
     const origin = await this.runGit(
       resolvedWorkspacePath,
@@ -40,7 +42,9 @@ export class LocalHeadService {
     const normalizedHeadCommitSha = normalizeCommitSha(headCommitSha);
     const normalizedRemoteFingerprint = normalizeRemoteFingerprint(origin);
     if (!normalizedRemoteFingerprint) {
-      throw new Error(`Remote fingerprint is empty for workspace: ${resolvedWorkspacePath}`);
+      throw new Error(
+        `Remote fingerprint is empty for workspace: ${resolvedWorkspacePath}`,
+      );
     }
 
     return {
@@ -83,7 +87,10 @@ export class LocalHeadService {
 
 function normalizeCommitSha(value: string): string {
   const normalized = value.trim().toLowerCase();
-  if (!/^[0-9a-f]+$/.test(normalized) || (normalized.length !== 40 && normalized.length !== 64)) {
+  if (
+    !/^[0-9a-f]+$/.test(normalized) ||
+    (normalized.length !== 40 && normalized.length !== 64)
+  ) {
     throw new Error('commit sha must be a full 40 or 64 character hex string');
   }
 

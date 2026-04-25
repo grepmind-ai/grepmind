@@ -7,7 +7,9 @@ import { AgentBindingTableRepository } from './table-repository.js';
 export type EmbeddingProfileRow = typeof embeddingProfiles.$inferSelect;
 export type EmbeddingProfileInsert = typeof embeddingProfiles.$inferInsert;
 
-export class EmbeddingProfileRepository extends AgentBindingTableRepository<typeof embeddingProfiles> {
+export class EmbeddingProfileRepository extends AgentBindingTableRepository<
+  typeof embeddingProfiles
+> {
   constructor(db: AgentDatabase) {
     super(db, embeddingProfiles);
   }
@@ -41,29 +43,31 @@ export class EmbeddingProfileRepository extends AgentBindingTableRepository<type
       );
 
     for (const profile of profiles) {
-      await this.insert({
-        bindingId,
-        target: profile.target,
-        profileVersion: profile.profileVersion,
-        model: profile.model,
-        dimensions: profile.dimensions,
-        embeddingSpace: profile.embeddingSpace,
-        artifactSchemaVersion: profile.artifactSchemaVersion,
-        distanceMetric: profile.distanceMetric,
-        updatedAt: profile.updatedAt,
-      } satisfies EmbeddingProfileInsert, executor)
-        .onConflictDoUpdate({
-          target: [embeddingProfiles.bindingId, embeddingProfiles.target],
-          set: {
-            profileVersion: profile.profileVersion,
-            model: profile.model,
-            dimensions: profile.dimensions,
-            embeddingSpace: profile.embeddingSpace,
-            artifactSchemaVersion: profile.artifactSchemaVersion,
-            distanceMetric: profile.distanceMetric,
-            updatedAt: profile.updatedAt,
-          },
-        });
+      await this.insert(
+        {
+          bindingId,
+          target: profile.target,
+          profileVersion: profile.profileVersion,
+          model: profile.model,
+          dimensions: profile.dimensions,
+          embeddingSpace: profile.embeddingSpace,
+          artifactSchemaVersion: profile.artifactSchemaVersion,
+          distanceMetric: profile.distanceMetric,
+          updatedAt: profile.updatedAt,
+        } satisfies EmbeddingProfileInsert,
+        executor,
+      ).onConflictDoUpdate({
+        target: [embeddingProfiles.bindingId, embeddingProfiles.target],
+        set: {
+          profileVersion: profile.profileVersion,
+          model: profile.model,
+          dimensions: profile.dimensions,
+          embeddingSpace: profile.embeddingSpace,
+          artifactSchemaVersion: profile.artifactSchemaVersion,
+          distanceMetric: profile.distanceMetric,
+          updatedAt: profile.updatedAt,
+        },
+      });
     }
   }
 }

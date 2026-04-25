@@ -136,11 +136,13 @@ export async function loadLocalSyncSnapshot(
         branch: row.branch,
         maxKnownAttachmentId: Number(row.max_known_attachment_id),
       })),
-      pendingRevisions: attachmentStateResult.rows.map<PendingRevisionState>((row) => ({
-        attachmentId: Number(row.attachment_id),
-        revisionId: Number(row.revision_id),
-        filesSynced: toDbBoolean(row.files_synced),
-      })),
+      pendingRevisions: attachmentStateResult.rows.map<PendingRevisionState>(
+        (row) => ({
+          attachmentId: Number(row.attachment_id),
+          revisionId: Number(row.revision_id),
+          filesSynced: toDbBoolean(row.files_synced),
+        }),
+      ),
       materializations: materializationResult.rows
         .filter((row) => targets.includes(row.target))
         .map<LocalMaterializationState>((row) => ({
@@ -173,5 +175,9 @@ function toDbBoolean(value: boolean | number | string): boolean {
     return value !== 0;
   }
 
-  return value === '1' || value.toLowerCase() === 'true' || value.toLowerCase() === 't';
+  return (
+    value === '1' ||
+    value.toLowerCase() === 'true' ||
+    value.toLowerCase() === 't'
+  );
 }

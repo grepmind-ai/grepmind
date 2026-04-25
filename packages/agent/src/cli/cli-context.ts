@@ -14,5 +14,7 @@ export function createAgentConsole(args?: ParsedArgs): AgentConsole {
 }
 
 function isTraceEnabled(args?: ParsedArgs): boolean {
-  return hasBooleanFlag(args, 'trace') || process.env.GREPMIND_AGENT_TRACE === '1';
+  return (
+    hasBooleanFlag(args, 'trace') || process.env.GREPMIND_AGENT_TRACE === '1'
+  );
 }

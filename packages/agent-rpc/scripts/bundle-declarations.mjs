@@ -26,22 +26,21 @@ await writeFile(indexDtsPath, `${bundled}\n`, 'utf8');
 const distEntries = await readdir(distDir);
 await Promise.all(
   distEntries
-    .filter((entry) => (
-      entry.endsWith('.d.ts.map')
-      || (entry.endsWith('.d.ts') && entry !== 'index.d.ts')
-    ))
+    .filter(
+      (entry) =>
+        entry.endsWith('.d.ts.map') ||
+        (entry.endsWith('.d.ts') && entry !== 'index.d.ts'),
+    )
     .map((entry) => rm(path.join(distDir, entry), { force: true })),
 );
 
 function cleanDeclaration(value) {
-  return value
-    .replace(/^\/\/# sourceMappingURL=.*$/gm, '')
-    .trim();
+  return value.replaceAll(/^\/\/# sourceMappingURL=.*$/gm, '').trim();
 }
 
 function cleanClientDeclaration(value) {
   return cleanDeclaration(value)
     .replace(/^import\s+\{[\s\S]*?\}\s+from\s+'\.\/protocol\.js';\n?/m, '')
-    .replace(/import\("\.\/protocol\.js"\)\./g, '')
+    .replaceAll(/import\("\.\/protocol\.js"\)\./g, '')
     .trim();
 }

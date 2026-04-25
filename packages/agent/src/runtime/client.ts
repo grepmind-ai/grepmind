@@ -71,11 +71,11 @@ export async function waitForAgentRuntimeReady(dataDir: string): Promise<void> {
 }
 
 function isRetriableReadyWaitError(error: unknown): boolean {
-  return error instanceof AgentRuntimeClientError
-    && (
-      error.code === 'RUNTIME_UNAVAILABLE'
-      || error.code === 'BROKEN_PIPE'
-      || error.code === 'TIMEOUT'
-      || error.code === 'RUNTIME_NOT_READY'
-    );
+  return (
+    error instanceof AgentRuntimeClientError &&
+    (error.code === 'RUNTIME_UNAVAILABLE' ||
+      error.code === 'BROKEN_PIPE' ||
+      error.code === 'TIMEOUT' ||
+      error.code === 'RUNTIME_NOT_READY')
+  );
 }

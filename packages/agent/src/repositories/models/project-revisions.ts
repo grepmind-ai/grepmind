@@ -1,4 +1,12 @@
-import { bigint, boolean, index, integer, pgTable, primaryKey, text } from 'drizzle-orm/pg-core';
+import {
+  bigint,
+  boolean,
+  index,
+  integer,
+  pgTable,
+  primaryKey,
+  text,
+} from 'drizzle-orm/pg-core';
 
 export const projectRevisions = pgTable(
   'project_revisions',
@@ -21,6 +29,9 @@ export const projectRevisions = pgTable(
       table.ingestedAt,
       table.revisionId,
     ),
-    index('project_revisions_binding_commit_idx').on(table.bindingId, table.commitSha),
+    index('project_revisions_binding_commit_idx').on(
+      table.bindingId,
+      table.commitSha,
+    ),
   ],
 );

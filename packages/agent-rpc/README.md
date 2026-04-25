@@ -60,17 +60,17 @@ new AgentRuntimeClient(dataDir: string)
 
 Methods:
 
-| Method | Description |
-| --- | --- |
-| `ping(timeoutMs?)` | Checks runtime availability without requiring the runtime token. |
-| `status(params?, options?)` | Reads local status snapshots. |
-| `registerProject(params, options?)` | Registers a project through the runtime. |
-| `listProjects(options?)` | Lists registered local projects. |
-| `syncProject(params, options?)` | Requests sync for one or more projects. |
-| `unbindProject(params, options?)` | Removes a local binding. |
-| `cleanProject(params, options?)` | Cleans local project data. |
-| `searchHead(params, options?)` | Searches indexed local HEAD content. |
-| `shutdown(params, options?)` | Requests runtime shutdown. |
+| Method                              | Description                                                      |
+| ----------------------------------- | ---------------------------------------------------------------- |
+| `ping(timeoutMs?)`                  | Checks runtime availability without requiring the runtime token. |
+| `status(params?, options?)`         | Reads local status snapshots.                                    |
+| `registerProject(params, options?)` | Registers a project through the runtime.                         |
+| `listProjects(options?)`            | Lists registered local projects.                                 |
+| `syncProject(params, options?)`     | Requests sync for one or more projects.                          |
+| `unbindProject(params, options?)`   | Removes a local binding.                                         |
+| `cleanProject(params, options?)`    | Cleans local project data.                                       |
+| `searchHead(params, options?)`      | Searches indexed local HEAD content.                             |
+| `shutdown(params, options?)`        | Requests runtime shutdown.                                       |
 
 All methods accept an optional `{ timeoutMs }` option. The default request timeout is `30000ms`, except `ping`, which defaults to `1000ms`.
 
