@@ -114,12 +114,21 @@ export async function cleanupStaleRuntimeArtifacts(
         throw error;
       }
     });
+    await unlink(getAgentMetaPath(dataDir)).catch(
+      (error: NodeJS.ErrnoException) => {
+        if (error.code !== 'ENOENT') {
+          throw error;
+        }
+      },
+    );
   }
 
   await cleanupStaleSocket(getAgentSocketPath(dataDir));
 }
 
-export async function cleanupSocketAndPidFiles(dataDir: string): Promise<void> {
+export async function cleanupRuntimeArtifactFiles(
+  dataDir: string,
+): Promise<void> {
   await unlink(getAgentSocketPath(dataDir)).catch(
     (error: NodeJS.ErrnoException) => {
       if (error.code !== 'ENOENT') {
@@ -134,6 +143,17 @@ export async function cleanupSocketAndPidFiles(dataDir: string): Promise<void> {
       }
     },
   );
+  await unlink(getAgentMetaPath(dataDir)).catch(
+    (error: NodeJS.ErrnoException) => {
+      if (error.code !== 'ENOENT') {
+        throw error;
+      }
+    },
+  );
+}
+
+export async function cleanupSocketAndPidFiles(dataDir: string): Promise<void> {
+  await cleanupRuntimeArtifactFiles(dataDir);
 }
 
 export async function writeAgentPidFile(

@@ -8,6 +8,9 @@ import {
   type ResponseMeta,
 } from './search-client.js';
 
+const DEFAULT_SEARCH_LIMIT = 10;
+const MAX_SEARCH_LIMIT = 100;
+
 export const codeSearchSchema = z.object({
   workspacePath: z
     .string()
@@ -26,9 +29,17 @@ export const codeSearchSchema = z.object({
     .describe(
       'Search target in the local agent HEAD: "code" (default) or "docs" (markdown/docs files)',
     ),
-  limit: z.number().optional().describe('Max results (default: 10)'),
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(MAX_SEARCH_LIMIT)
+    .optional()
+    .describe('Max results (default: 10, max: 100)'),
   threshold: z
     .number()
+    .min(0)
+    .max(1)
     .optional()
     .describe('Min similarity 0-1 (default: 0.5). Lower = more results'),
   path: z
@@ -118,7 +129,7 @@ export async function codeSearchTool(input: CodeSearchInput): Promise<{
       query: input.query,
       mode: 'semantic',
       target: input.target,
-      limit: input.limit ?? 10,
+      limit: input.limit ?? DEFAULT_SEARCH_LIMIT,
       threshold: input.threshold ?? 0.5,
       path: input.path,
       tags: input.tags,
@@ -140,7 +151,7 @@ export async function codeSearchTool(input: CodeSearchInput): Promise<{
     );
 
     const responseText = formatted.join('\n\n---\n\n');
-    const requestedLimit = input.limit ?? 10;
+    const requestedLimit = input.limit ?? DEFAULT_SEARCH_LIMIT;
 
     return {
       content: [{ type: 'text', text: responseText }],

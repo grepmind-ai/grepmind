@@ -224,6 +224,7 @@ export interface SearchHeadRpcParams {
   limit?: number;
   threshold?: number;
   rerank?: boolean;
+  tags?: string[];
 }
 
 export interface SearchHeadRpcResult extends SearchResponsePayload {

@@ -11,7 +11,7 @@ import { SearchHeadService } from '../../services/search-head-service.js';
 import {
   acquireAgentRuntimeLock,
   chmodSocketPrivate,
-  cleanupSocketAndPidFiles,
+  cleanupRuntimeArtifactFiles,
   cleanupStaleRuntimeArtifacts,
   getAgentSocketPath,
   writeAgentMetaFile,
@@ -26,11 +26,13 @@ import {
   type AgentRuntimeMeta,
 } from '../rpc/protocol.js';
 import { SingleWriterQueue } from '../single-writer-queue.js';
+import { AgentRpcRequestError } from './rpc-errors.js';
 import {
   AgentRuntimeRequestDispatcher,
-  AgentRpcRequestError,
   toRpcError,
 } from './request-dispatcher.js';
+
+const MAX_RPC_REQUEST_BYTES = 1_048_576;
 
 export interface AgentRuntimeServerOptions {
   logger?: AgentLogger;
@@ -196,7 +198,7 @@ export class AgentRuntimeServer {
       );
     });
     if (this.ownsSocket || this.ownsPidFile) {
-      await cleanupSocketAndPidFiles(this.config.dataDir).catch((error) => {
+      await cleanupRuntimeArtifactFiles(this.config.dataDir).catch((error) => {
         this.logger.error('runtime', 'Failed to remove runtime files', error);
       });
     }
@@ -224,6 +226,22 @@ export class AgentRuntimeServer {
       }
 
       buffer += chunk;
+      if (Buffer.byteLength(buffer, 'utf8') > MAX_RPC_REQUEST_BYTES) {
+        handled = true;
+        this.writeResponse(socket, {
+          id: 'unknown',
+          ok: false,
+          error: toRpcError(
+            new AgentRpcRequestError({
+              code: 'INVALID_REQUEST',
+              message: `Request payload exceeds ${MAX_RPC_REQUEST_BYTES} bytes`,
+              retryable: false,
+            }),
+          ),
+        });
+        return;
+      }
+
       const newlineIndex = buffer.indexOf('\n');
       if (newlineIndex < 0) {
         return;
@@ -320,7 +338,7 @@ export class AgentRuntimeServer {
     this.server = null;
     await this.runner.stop().catch(() => {});
     if (this.ownsSocket || this.ownsPidFile) {
-      await cleanupSocketAndPidFiles(this.config.dataDir).catch(() => {});
+      await cleanupRuntimeArtifactFiles(this.config.dataDir).catch(() => {});
     }
     this.ownsSocket = false;
     this.ownsPidFile = false;

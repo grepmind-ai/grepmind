@@ -44,6 +44,10 @@ export function estimateTokens(text: string): number {
 }
 
 const DEFAULT_AGENT_DATA_DIR = path.join(os.homedir(), '.grepmind-agent');
+const DEFAULT_SEARCH_LIMIT = 10;
+const FILTER_OVERFETCH_MULTIPLIER = 5;
+const MIN_FILTER_OVERFETCH_LIMIT = 50;
+const MAX_FILTER_OVERFETCH_LIMIT = 200;
 let cachedAgentDataDir: string | null = null;
 let cachedAgentRuntimeClient: AgentRuntimeClient | null = null;
 
@@ -80,18 +84,30 @@ export async function searchCode(params: {
 
   try {
     const workspacePath = path.resolve(params.workspacePath);
+    const requestedLimit = params.limit ?? DEFAULT_SEARCH_LIMIT;
+    const searchLimit = shouldOverfetch(params)
+      ? Math.min(
+          Math.max(
+            requestedLimit * FILTER_OVERFETCH_MULTIPLIER,
+            MIN_FILTER_OVERFETCH_LIMIT,
+          ),
+          MAX_FILTER_OVERFETCH_LIMIT,
+        )
+      : requestedLimit;
     const response = await createAgentRuntimeClient().searchHead({
       workspacePath,
       query: params.query,
       target: params.target ?? 'code',
-      limit: params.limit,
+      limit: searchLimit,
       threshold: params.threshold,
       rerank: true,
+      tags: normalizeTags(params.tags),
     });
 
     return toSearchResponse(response, {
       path: params.path,
       tags: params.tags,
+      limit: requestedLimit,
     });
   } catch (error) {
     throw normalizeAgentSearchError(error, params.workspacePath);
@@ -103,14 +119,20 @@ function toSearchResponse(
   filters: {
     path?: string;
     tags?: string[];
+    limit: number;
   },
 ): SearchResponse {
   return {
     results: response.items
       .filter((item) => matchesPathFilter(item, filters.path))
       .filter((item) => matchesTagsFilter(item, filters.tags))
+      .slice(0, filters.limit)
       .map(toSearchResult),
   };
+}
+
+function shouldOverfetch(params: { path?: string; tags?: string[] }): boolean {
+  return Boolean(params.path?.trim()) || normalizeTags(params.tags).length > 0;
 }
 
 function toSearchResult(item: SearchResultItem): SearchResult {

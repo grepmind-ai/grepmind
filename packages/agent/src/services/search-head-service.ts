@@ -18,6 +18,7 @@ export interface SearchHeadCommandInput {
   limit?: number;
   threshold?: number;
   rerank?: boolean;
+  tags?: string[];
 }
 
 export interface SearchHeadResult extends SearchResponsePayload {
@@ -54,11 +55,13 @@ export class SearchHeadService {
 
   async searchByLocalHead(
     input: SearchHeadCommandInput,
+    options: { timeoutMs?: number } = {},
   ): Promise<SearchHeadResult> {
     const query = normalizeQuery(input.query);
     const target = normalizeTarget(input.target);
     const limit = normalizeLimit(input.limit);
     const threshold = normalizeThreshold(input.threshold);
+    const tags = normalizeTags(input.tags);
     const project = await this.resolveProject(input);
     const observedHead = await this.localHeadService.readObservedHead(
       project.workspacePath,
@@ -83,16 +86,20 @@ export class SearchHeadService {
       );
     }
 
-    const response = await this.options.searchTransport.search({
-      requestId: randomUUID(),
-      bindingId: project.bindingId,
-      revisionId,
-      query,
-      target,
-      limit,
-      threshold,
-      rerank: input.rerank ?? true,
-    });
+    const response = await this.options.searchTransport.search(
+      {
+        requestId: randomUUID(),
+        bindingId: project.bindingId,
+        revisionId,
+        query,
+        target,
+        limit,
+        threshold,
+        rerank: input.rerank ?? true,
+        tags,
+      },
+      options,
+    );
 
     return {
       ...response,
@@ -198,6 +205,22 @@ function normalizeThreshold(threshold: number | undefined): number | undefined {
   }
 
   return threshold;
+}
+
+function normalizeTags(tags: string[] | undefined): string[] | undefined {
+  if (tags == null) {
+    return undefined;
+  }
+  if (!Array.isArray(tags)) {
+    throw new TypeError('--tags must be an array');
+  }
+
+  const normalized = tags.map((tag) => tag.trim().toLowerCase());
+  if (normalized.some((tag) => tag.length === 0)) {
+    throw new Error('--tags must contain non-empty strings');
+  }
+
+  return [...new Set(normalized)];
 }
 
 function samePath(left: string, right: string): boolean {
