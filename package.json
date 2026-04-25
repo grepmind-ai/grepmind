@@ -8,7 +8,7 @@
   "description": "Grepmind packages",
   "type": "module",
   "scripts": {
-    "build": "npm run build:agent && npm run build:mcp && npm run build:grepmind",
+    "build": "npm run build:agent-rpc && npm -w @grepmind/agent run build && npm -w @grepmind/mcp run build && npm run build:grepmind",
     "build:agent-rpc": "npm -w @grepmind/agent-rpc run build",
     "build:agent": "npm run build:agent-rpc && npm -w @grepmind/agent run build",
     "build:mcp": "npm run build:agent-rpc && npm -w @grepmind/mcp run build",
