@@ -1,6 +1,6 @@
 {
   "name": "@grepmind/agent-rpc",
-  "version": "0.1.0-alpha.0",
+  "version": "0.1.0",
   "description": "Public RPC client for the local Grepmind agent runtime",
   "type": "module",
   "main": "dist/index.js",
