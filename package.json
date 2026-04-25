@@ -22,7 +22,7 @@
     "release:grepmind": "npm -w grepmind run release --",
     "release:grepmind:dry-run": "npm -w grepmind run release:dry-run",
     "clean": "npm -ws run clean --if-present",
-    "grepmind": "node packages/grepmind/src/index.js",
+    "grepmind": "tsx packages/grepmind/src/index.ts",
     "agent": "npm -w @grepmind/agent run dev:cli --"
   },
   "author": "Zaytra",
@@ -37,7 +37,7 @@
   },
   "devDependencies": {
     "@types/node": "^20.10.0",
-    "esbuild": "^0.27.1",
+    "tsdown": "^0.21.10",
     "tsx": "^4.21.0",
     "typescript": "^5.3.0"
   },

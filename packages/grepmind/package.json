@@ -4,17 +4,19 @@
   "description": "Grepmind command-line utility",
   "type": "module",
   "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "bin": {
     "grepmind": "./dist/index.js"
   },
   "exports": {
     ".": {
+      "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
     "./package.json": "./package.json"
   },
   "files": [
-    "dist/*.js",
+    "dist",
     "README.md",
     "LICENSE"
   ],
@@ -29,16 +31,13 @@
     "url": "https://github.com/zaytra-labs/grepmind/issues"
   },
   "scripts": {
-    "build": "node build.mjs",
-    "build:publish": "node build.mjs",
+    "build": "node ../../tools/build-package.mjs",
+    "build:publish": "node ../../tools/build-package.mjs",
     "release": "node ../../tools/release-package.mjs --workspace grepmind",
     "release:dry-run": "node ../../tools/release-package.mjs --workspace grepmind --dry-run"
   },
   "dependencies": {
     "@grepmind/agent": "0.1.0-alpha.1"
-  },
-  "devDependencies": {
-    "esbuild": "^0.27.1"
   },
   "engines": {
     "node": ">=18.0.0"

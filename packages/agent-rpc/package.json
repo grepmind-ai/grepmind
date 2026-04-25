@@ -28,10 +28,10 @@
     "url": "https://github.com/zaytra-labs/grepmind/issues"
   },
   "scripts": {
-    "build": "rm -rf dist tsconfig.tsbuildinfo && tsc -p tsconfig.json && node scripts/bundle-declarations.mjs",
+    "build": "node ../../tools/build-package.mjs",
     "release": "node ../../tools/release-package.mjs --workspace @grepmind/agent-rpc",
     "release:dry-run": "node ../../tools/release-package.mjs --workspace @grepmind/agent-rpc --dry-run",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist tsconfig.tsbuildinfo"
   },
   "devDependencies": {
     "typescript": "^5.3.0"

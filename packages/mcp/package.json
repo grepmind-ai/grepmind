@@ -8,6 +8,13 @@
   "bin": {
     "grepmind-mcp": "./dist/index.js"
   },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
   "files": [
     "dist",
     "README.md",
@@ -15,7 +22,7 @@
   ],
   "license": "Apache-2.0",
   "scripts": {
-    "build": "tsc",
+    "build": "node ../../tools/build-package.mjs",
     "dev": "tsc --watch",
     "start": "node dist/index.js",
     "release": "node ../../tools/release-package.mjs --workspace @grepmind/mcp",

@@ -31,7 +31,7 @@ async function main() {
   }
 }
 
-async function runAgentCommand(args) {
+async function runAgentCommand(args: string[]) {
   const agentCommand = args[0];
   if (agentCommand != null && !PUBLIC_AGENT_COMMANDS.has(agentCommand)) {
     throw new Error(`Unknown command: agent ${agentCommand}`);
@@ -42,7 +42,7 @@ async function runAgentCommand(args) {
   await runAgentCli(args);
 }
 
-function normalizeAgentArgs(args) {
+function normalizeAgentArgs(args: string[]) {
   return args;
 }
 
