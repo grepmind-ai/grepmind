@@ -13,6 +13,12 @@
     "build:agent": "npm run build:agent-rpc && npm -w @grepmind/agent run build",
     "build:mcp": "npm run build:agent-rpc && npm -w @grepmind/mcp run build",
     "build:grepmind": "npm -w grepmind run build",
+    "pack:dry-run": "npm -w @grepmind/agent-rpc pack --dry-run && npm -w @grepmind/agent pack --dry-run && npm -w @grepmind/mcp pack --dry-run && npm -w grepmind pack --dry-run",
+    "changeset": "changeset",
+    "version:packages": "changeset version",
+    "version:packages:beta": "node tools/changeset-version-beta.mjs",
+    "release:stable": "npm run build && npm run pack:dry-run && node tools/assert-stable-release.mjs && changeset publish --tag latest",
+    "release:beta": "npm run build && npm run pack:dry-run && node tools/assert-beta-release.mjs && changeset publish --tag beta",
     "lint": "npm --workspaces run lint --if-present && npm run format:check",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
@@ -38,6 +44,7 @@
     "url": "https://github.com/zaytra-labs/grepmind/issues"
   },
   "devDependencies": {
+    "@changesets/cli": "^2.31.0",
     "@types/node": "^20.10.0",
     "oxlint": "^1.0.0",
     "prettier": "^3.5.3",

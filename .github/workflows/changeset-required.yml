@@ -1,0 +1,68 @@
+name: Changeset Required
+
+on:
+  pull_request:
+    paths:
+      - '.changeset/**'
+      - 'packages/**/package.json'
+      - 'packages/**/src/**'
+      - 'packages/**/scripts/**'
+      - 'packages/**/drizzle/**'
+      - '.github/workflows/changeset-required.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  changeset:
+    name: Require changeset for package source changes
+    if: ${{ !startsWith(github.head_ref, 'changeset-release/') }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check changeset
+        shell: bash
+        run: |
+          git fetch origin "${{ github.base_ref }}" --depth=1
+
+          changed_files="$(git diff --name-only "origin/${{ github.base_ref }}...HEAD")"
+          printf '%s\n' "$changed_files"
+
+          has_package_source=false
+          has_package_manifest=false
+          has_changeset=false
+
+          if printf '%s\n' "$changed_files" | grep -Eq '^(packages/[^/]+/(src|scripts|drizzle)/)'; then
+            has_package_source=true
+          fi
+
+          if printf '%s\n' "$changed_files" | grep -Eq '^packages/[^/]+/package\.json$'; then
+            has_package_manifest=true
+          fi
+
+          if printf '%s\n' "$changed_files" | grep -Eq '^\.changeset/[^/]+\.md$'; then
+            has_changeset=true
+          fi
+
+          if [[ "$has_package_source" == "false" && "$has_changeset" == "true" && "$has_package_manifest" == "false" ]]; then
+            echo "::error::Changeset-only pull requests are not allowed. Include the package source change in the same pull request."
+            exit 1
+          fi
+
+          if [[ "$has_package_source" == "false" ]]; then
+            echo "No package source changes detected."
+            exit 0
+          fi
+
+          if [[ "$has_changeset" == "true" ]]; then
+            echo "Changeset found."
+            exit 0
+          fi
+
+          echo "::error::Package source changes require a changeset. Run npm run changeset and commit the generated .changeset/*.md file."
+          exit 1

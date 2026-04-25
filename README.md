@@ -100,23 +100,46 @@ The workspace is ESM-first and publishes built files from `dist`.
 
 ## Release
 
-Each public package has a workspace release script:
+Releases are automated with GitHub Actions and Changesets.
+
+Package source changes must include a Changeset:
 
 ```sh
-npm run release:grepmind -- <version>
-npm run release:agent -- <version>
-npm run release:agent-rpc -- <version>
-npm run release:mcp -- <version>
+npm run changeset
 ```
 
-Dry-run variants are also available:
+The `Changeset Required` workflow enforces this for pull requests that touch
+package source files under `packages/**/src` or package scripts/migrations.
+Documentation-only changes do not trigger a new version.
+
+Stable releases use the `main` branch:
+
+1. Merge a source change and its `.changeset/*.md` file into `main`.
+2. The `Release` workflow opens a `chore: version packages` pull request.
+3. Review and merge that version pull request.
+4. The same workflow publishes changed packages to npm with the `latest` tag.
+
+Beta prereleases use the `beta` branch:
+
+1. Create or update the `beta` branch from `main`.
+2. Merge beta-bound source changes and their Changesets into `beta`.
+3. The `Release` workflow opens a `chore: version packages (beta)` pull request.
+4. Review and merge that version pull request.
+5. The same workflow publishes changed packages to npm with the `beta` tag.
+
+The beta workflow enters Changesets prerelease mode on the `beta` branch. Keep
+`.changeset/pre.json` out of `main`.
+
+Manual local checks for release packaging:
 
 ```sh
-npm run release:grepmind:dry-run
-npm run release:agent:dry-run
-npm run release:agent-rpc:dry-run
-npm run release:mcp:dry-run
+npm run build
+npm run pack:dry-run
 ```
+
+npm publishing is designed for Trusted Publishing/OIDC. Configure each public
+npm package to trust this repository and the `.github/workflows/release.yml`
+workflow, then restrict token-based publishing after the first successful run.
 
 ## Support
 
