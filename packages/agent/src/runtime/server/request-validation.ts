@@ -55,7 +55,11 @@ export function normalizeRequestTimeoutMs(
   if (timeoutMs == null) {
     return undefined;
   }
-  if (!Number.isInteger(timeoutMs) || timeoutMs <= 0) {
+  if (
+    typeof timeoutMs !== 'number' ||
+    !Number.isInteger(timeoutMs) ||
+    timeoutMs <= 0
+  ) {
     throw new AgentRpcRequestError({
       code: 'INVALID_REQUEST',
       message: 'timeoutMs must be a positive integer',
@@ -274,7 +278,7 @@ function optionalPositiveInteger(
   if (value == null) {
     return undefined;
   }
-  if (!Number.isInteger(value) || value <= 0) {
+  if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0) {
     throw new AgentRpcRequestError({
       code: 'INVALID_REQUEST',
       message: `${label} must be a positive integer`,
