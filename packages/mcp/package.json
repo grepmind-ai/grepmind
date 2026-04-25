@@ -25,11 +25,8 @@
     "build": "node ../../tools/build-package.mjs",
     "dev": "tsc --watch",
     "start": "node dist/index.js",
-    "release": "node ../../tools/release-package.mjs --workspace @grepmind/mcp",
-    "release:dry-run": "node ../../tools/release-package.mjs --workspace @grepmind/mcp --dry-run",
     "test": "echo 'No tests yet'",
     "test:watch": "echo 'No tests yet'",
-    "prepublishOnly": "npm run build",
     "clean": "rm -rf dist"
   },
   "keywords": [

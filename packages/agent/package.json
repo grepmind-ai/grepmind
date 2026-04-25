@@ -33,8 +33,6 @@
   "scripts": {
     "build": "node ../../tools/build-package.mjs",
     "build:publish": "node ../../tools/build-package.mjs",
-    "release": "node ../../tools/release-package.mjs --workspace @grepmind/agent",
-    "release:dry-run": "node ../../tools/release-package.mjs --workspace @grepmind/agent --dry-run",
     "dev": "tsc -p tsconfig.json --watch",
     "start": "node dist/index.js",
     "dev:cli": "tsx src/cli.ts",
