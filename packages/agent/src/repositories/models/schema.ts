@@ -1,0 +1,12 @@
+export { agentMeta } from './agent-meta.js';
+export { projects } from './projects.js';
+export { projectBranches } from './project-branches.js';
+export { embeddingProfiles } from './embedding-profiles.js';
+export { projectBindingSyncState } from './project-binding-sync-state.js';
+export { projectRevisions } from './project-revisions.js';
+export { projectRevisionAttachments } from './project-revision-attachments.js';
+export { projectRevisionFiles } from './project-revision-files.js';
+export { projectAttachmentSyncState } from './project-attachment-sync-state.js';
+export { projectMaterializations } from './project-materializations.js';
+export { codeChunks, docsChunks } from './search-chunks.js';
+export { docsChunkTags } from './docs-chunk-tags.js';

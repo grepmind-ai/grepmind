@@ -1,0 +1,14 @@
+{
+  "files": [],
+  "references": [
+    {
+      "path": "./packages/agent-rpc"
+    },
+    {
+      "path": "./packages/agent"
+    },
+    {
+      "path": "./packages/mcp"
+    }
+  ]
+}

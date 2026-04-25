@@ -1,0 +1,20 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outFile": "./dist/index.d.ts",
+    "composite": false,
+    "incremental": false,
+    "declarationMap": false,
+    "sourceMap": false,
+    "emitDeclarationOnly": true,
+    "module": "System",
+    "moduleResolution": "Node",
+    "resolveJsonModule": false,
+    "paths": {
+      "@electric-sql/pglite/vector": [
+        "node_modules/@electric-sql/pglite/dist/vector/index.d.ts"
+      ]
+    }
+  },
+  "include": ["src/cli.ts"]
+}

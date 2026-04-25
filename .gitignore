@@ -1,0 +1,10 @@
+node_modules/
+dist/
+*.log
+.DS_Store
+.env
+*tsconfig.tsbuildinfo
+
+# Generated JS artifacts should live in dist/, not in source tree.
+packages/agent/src/**/*.js
+packages/agent/src/**/*.js.map

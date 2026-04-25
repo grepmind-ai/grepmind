@@ -1,0 +1,74 @@
+{
+  "name": "@grepmind/mcp",
+  "version": "0.1.0",
+  "description": "MCP server for semantic search over markdown notes and code using embeddings",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "grepmind-mcp": "./dist/index.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "license": "Apache-2.0",
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "node ../../tools/build-package.mjs",
+    "lint": "oxlint --deny-warnings src",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "dev": "tsc --watch",
+    "start": "node dist/index.js",
+    "test": "echo 'No tests yet'",
+    "test:watch": "echo 'No tests yet'",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "notes",
+    "markdown",
+    "code",
+    "semantic-search",
+    "embeddings",
+    "transformers",
+    "claude",
+    "ai",
+    "vector-search",
+    "knowledge-base",
+    "code-indexing"
+  ],
+  "author": "Zaytra",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zaytra-labs/grepmind.git"
+  },
+  "homepage": "https://github.com/zaytra-labs/grepmind#readme",
+  "bugs": {
+    "url": "https://github.com/zaytra-labs/grepmind/issues"
+  },
+  "dependencies": {
+    "@grepmind/agent-rpc": "0.1.0",
+    "@modelcontextprotocol/sdk": "^1.26.0",
+    "dotenv": "^17.2.4",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

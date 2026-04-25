@@ -1,0 +1,45 @@
+{
+  "name": "@grepmind/agent-rpc",
+  "version": "0.1.0",
+  "description": "Public RPC client for the local Grepmind agent runtime",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "license": "Apache-2.0",
+  "publishConfig": {
+    "access": "public"
+  },
+  "author": "Zaytra",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zaytra-labs/grepmind.git"
+  },
+  "homepage": "https://github.com/zaytra-labs/grepmind#readme",
+  "bugs": {
+    "url": "https://github.com/zaytra-labs/grepmind/issues"
+  },
+  "scripts": {
+    "build": "node ../../tools/build-package.mjs",
+    "lint": "oxlint --deny-warnings src",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "clean": "rm -rf dist tsconfig.tsbuildinfo"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
