@@ -273,7 +273,7 @@ export class AgentBackendClient {
     try {
       payload = (await response.json()) as AgentErrorPayload;
     } catch {
-      fallbackBody = await response.text().catch(() => undefined);
+      fallbackBody = await response.text().catch(() => '');
     }
 
     return new AgentBackendClientError(
