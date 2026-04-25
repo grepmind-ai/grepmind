@@ -1,77 +1,62 @@
 # grepmind
 
-> The public CLI for running a local Grepmind agent.
+Public command-line utility for running a local Grepmind agent.
 
-`grepmind` is the operator-friendly entrypoint into the Grepmind agent workflow. It gives you a small, stable command surface for connecting a machine to a Grepmind backend, registering local Git workspaces, and keeping the local runtime online.
+`grepmind` is the operator-friendly entrypoint into the Grepmind workflow. It wraps `@grepmind/agent` and exposes a deliberately small command surface for configuring a machine, starting the local runtime, registering Git workspaces, and listing or cleaning local projects.
 
-If you want the package you install globally and hand to humans, this is it.
+## Requirements
 
-## Why this package exists
-
-`grepmind` is a thin wrapper around `@grepmind/agent`, but that thin layer is intentional:
-
-- one global binary: `grepmind`
-- one namespace for agent operations: `grepmind agent ...`
-- a curated public command set instead of the full low-level runtime surface
-
-That keeps the default UX simple while the underlying agent runtime stays free to expose more advanced internal commands separately.
+- Node.js 18 or newer.
+- A compatible Grepmind backend.
+- A local Git workspace with an `origin` remote for `register`.
 
 ## Install
 
-```bash
+```sh
 npm install -g grepmind
 ```
 
-Requires Node.js 18 or newer.
+## Quick Start
 
-## Quick start
+`register`, `projects`, and `clean` talk to the local runtime. Start the runtime before using them.
 
-Important: `register`, `projects`, and `clean` talk to the local runtime. Start the runtime first.
-
-```bash
-# 1. Save backend configuration
+```sh
 grepmind agent configure \
   --url https://your-grepmind-server.example \
   --name "$(hostname)"
 
-# 2. Start the local runtime in background
 grepmind agent run -d
-
-# 3. Register a Git workspace
 grepmind agent register --workspace ~/work/your-repo
-
-# 4. Check what is attached
 grepmind agent projects
 ```
 
-If your backend requires credentials, provide them during configuration:
+If your backend requires credentials:
 
-```bash
+```sh
 grepmind agent configure \
   --url https://your-grepmind-server.example \
   --token <access-token> \
   --api-key <api-key>
 ```
 
-## Mental model
+## Commands
 
 ```text
-grepmind agent configure   -> writes local agent config
-grepmind agent run         -> starts the long-running runtime
-grepmind agent register    -> attaches a local Git workspace
-grepmind agent projects    -> lists registered workspaces
-grepmind agent clean       -> removes local data for a workspace
+grepmind
+
+Commands:
+  grepmind agent configure --url <backend> [--token <token>]
+  grepmind agent register --workspace <path>
+  grepmind agent run
+  grepmind agent projects
+  grepmind agent clean --workspace <path>
 ```
-
-The runtime is branch-aware and long-lived. Run it in the foreground when you want logs in the current terminal, or use `-d` to detach it and continue working.
-
-## Commands
 
 ### `grepmind agent configure`
 
-Configures the local machine to talk to a Grepmind backend and persists the config in the local agent data directory.
+Writes local agent configuration and validates the backend connection.
 
-```bash
+```sh
 grepmind agent configure --url <backend> [options]
 ```
 
@@ -86,25 +71,23 @@ Common options:
 
 ### `grepmind agent run`
 
-Starts the long-running local agent runtime.
+Starts the long-running local runtime.
 
-```bash
+```sh
 grepmind agent run [options]
 ```
 
 Common options:
 
-- `-d`, `--detach` to start in background
-- `--trace` to enable verbose runtime logs
-- `--data-dir <dir>`
-
-Foreground mode is useful during setup and debugging. Detached mode is the normal day-to-day workflow.
+- `-d`, `--detach` starts in the background.
+- `--trace` enables verbose runtime logs.
+- `--data-dir <dir>` selects a non-default runtime data directory.
 
 ### `grepmind agent register`
 
 Registers a local Git workspace with the running runtime.
 
-```bash
+```sh
 grepmind agent register --workspace <path> [options]
 ```
 
@@ -114,13 +97,13 @@ Common options:
 - `--branch <branch>`
 - `--data-dir <dir>`
 
-The workspace must exist locally and have an `origin` remote configured.
+The workspace must exist and have an `origin` remote configured.
 
 ### `grepmind agent projects`
 
 Lists registered local workspaces.
 
-```bash
+```sh
 grepmind agent projects
 grepmind agent list
 ```
@@ -131,45 +114,52 @@ grepmind agent list
 
 Deletes local Grepmind data for a registered workspace.
 
-```bash
+```sh
 grepmind agent clean --workspace <path> [--data-dir <dir>]
 ```
 
-This command is interactive and asks for `y/n` confirmation before deleting local runtime data for the workspace. It does not remove server-side bindings or agent configuration.
+This command asks for `y/n` confirmation before deleting local runtime data. It does not remove server-side bindings or agent configuration.
 
-### `grepmind help`
+## Environment Variables
 
-Prints the top-level CLI help.
+Most configuration can be supplied through environment variables:
 
-## Environment variables
+| Variable | Description |
+| --- | --- |
+| `GREPMIND_AGENT_URL` | Backend URL. |
+| `GREPMIND_AGENT_TOKEN` | Access token. |
+| `GREPMIND_AGENT_API_KEY` | API key. |
+| `GREPMIND_AGENT_NAME` | Local agent display name. |
+| `GREPMIND_AGENT_DATA_DIR` | Local runtime data directory. |
+| `GREPMIND_AGENT_POLL_INTERVAL_MS` | Project sync poll interval. |
+| `GREPMIND_AGENT_HEAD_POLL_INTERVAL_MS` | Local branch HEAD poll interval. |
+| `GREPMIND_AGENT_TRACE=1` | Enable detailed runtime trace output. |
+| `GREPMIND_AGENT_TRACE_HTTP=1` | Include HTTP trace output. |
 
-You can provide most configuration through environment variables instead of flags:
+By default, local state is stored in `~/.grepmind-agent`.
 
-- `GREPMIND_AGENT_URL`
-- `GREPMIND_AGENT_TOKEN`
-- `GREPMIND_AGENT_API_KEY`
-- `GREPMIND_AGENT_NAME`
-- `GREPMIND_AGENT_DATA_DIR`
-- `GREPMIND_AGENT_POLL_INTERVAL_MS`
-- `GREPMIND_AGENT_HEAD_POLL_INTERVAL_MS`
-- `GREPMIND_AGENT_TRACE=1`
-- `GREPMIND_AGENT_TRACE_HTTP=1`
+## Technical Notes
 
-By default, the agent stores its local state in `~/.grepmind-agent`.
+- Package type: ESM.
+- Binary: `grepmind`.
+- Public npm package: `grepmind`.
+- Runtime implementation: delegated to `@grepmind/agent`.
+- Supported public command namespace: `grepmind agent configure`, `run`, `register`, `projects`, `list`, and `clean`.
 
-## Package boundary
+Use `grepmind` for the stable public CLI. Use `@grepmind/agent` directly when you need lower-level runtime commands such as `stop`, `sync`, `status`, `search-head`, `remove`, `reset`, or `bootstrap`.
 
-`grepmind` intentionally exposes a smaller surface than `@grepmind/agent`.
+## Development
 
-Use `grepmind` when you want the public, top-level CLI.
+From the repository root:
 
-Use `@grepmind/agent` directly when you need lower-level commands such as runtime shutdown, manual sync, detailed status inspection, unbinding, reset, or bootstrap-style diagnostics.
+```sh
+npm run build:grepmind
+npm run grepmind -- agent help
+```
 
-## Links
+## Support
 
-- Repository: [zaytra-labs/grepmind](https://github.com/zaytra-labs/grepmind)
-- Package source: [packages/grepmind](https://github.com/zaytra-labs/grepmind/tree/main/packages/grepmind)
-- Issues: [github.com/zaytra-labs/grepmind/issues](https://github.com/zaytra-labs/grepmind/issues)
+Report bugs and request features through [GitHub Issues](https://github.com/zaytra-labs/grepmind/issues).
 
 ## License
 
