@@ -7,7 +7,7 @@ Public command-line utility for running a local Grepmind agent.
 ## Requirements
 
 - Node.js 18 or newer.
-- A compatible Grepmind backend.
+- A compatible Grepmind backend with Grepmind CLI OAuth enabled.
 - A local Git workspace with an `origin` remote for `register`.
 
 ## Install
@@ -21,8 +21,8 @@ npm install -g grepmind
 `register`, `projects`, and `clean` talk to the local runtime. Start the runtime before using them.
 
 ```sh
-grepmind agent configure \
-  --url https://your-grepmind-server.example \
+grepmind auth login \
+  --hostname your-grepmind-server.example \
   --name "$(hostname)"
 
 grepmind agent run -d
@@ -30,14 +30,7 @@ grepmind agent register --workspace ~/work/your-repo
 grepmind agent projects
 ```
 
-If your backend requires credentials:
-
-```sh
-grepmind agent configure \
-  --url https://your-grepmind-server.example \
-  --token <access-token> \
-  --api-key <api-key>
-```
+Agent authentication is browser-based OAuth Authorization Code + PKCE. The previous manual token/API key agent configuration flow has been removed.
 
 ## Commands
 
@@ -45,29 +38,34 @@ grepmind agent configure \
 grepmind
 
 Commands:
-  grepmind agent configure --url <backend> [--token <token>]
+  grepmind auth login --hostname <host>
+  grepmind auth status
+  grepmind auth logout
+  grepmind agent auth login --hostname <host>
   grepmind agent register --workspace <path>
   grepmind agent run
   grepmind agent projects
   grepmind agent clean --workspace <path>
 ```
 
-### `grepmind agent configure`
-
-Writes local agent configuration and validates the backend connection.
+### `grepmind auth login`
 
 ```sh
-grepmind agent configure --url <backend> [options]
+grepmind auth login --hostname <host> [options]
+grepmind agent auth login --hostname <host> [options]
 ```
 
 Common options:
 
-- `--token <token>`
-- `--api-key <api-key>`
 - `--name <agent-name>`
 - `--data-dir <dir>`
+- `--scopes <scope,...>`
+- `--no-open`
+- `--callback-port <port>`
 - `--poll-interval-ms <ms>`
 - `--head-poll-interval-ms <ms>`
+
+Login opens the browser for Clerk OAuth Authorization Code + PKCE, stores OAuth secrets in OS secure storage, and writes only non-secret metadata to local config.
 
 ### `grepmind agent run`
 
@@ -126,9 +124,6 @@ Most configuration can be supplied through environment variables:
 
 | Variable                               | Description                           |
 | -------------------------------------- | ------------------------------------- |
-| `GREPMIND_AGENT_URL`                   | Backend URL.                          |
-| `GREPMIND_AGENT_TOKEN`                 | Access token.                         |
-| `GREPMIND_AGENT_API_KEY`               | API key.                              |
 | `GREPMIND_AGENT_NAME`                  | Local agent display name.             |
 | `GREPMIND_AGENT_DATA_DIR`              | Local runtime data directory.         |
 | `GREPMIND_AGENT_POLL_INTERVAL_MS`      | Project sync poll interval.           |
@@ -144,7 +139,7 @@ By default, local state is stored in `~/.grepmind-agent`.
 - Binary: `grepmind`.
 - Public npm package: `grepmind`.
 - Runtime implementation: delegated to `@grepmind/agent`.
-- Supported public command namespace: `grepmind agent configure`, `run`, `register`, `projects`, `list`, and `clean`.
+- Supported public command namespace: `grepmind auth`, `grepmind agent auth`, `grepmind agent run`, `register`, `projects`, `list`, and `clean`.
 
 Use `grepmind` for the stable public CLI. Use `@grepmind/agent` directly when you need lower-level runtime commands such as `stop`, `sync`, `status`, `search-head`, `remove`, `reset`, or `bootstrap`.
 

@@ -54,6 +54,7 @@ export async function executeSocketPreferredCommand<TResult>(
 export async function loadConfigForCommand(
   args: ParsedArgs,
 ): Promise<AgentCliConfig> {
+  rejectRemovedAuthFlags(args);
   const dataDir = resolveDataDir(
     getStringFlag(args, 'data-dir') ?? process.env.GREPMIND_AGENT_DATA_DIR,
   );
@@ -62,18 +63,7 @@ export async function loadConfigForCommand(
 
   return {
     ...config,
-    apiBaseUrl:
-      getStringFlag(args, 'url') ??
-      process.env.GREPMIND_AGENT_URL ??
-      config.apiBaseUrl,
-    accessToken:
-      getStringFlag(args, 'token') ??
-      process.env.GREPMIND_AGENT_TOKEN ??
-      config.accessToken,
-    apiKey:
-      getStringFlag(args, 'api-key') ??
-      process.env.GREPMIND_AGENT_API_KEY ??
-      config.apiKey,
+    apiBaseUrl: config.apiBaseUrl,
     name:
       getStringFlag(args, 'name') ??
       process.env.GREPMIND_AGENT_NAME ??
@@ -92,6 +82,20 @@ export async function loadConfigForCommand(
           process.env.GREPMIND_AGENT_DEVICE_ID,
       ) ?? config.deviceId,
   };
+}
+
+export function rejectRemovedAuthFlags(args: ParsedArgs): void {
+  const removedFlags = [
+    'url',
+    'token',
+    'api-key',
+    'with-token',
+    'with-api-key',
+  ];
+  const match = removedFlags.find((flag) => args.flags.has(flag));
+  if (match) {
+    throw new Error(`Unknown flag: --${match}`);
+  }
 }
 
 export async function loadOptionalConfig(

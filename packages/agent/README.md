@@ -7,7 +7,7 @@ Local branch-aware Grepmind agent runtime backed by PGlite.
 ## Requirements
 
 - Node.js 18 or newer.
-- A compatible Grepmind backend.
+- A compatible Grepmind backend with Grepmind CLI OAuth enabled.
 - A local Git workspace with an `origin` remote for project registration.
 
 ## Install
@@ -34,8 +34,8 @@ Runtime classes, repositories, database schema, migrations, backend clients, rea
 ## Quick Start
 
 ```sh
-grepmind-agent configure \
-  --url https://your-grepmind-server.example \
+grepmind-agent auth login \
+  --hostname your-grepmind-server.example \
   --name "$(hostname)"
 
 grepmind-agent run -d
@@ -49,7 +49,9 @@ grepmind-agent projects
 grepmind-agent
 
 Commands:
-  configure --url <backend> [--token <token>] [--name <agent>] [--data-dir <dir>] [--poll-interval-ms <ms>] [--head-poll-interval-ms <ms>]
+  auth login --hostname <host> [--name <agent>] [--data-dir <dir>] [--scopes <scope,...>] [--no-open] [--callback-port <port>]
+  auth status [--data-dir <dir>]
+  auth logout [--data-dir <dir>]
   run [--data-dir <dir>] [-d|--detach] [--trace]
   stop [--data-dir <dir>]
   register --workspace <path> [--display-name <name>] [--branch <branch>] [--data-dir <dir>]
@@ -65,7 +67,9 @@ Commands:
 
 ### Runtime Commands
 
-- `configure` writes local config and checks backend bootstrap.
+- `auth login` opens the browser for Clerk OAuth Authorization Code + PKCE, stores secrets in OS secure storage, writes non-secret local config, and checks backend bootstrap.
+- `auth status` prints the current host/account/storage status without token values.
+- `auth logout` removes the local secure credential and preserves non-secret config.
 - `run` starts the long-running runtime; use `-d` or `--detach` for background mode.
 - `stop` requests graceful shutdown for the runtime using the same data directory.
 - `bootstrap` checks backend compatibility and prints server/runtime defaults.
@@ -88,9 +92,6 @@ Commands:
 
 | Variable                               | Description                           |
 | -------------------------------------- | ------------------------------------- |
-| `GREPMIND_AGENT_URL`                   | Backend URL.                          |
-| `GREPMIND_AGENT_TOKEN`                 | Access token.                         |
-| `GREPMIND_AGENT_API_KEY`               | API key.                              |
 | `GREPMIND_AGENT_NAME`                  | Local agent display name.             |
 | `GREPMIND_AGENT_DEVICE_ID`             | Stable device id override.            |
 | `GREPMIND_AGENT_DATA_DIR`              | Local runtime data directory.         |
@@ -100,6 +101,8 @@ Commands:
 | `GREPMIND_AGENT_TRACE_HTTP=1`          | Include HTTP trace output.            |
 
 Defaults: data dir `~/.grepmind-agent`, poll interval `60000ms`, HEAD poll interval `1500ms`.
+
+Manual token/API key auth for agent endpoints was removed by the OAuth hard cutover. Run `grepmind-agent auth login --hostname <host>` to create a local OAuth credential.
 
 ## Technical Notes
 

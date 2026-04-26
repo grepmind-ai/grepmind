@@ -36,8 +36,7 @@ const DEFAULT_SEARCH_REQUEST_TIMEOUT_MS = 30_000;
 
 export class AgentBackendRealtimeClient {
   private readonly baseUrl: string;
-  private readonly accessToken?: string;
-  private readonly apiKey?: string;
+  private readonly accessToken?: AgentBackendRealtimeClientOptions['accessToken'];
   private readonly deviceId: string;
   private readonly deviceName: string;
   private readonly protocolVersion: string;
@@ -64,7 +63,6 @@ export class AgentBackendRealtimeClient {
   constructor(options: AgentBackendRealtimeClientOptions) {
     this.baseUrl = options.baseUrl.replace(/\/+$/, '');
     this.accessToken = options.accessToken;
-    this.apiKey = options.apiKey;
     this.deviceId = options.deviceId;
     this.deviceName = options.deviceName;
     this.protocolVersion = options.protocolVersion ?? 'v1';
@@ -91,7 +89,7 @@ export class AgentBackendRealtimeClient {
 
     this.started = true;
     this.bindings = [...bindings];
-    this.connect();
+    void this.connect();
   }
 
   async stop(): Promise<void> {
@@ -169,13 +167,30 @@ export class AgentBackendRealtimeClient {
     });
   }
 
-  private connect(): void {
+  private async connect(): Promise<void> {
     if (!RealtimeWebSocket || this.stopping || !this.started) {
       return;
     }
 
+    let accessToken: string | undefined;
+    try {
+      accessToken = await this.resolveAccessToken();
+    } catch (error) {
+      this.logger.warn(
+        'runtime',
+        error instanceof Error
+          ? `Failed to resolve OAuth token for realtime connection: ${error.message}`
+          : 'Failed to resolve OAuth token for realtime connection',
+      );
+      this.scheduleReconnect();
+      return;
+    }
+    if (this.stopping || !this.started) {
+      return;
+    }
+
     const ws = new RealtimeWebSocket(
-      buildRealtimeUrl(this.baseUrl, this.accessToken, this.apiKey),
+      buildRealtimeUrl(this.baseUrl, accessToken),
     );
     this.ws = ws;
 
@@ -227,8 +242,16 @@ export class AgentBackendRealtimeClient {
     this.reconnectAttempts += 1;
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
-      this.connect();
+      void this.connect();
     }, delayMs);
+  }
+
+  private async resolveAccessToken(): Promise<string | undefined> {
+    if (typeof this.accessToken === 'function') {
+      return this.accessToken();
+    }
+
+    return this.accessToken;
   }
 
   private async handleMessage(rawData: unknown): Promise<void> {

@@ -9,15 +9,11 @@ export const SOCKET_OPEN_STATE = 1;
 export function buildRealtimeUrl(
   baseUrl: string,
   accessToken?: string,
-  apiKey?: string,
 ): string {
   const url = new URL('/api/agent/v1/events', `${baseUrl}/`);
   url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
   if (accessToken) {
     url.searchParams.set('token', accessToken);
-  }
-  if (apiKey) {
-    url.searchParams.set('apiKey', apiKey);
   }
   return url.toString();
 }

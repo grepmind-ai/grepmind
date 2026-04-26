@@ -19,11 +19,18 @@ import type {
   SyncProjectResponse,
 } from './contracts/index.js';
 
+export type AgentBackendAccessTokenProvider = (() =>
+  | string
+  | undefined
+  | Promise<string | undefined>) & {
+  refresh?: () => string | undefined | Promise<string | undefined>;
+};
+
 export interface AgentBackendClientOptions {
   baseUrl: AgentBackendBaseUrl;
   accessToken?:
     | string
-    | (() => string | undefined | Promise<string | undefined>);
+    | AgentBackendAccessTokenProvider;
   defaultHeaders?: Record<string, string>;
   fetchImpl?: typeof fetch;
   logger?: AgentLogger;
@@ -203,16 +210,24 @@ export class AgentBackendClient {
   ): Promise<T> {
     const method = options.method ?? 'GET';
     const startedAt = Date.now();
+    const body =
+      options.body === undefined ? undefined : JSON.stringify(options.body);
     if (this.traceHttp) {
       this.logger.trace('http', `request ${method} ${path}`);
     }
     const headers = await this.buildHeaders(options.body !== undefined);
-    const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
+    let response = await this.fetchImpl(`${this.baseUrl}${path}`, {
       method,
       headers,
-      body:
-        options.body === undefined ? undefined : JSON.stringify(options.body),
+      body,
     });
+    if (response.status === 401 && await this.forceRefreshAccessToken()) {
+      response = await this.fetchImpl(`${this.baseUrl}${path}`, {
+        method,
+        headers: await this.buildHeaders(options.body !== undefined),
+        body,
+      });
+    }
 
     if (!response.ok) {
       if (this.traceHttp) {
@@ -264,6 +279,25 @@ export class AgentBackendClient {
     }
 
     return this.accessToken;
+  }
+
+  private async forceRefreshAccessToken(): Promise<boolean> {
+    if (typeof this.accessToken !== 'function' || !this.accessToken.refresh) {
+      return false;
+    }
+
+    try {
+      const token = await this.accessToken.refresh();
+      return Boolean(token);
+    } catch (error) {
+      this.logger.warn(
+        'http',
+        error instanceof Error
+          ? `OAuth token refresh failed: ${error.message}`
+          : 'OAuth token refresh failed',
+      );
+      return false;
+    }
   }
 
   private async toError(response: Response): Promise<AgentBackendClientError> {

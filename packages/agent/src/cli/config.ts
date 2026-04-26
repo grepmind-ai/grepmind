@@ -12,16 +12,27 @@ import os from 'node:os';
 import path from 'node:path';
 import type { AgentBackendClientOptions } from '../backend/agent-backend-client.js';
 import type { AgentLogger } from '../logging/agent-logger.js';
+import { createAuthAccessTokenProvider } from './auth-token-provider.js';
+
+export interface AgentCliAuthConfig {
+  credentialType: 'oauth_token';
+  host: string;
+  accountSubject: string | null;
+  accountEmail: string | null;
+  expiresAt: string;
+  credentialStoreKey: string;
+  credentialStoreKind: string;
+  oauthClientId: string;
+}
 
 export interface AgentCliConfig {
   apiBaseUrl: string;
-  accessToken?: string;
-  apiKey?: string;
   name: string;
   pollIntervalMs: number;
   headPollIntervalMs: number;
   deviceId: string;
   dataDir: string;
+  auth?: AgentCliAuthConfig;
 }
 
 export const DEFAULT_POLL_INTERVAL_MS = 60_000;
@@ -68,16 +79,15 @@ export async function loadAgentCliConfig(
   }
 
   const parsedDeviceId = normalizeDeviceId(parsed.deviceId);
+  const auth = normalizeAuthConfig((parsed as { auth?: unknown }).auth);
   const config: AgentCliConfig = {
     apiBaseUrl: parsed.apiBaseUrl,
-    accessToken:
-      typeof parsed.accessToken === 'string' ? parsed.accessToken : undefined,
-    apiKey: typeof parsed.apiKey === 'string' ? parsed.apiKey : undefined,
     name: parsed.name,
     pollIntervalMs: normalizePollInterval(parsed.pollIntervalMs),
     headPollIntervalMs: normalizeHeadPollInterval(parsed.headPollIntervalMs),
     deviceId: parsedDeviceId ?? randomUUID(),
     dataDir,
+    ...(auth ? { auth } : {}),
   };
 
   if (!parsedDeviceId) {
@@ -94,15 +104,18 @@ export async function saveAgentCliConfig(
   const configPath = getConfigPath(config.dataDir);
   const payload = {
     apiBaseUrl: stripTrailingSlash(config.apiBaseUrl),
-    accessToken: config.accessToken,
-    apiKey: config.apiKey,
     name: config.name,
     pollIntervalMs: normalizePollInterval(config.pollIntervalMs),
     headPollIntervalMs: normalizeHeadPollInterval(config.headPollIntervalMs),
     deviceId: normalizeDeviceId(config.deviceId) ?? randomUUID(),
+    ...(config.auth ? { auth: config.auth } : {}),
   };
 
-  await writeFile(configPath, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
+  await writeFile(configPath, `${JSON.stringify(payload, null, 2)}\n`, {
+    encoding: 'utf8',
+    mode: 0o600,
+  });
+  await chmod(configPath, 0o600).catch(() => {});
   return configPath;
 }
 
@@ -116,11 +129,10 @@ export function toBackendOptions(
 ): AgentBackendClientOptions {
   return {
     baseUrl: stripTrailingSlash(config.apiBaseUrl),
-    accessToken: config.accessToken,
+    accessToken: createAuthAccessTokenProvider(config, logger),
     logger,
     defaultHeaders: {
       'X-Grepmind-Agent-Name': config.name,
-      ...(config.apiKey ? { 'X-Grepmind-Key': config.apiKey } : {}),
     },
   };
 }
@@ -166,4 +178,35 @@ function normalizeDeviceId(value: unknown): string | null {
 
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
+}
+
+function normalizeAuthConfig(value: unknown): AgentCliAuthConfig | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return undefined;
+  }
+
+  const record = value as Partial<AgentCliAuthConfig>;
+  if (
+    record.credentialType !== 'oauth_token'
+    || typeof record.host !== 'string'
+    || typeof record.expiresAt !== 'string'
+    || typeof record.credentialStoreKey !== 'string'
+    || typeof record.credentialStoreKind !== 'string'
+    || typeof record.oauthClientId !== 'string'
+  ) {
+    return undefined;
+  }
+
+  return {
+    credentialType: 'oauth_token',
+    host: record.host,
+    accountSubject:
+      typeof record.accountSubject === 'string' ? record.accountSubject : null,
+    accountEmail:
+      typeof record.accountEmail === 'string' ? record.accountEmail : null,
+    expiresAt: record.expiresAt,
+    credentialStoreKey: record.credentialStoreKey,
+    credentialStoreKind: record.credentialStoreKind,
+    oauthClientId: record.oauthClientId,
+  };
 }

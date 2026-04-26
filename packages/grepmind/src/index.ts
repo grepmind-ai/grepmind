@@ -2,7 +2,7 @@
 import process from 'node:process';
 
 const PUBLIC_AGENT_COMMANDS = new Set([
-  'configure',
+  'auth',
   'register',
   'run',
   'projects',
@@ -17,6 +17,9 @@ async function main() {
   const [, , command, ...rest] = process.argv;
 
   switch (command) {
+    case 'auth':
+      await runAgentCommand(['auth', ...rest]);
+      return;
     case 'agent':
       await runAgentCommand(normalizeAgentArgs(rest));
       return;
@@ -52,7 +55,10 @@ function printHelp() {
       'grepmind',
       '',
       'Commands:',
-      '  grepmind agent configure --url <backend> [--token <token>]',
+      '  grepmind auth login --hostname <host>',
+      '  grepmind auth status',
+      '  grepmind auth logout',
+      '  grepmind agent auth login --hostname <host>',
       '  grepmind agent register --workspace <path>',
       '  grepmind agent run',
       '  grepmind agent projects',
