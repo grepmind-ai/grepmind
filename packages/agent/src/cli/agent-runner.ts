@@ -48,9 +48,10 @@ export class AgentRunner {
       return;
     }
 
+    const backendOptions = toBackendOptions(this.config, this.logger);
     this.runtime = await createAgentRuntime({
       dataDir: this.config.dataDir,
-      backend: toBackendOptions(this.config, this.logger),
+      backend: backendOptions,
       bootstrapOnInit: this.bootstrapOnInit,
     });
     this.bootstrap = await this.runtime.bootstrap();
@@ -65,8 +66,7 @@ export class AgentRunner {
       const runtime = this.runtime;
       this.realtimeClient = new AgentBackendRealtimeClient({
         baseUrl: this.config.apiBaseUrl,
-        accessToken: this.config.accessToken,
-        apiKey: this.config.apiKey,
+        accessToken: backendOptions.accessToken,
         deviceId: this.config.deviceId,
         deviceName: this.config.name,
         heartbeatMs: this.bootstrap.defaultWebSocketHeartbeatMs,

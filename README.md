@@ -18,7 +18,7 @@ Grepmind connects a local Git workspace to a Grepmind backend, keeps branch-awar
 - Node.js 18 or newer.
 - npm with workspace support.
 - A Git workspace with an `origin` remote when registering projects.
-- A compatible Grepmind backend for agent configuration and sync.
+- A compatible Grepmind backend with Grepmind CLI OAuth enabled.
 
 ## Install From npm
 
@@ -39,8 +39,8 @@ npm install -g @grepmind/mcp
 ## Quick Start
 
 ```sh
-grepmind agent configure \
-  --url https://your-grepmind-server.example \
+grepmind auth login \
+  --hostname your-grepmind-server.example \
   --name "$(hostname)"
 
 grepmind agent run -d
@@ -48,7 +48,7 @@ grepmind agent register --workspace ~/work/your-repo
 grepmind agent projects
 ```
 
-Use `--token` or `--api-key` with `configure` when your backend requires credentials.
+Agent authentication is browser-based OAuth Authorization Code + PKCE. The previous manual token/API key agent configuration flow has been removed.
 
 ## Development
 

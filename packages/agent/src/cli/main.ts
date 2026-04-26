@@ -1,7 +1,7 @@
 import {
+  authCommand,
   bootstrapCommand,
   cleanProjectCommand,
-  configureCommand,
   listProjectsCommand,
   registerCommand,
   removeProjectCommand,
@@ -28,8 +28,8 @@ export async function runAgentCli(argv: string[]): Promise<void> {
   const context: AgentCliExecutionContext = { cliEntrypointUrl };
 
   switch (command) {
-    case 'configure':
-      await configureCommand(args);
+    case 'auth':
+      await authCommand(args);
       return;
     case 'run':
       await runCommand(args, context);

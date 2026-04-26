@@ -36,8 +36,7 @@ const DEFAULT_SEARCH_REQUEST_TIMEOUT_MS = 30_000;
 
 export class AgentBackendRealtimeClient {
   private readonly baseUrl: string;
-  private readonly accessToken?: string;
-  private readonly apiKey?: string;
+  private readonly accessToken?: AgentBackendRealtimeClientOptions['accessToken'];
   private readonly deviceId: string;
   private readonly deviceName: string;
   private readonly protocolVersion: string;
@@ -54,8 +53,10 @@ export class AgentBackendRealtimeClient {
   private reconnectAttempts = 0;
   private started = false;
   private stopping = false;
+  private connecting = false;
   private heartbeatMs: number;
   private stopCommandId: string | null = null;
+  private reconnectingAfterTokenRefresh = false;
   private readonly pendingSearchRuns = new Map<
     string,
     PendingSearchRunRequest
@@ -64,7 +65,6 @@ export class AgentBackendRealtimeClient {
   constructor(options: AgentBackendRealtimeClientOptions) {
     this.baseUrl = options.baseUrl.replace(/\/+$/, '');
     this.accessToken = options.accessToken;
-    this.apiKey = options.apiKey;
     this.deviceId = options.deviceId;
     this.deviceName = options.deviceName;
     this.protocolVersion = options.protocolVersion ?? 'v1';
@@ -76,6 +76,9 @@ export class AgentBackendRealtimeClient {
     this.onIndexSearchRequested = options.onIndexSearchRequested;
     this.searchRequestTimeoutMs =
       options.searchRequestTimeoutMs ?? DEFAULT_SEARCH_REQUEST_TIMEOUT_MS;
+    this.accessToken?.onRefresh?.(() => {
+      this.reconnectWithFreshToken();
+    });
   }
 
   start(bindings: AgentBackendRealtimeBinding[]): void {
@@ -91,7 +94,7 @@ export class AgentBackendRealtimeClient {
 
     this.started = true;
     this.bindings = [...bindings];
-    this.connect();
+    void this.connect();
   }
 
   async stop(): Promise<void> {
@@ -169,50 +172,78 @@ export class AgentBackendRealtimeClient {
     });
   }
 
-  private connect(): void {
-    if (!RealtimeWebSocket || this.stopping || !this.started) {
+  private async connect(): Promise<void> {
+    if (
+      !RealtimeWebSocket ||
+      this.stopping ||
+      !this.started ||
+      this.connecting
+    ) {
       return;
     }
 
-    const ws = new RealtimeWebSocket(
-      buildRealtimeUrl(this.baseUrl, this.accessToken, this.apiKey),
-    );
-    this.ws = ws;
-
-    ws.onopen = () => {
-      this.reconnectAttempts = 0;
-      this.send('hello', {
-        deviceId: this.deviceId,
-        deviceName: this.deviceName,
-        protocolVersion: this.protocolVersion,
-        capabilities: this.capabilities,
-        bindings: this.bindings,
-      });
-    };
-
-    ws.onmessage = (event) => {
-      void this.handleMessage(event.data);
-    };
-
-    ws.onclose = () => {
-      if (this.ws === ws) {
-        this.ws = null;
+    this.connecting = true;
+    try {
+      const accessToken = await this.resolveAccessToken();
+      if (this.stopping || !this.started) {
+        return;
       }
-      if (this.heartbeatTimer) {
-        clearInterval(this.heartbeatTimer);
-        this.heartbeatTimer = null;
-      }
-      this.rejectPendingSearchRuns(
-        'Agent realtime socket closed before search completed',
+
+      const ws = new RealtimeWebSocket(
+        buildRealtimeUrl(this.baseUrl, accessToken),
       );
-      if (!this.stopping && this.started) {
-        this.scheduleReconnect();
-      }
-    };
+      this.ws = ws;
 
-    ws.onerror = () => {
-      // onclose handles retries.
-    };
+      ws.onopen = () => {
+        this.reconnectAttempts = 0;
+        this.send('hello', {
+          deviceId: this.deviceId,
+          deviceName: this.deviceName,
+          protocolVersion: this.protocolVersion,
+          capabilities: this.capabilities,
+          bindings: this.bindings,
+        });
+      };
+
+      ws.onmessage = (event) => {
+        void this.handleMessage(event.data);
+      };
+
+      ws.onclose = () => {
+        if (this.ws === ws) {
+          this.ws = null;
+        }
+        if (this.heartbeatTimer) {
+          clearInterval(this.heartbeatTimer);
+          this.heartbeatTimer = null;
+        }
+        this.rejectPendingSearchRuns(
+          'Agent realtime socket closed before search completed',
+        );
+        if (!this.stopping && this.started) {
+          if (this.reconnectingAfterTokenRefresh) {
+            this.reconnectingAfterTokenRefresh = false;
+            void this.connect();
+          } else {
+            this.scheduleReconnect();
+          }
+        }
+      };
+
+      ws.onerror = () => {
+        // onclose handles retries.
+      };
+    } catch (error) {
+      this.logger.warn(
+        'runtime',
+        error instanceof Error
+          ? `Failed to resolve OAuth token for realtime connection: ${error.message}`
+          : 'Failed to resolve OAuth token for realtime connection',
+      );
+      this.scheduleReconnect();
+    } finally {
+      this.connecting = false;
+    }
   }
 
   private scheduleReconnect(): void {
@@ -227,8 +258,35 @@ export class AgentBackendRealtimeClient {
     this.reconnectAttempts += 1;
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
-      this.connect();
+      void this.connect();
     }, delayMs);
+  }
+
+  private async resolveAccessToken(): Promise<string | undefined> {
+    return this.accessToken?.();
+  }
+
+  private reconnectWithFreshToken(): void {
+    if (this.stopping || !this.started) {
+      return;
+    }
+
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+
+    if (this.connecting) {
+      return;
+    }
+
+    if (!this.ws) {
+      void this.connect();
+      return;
+    }
+
+    this.reconnectingAfterTokenRefresh = true;
+    this.ws.close(1000, 'OAuth token refreshed');
   }
 
   private async handleMessage(rawData: unknown): Promise<void> {
