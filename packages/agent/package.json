@@ -1,6 +1,6 @@
 {
   "name": "@grepmind/agent",
-  "version": "0.1.1",
+  "version": "1.0.0",
   "description": "Local branch-aware agent runtime backed by PGlite",
   "type": "module",
   "main": "dist/index.js",
