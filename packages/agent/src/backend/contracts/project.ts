@@ -57,9 +57,11 @@ export interface ProjectBindingDto {
 
 export interface RegisterProjectRequest {
   userRepoId?: number;
-  remoteFingerprint?: string;
+  remoteUrl: string;
+  repoFullName?: string;
+  defaultBranch?: string;
   displayName: string;
-  workspaceFingerprint?: string;
+  workspaceFingerprint: string;
   preferredActiveBranch?: string;
 }
 

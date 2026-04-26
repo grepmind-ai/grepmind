@@ -4,8 +4,10 @@ import type { LocalProjectRecord } from '@grepmind/agent-rpc';
 import { createAgentConsole } from '../cli-context.js';
 import {
   executeSocketPreferredCommand,
+  deriveRepoFullNameFromRemoteUrl,
+  resolveWorkspaceDefaultBranch,
   resolveWorkspacePath,
-  resolveWorkspaceRemoteFingerprint,
+  resolveWorkspaceRemoteUrl,
 } from '../command-support.js';
 import { computeWorkspaceFingerprint } from '../config.js';
 import {
@@ -21,8 +23,9 @@ export async function registerCommand(args: ParsedArgs): Promise<void> {
   const workspacePath = await resolveWorkspacePath(
     requireStringFlag(args, 'workspace'),
   );
-  const remoteFingerprint =
-    await resolveWorkspaceRemoteFingerprint(workspacePath);
+  const remoteUrl = await resolveWorkspaceRemoteUrl(workspacePath);
+  const repoFullName = deriveRepoFullNameFromRemoteUrl(remoteUrl);
+  const defaultBranch = await resolveWorkspaceDefaultBranch(workspacePath);
   const displayName = requireStringFlag(
     args,
     'display-name',
@@ -35,7 +38,9 @@ export async function registerCommand(args: ParsedArgs): Promise<void> {
   const result = await executeSocketPreferredCommand(args, {
     rpc: (client) =>
       client.registerProject({
-        remoteFingerprint,
+        remoteUrl,
+        repoFullName,
+        defaultBranch,
         displayName,
         workspacePath,
         workspaceFingerprint,

@@ -106,10 +106,9 @@ export function normalizeRegisterProjectParams(
   const record = requireRecord(params, 'registerProject.params');
 
   return {
-    remoteFingerprint: requiredNonEmptyString(
-      record.remoteFingerprint,
-      'remoteFingerprint',
-    ),
+    remoteUrl: requiredNonEmptyString(record.remoteUrl, 'remoteUrl'),
+    repoFullName: optionalNonEmptyString(record.repoFullName, 'repoFullName'),
+    defaultBranch: optionalNonEmptyString(record.defaultBranch, 'defaultBranch'),
     displayName: requiredNonEmptyString(record.displayName, 'displayName'),
     workspacePath: requiredNonEmptyString(
       record.workspacePath,

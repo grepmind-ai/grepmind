@@ -1,12 +1,12 @@
 {
   "name": "grepmind",
-  "version": "1.0.0",
+  "version": "0.1.3",
   "description": "Grepmind command-line utility",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
-    "grepmind": "./dist/index.js"
+    "grepmind": "dist/index.js"
   },
   "exports": {
     ".": {
@@ -37,7 +37,7 @@
     "build:publish": "node ../../tools/build-package.mjs"
   },
   "dependencies": {
-    "@grepmind/agent": "1.0.0"
+    "@grepmind/agent": "0.1.2"
   },
   "engines": {
     "node": ">=18.0.0"
