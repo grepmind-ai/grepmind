@@ -16,7 +16,7 @@ export interface AgentBackendRealtimeBinding {
 
 export interface AgentBackendRealtimeClientOptions {
   baseUrl: string;
-  accessToken?: string | AgentBackendAccessTokenProvider;
+  accessToken?: AgentBackendAccessTokenProvider;
   deviceId: string;
   deviceName: string;
   protocolVersion?: string;

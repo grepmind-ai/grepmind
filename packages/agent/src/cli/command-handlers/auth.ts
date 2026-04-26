@@ -238,9 +238,10 @@ async function authLoginCommand(args: ParsedArgs): Promise<void> {
       },
     };
     const configPath = await saveAgentCliConfig(config);
+    const bootstrapAccessToken = tokenResponse.access_token!;
     const bootstrap = await new AgentBackendClient({
       baseUrl: apiBaseUrl,
-      accessToken: tokenResponse.access_token,
+      accessToken: () => bootstrapAccessToken,
       defaultHeaders: {
         'X-Grepmind-Agent-Name': config.name,
       },

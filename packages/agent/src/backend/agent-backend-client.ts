@@ -24,13 +24,12 @@ export type AgentBackendAccessTokenProvider = (() =>
   | undefined
   | Promise<string | undefined>) & {
   refresh?: () => string | undefined | Promise<string | undefined>;
+  onRefresh?: (listener: (token: string) => void) => () => void;
 };
 
 export interface AgentBackendClientOptions {
   baseUrl: AgentBackendBaseUrl;
-  accessToken?:
-    | string
-    | AgentBackendAccessTokenProvider;
+  accessToken?: AgentBackendAccessTokenProvider;
   defaultHeaders?: Record<string, string>;
   fetchImpl?: typeof fetch;
   logger?: AgentLogger;
@@ -274,11 +273,7 @@ export class AgentBackendClient {
   }
 
   private async resolveAccessToken(): Promise<string | undefined> {
-    if (typeof this.accessToken === 'function') {
-      return this.accessToken();
-    }
-
-    return this.accessToken;
+    return this.accessToken?.();
   }
 
   private async forceRefreshAccessToken(): Promise<boolean> {

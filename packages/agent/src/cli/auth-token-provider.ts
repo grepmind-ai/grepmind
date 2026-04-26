@@ -14,14 +14,27 @@ export function createAuthAccessTokenProvider(
   config: AgentCliConfig,
   logger?: AgentLogger,
 ): AgentBackendAccessTokenProvider {
-  const provider = (async () => getAccessToken(config, logger)) as AgentBackendAccessTokenProvider;
-  provider.refresh = () => refreshAccessToken(config, logger);
+  const listeners = new Set<(token: string) => void>();
+  const notifyRefresh = (token: string) => {
+    for (const listener of listeners) {
+      listener(token);
+    }
+  };
+  const provider = (async () => getAccessToken(config, logger, notifyRefresh)) as AgentBackendAccessTokenProvider;
+  provider.refresh = () => refreshAccessToken(config, logger, notifyRefresh);
+  provider.onRefresh = (listener) => {
+    listeners.add(listener);
+    return () => {
+      listeners.delete(listener);
+    };
+  };
   return provider;
 }
 
 async function getAccessToken(
   config: AgentCliConfig,
   logger?: AgentLogger,
+  notifyRefresh?: (token: string) => void,
 ): Promise<string | undefined> {
   const credential = await loadCredential(config);
   if (!needsRefresh(credential)) {
@@ -29,15 +42,16 @@ async function getAccessToken(
   }
 
   logger?.trace('http', 'OAuth access token is near expiry; refreshing');
-  return refreshCredential(config, credential, logger).then((next) => next.accessToken);
+  return refreshCredential(config, credential, logger, notifyRefresh).then((next) => next.accessToken);
 }
 
 async function refreshAccessToken(
   config: AgentCliConfig,
   logger?: AgentLogger,
+  notifyRefresh?: (token: string) => void,
 ): Promise<string | undefined> {
   const credential = await loadCredential(config);
-  return refreshCredential(config, credential, logger).then((next) => next.accessToken);
+  return refreshCredential(config, credential, logger, notifyRefresh).then((next) => next.accessToken);
 }
 
 async function loadCredential(config: AgentCliConfig): Promise<StoredOAuthCredential> {
@@ -62,6 +76,7 @@ async function refreshCredential(
   config: AgentCliConfig,
   credential: StoredOAuthCredential,
   logger?: AgentLogger,
+  notifyRefresh?: (token: string) => void,
 ): Promise<StoredOAuthCredential> {
   const authClient = new AgentAuthClient({ baseUrl: credential.apiBaseUrl });
   const response = await authClient.refreshToken({
@@ -94,6 +109,7 @@ async function refreshCredential(
     expiresAt: nextCredential.expiresAt,
   };
   await saveAgentCliConfig(config);
+  notifyRefresh?.(nextCredential.accessToken);
   logger?.trace('http', 'OAuth access token refreshed');
   return nextCredential;
 }
