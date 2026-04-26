@@ -1,5 +1,21 @@
 # grepmind
 
+## 1.0.0
+
+### Major Changes
+
+- 7ed7448: Adopt OAuth-only agent authentication with PKCE login, secure credential storage, token refresh, and realtime reconnects.
+
+### Minor Changes
+
+- ee15072: add agent oauth flow
+
+### Patch Changes
+
+- Updated dependencies [7ed7448]
+- Updated dependencies [ee15072]
+  - @grepmind/agent@1.0.0
+
 ## 0.1.1
 
 ### Patch Changes
