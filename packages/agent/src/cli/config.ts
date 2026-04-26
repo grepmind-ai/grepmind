@@ -187,12 +187,12 @@ function normalizeAuthConfig(value: unknown): AgentCliAuthConfig | undefined {
 
   const record = value as Partial<AgentCliAuthConfig>;
   if (
-    record.credentialType !== 'oauth_token'
-    || typeof record.host !== 'string'
-    || typeof record.expiresAt !== 'string'
-    || typeof record.credentialStoreKey !== 'string'
-    || typeof record.credentialStoreKind !== 'string'
-    || typeof record.oauthClientId !== 'string'
+    record.credentialType !== 'oauth_token' ||
+    typeof record.host !== 'string' ||
+    typeof record.expiresAt !== 'string' ||
+    typeof record.credentialStoreKey !== 'string' ||
+    typeof record.credentialStoreKind !== 'string' ||
+    typeof record.oauthClientId !== 'string'
   ) {
     return undefined;
   }

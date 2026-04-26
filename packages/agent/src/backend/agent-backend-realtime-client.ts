@@ -173,7 +173,12 @@ export class AgentBackendRealtimeClient {
   }
 
   private async connect(): Promise<void> {
-    if (!RealtimeWebSocket || this.stopping || !this.started || this.connecting) {
+    if (
+      !RealtimeWebSocket ||
+      this.stopping ||
+      !this.started ||
+      this.connecting
+    ) {
       return;
     }
 

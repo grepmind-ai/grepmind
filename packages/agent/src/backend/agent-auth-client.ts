@@ -75,7 +75,9 @@ export class AgentAuthClient {
       },
     });
     if (!response.ok) {
-      throw new Error(`AUTH_USERINFO_FAILED: userinfo request failed with HTTP ${response.status}`);
+      throw new Error(
+        `AUTH_USERINFO_FAILED: userinfo request failed with HTTP ${response.status}`,
+      );
     }
     return (await response.json()) as OAuthUserInfoResponse;
   }
@@ -96,41 +98,60 @@ export class AgentAuthClient {
       );
     }
     if (metadata.supportsPkceLocalhost !== true) {
-      throw new Error('AUTH_METADATA_INVALID: PKCE localhost login is not supported by this host');
+      throw new Error(
+        'AUTH_METADATA_INVALID: PKCE localhost login is not supported by this host',
+      );
     }
     if (metadata.supportsDeviceCode !== false) {
-      throw new Error('AUTH_METADATA_INVALID: unexpected device flow support in metadata');
+      throw new Error(
+        'AUTH_METADATA_INVALID: unexpected device flow support in metadata',
+      );
     }
     if (metadata.supportsRefreshToken !== true) {
       throw new Error('AUTH_METADATA_INVALID: refresh tokens are required');
     }
     if (metadata.redirectUriStrategy !== 'loopback_fixed_ports') {
-      throw new Error('AUTH_METADATA_INVALID: unsupported redirect URI strategy');
+      throw new Error(
+        'AUTH_METADATA_INVALID: unsupported redirect URI strategy',
+      );
     }
     if (metadata.callbackHost !== '127.0.0.1') {
       throw new Error('AUTH_METADATA_INVALID: callback host must be 127.0.0.1');
     }
     if (metadata.callbackPath !== '/oauth/callback') {
-      throw new Error('AUTH_METADATA_INVALID: callback path must be /oauth/callback');
+      throw new Error(
+        'AUTH_METADATA_INVALID: callback path must be /oauth/callback',
+      );
     }
     if (metadata.expectedTokenType !== 'oauth_token') {
-      throw new Error('AUTH_METADATA_INVALID: expected OAuth token type must be oauth_token');
+      throw new Error(
+        'AUTH_METADATA_INVALID: expected OAuth token type must be oauth_token',
+      );
     }
     if (metadata.tokenFormat !== 'opaque') {
       throw new Error('AUTH_METADATA_INVALID: token format must be opaque');
     }
-    if (!Array.isArray(metadata.callbackPorts) || metadata.callbackPorts.length === 0) {
+    if (
+      !Array.isArray(metadata.callbackPorts) ||
+      metadata.callbackPorts.length === 0
+    ) {
       throw new Error('AUTH_METADATA_INVALID: callbackPorts must be non-empty');
     }
     for (const port of metadata.callbackPorts) {
       if (!Number.isInteger(port) || port <= 0 || port > 65535) {
-        throw new Error('AUTH_METADATA_INVALID: callbackPorts contains an invalid port');
+        throw new Error(
+          'AUTH_METADATA_INVALID: callbackPorts contains an invalid port',
+        );
       }
     }
     const availableScopes = new Set(metadata.scopes);
-    const unavailableScope = requestedScopes.find((scope) => !availableScopes.has(scope));
+    const unavailableScope = requestedScopes.find(
+      (scope) => !availableScopes.has(scope),
+    );
     if (unavailableScope) {
-      throw new Error(`AUTH_METADATA_INVALID: requested scope is unavailable: ${unavailableScope}`);
+      throw new Error(
+        `AUTH_METADATA_INVALID: requested scope is unavailable: ${unavailableScope}`,
+      );
     }
 
     return metadata;
@@ -148,9 +169,12 @@ export class AgentAuthClient {
       },
       body: new URLSearchParams(body),
     });
-    const payload = (await response.json().catch(() => ({}))) as OAuthTokenResponse;
+    const payload = (await response
+      .json()
+      .catch(() => ({}))) as OAuthTokenResponse;
     if (!response.ok || payload.error) {
-      const message = payload.error_description || payload.error || `HTTP ${response.status}`;
+      const message =
+        payload.error_description || payload.error || `HTTP ${response.status}`;
       throw new Error(`AUTH_TOKEN_EXCHANGE_FAILED: ${message}`);
     }
     return payload;

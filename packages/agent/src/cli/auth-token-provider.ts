@@ -20,7 +20,12 @@ export function createAuthAccessTokenProvider(
       listener(token);
     }
   };
-  const provider = (async () => getAccessToken(config, logger, notifyRefresh)) as AgentBackendAccessTokenProvider;
+  const provider = (async () =>
+    getAccessToken(
+      config,
+      logger,
+      notifyRefresh,
+    )) as AgentBackendAccessTokenProvider;
   provider.refresh = () => refreshAccessToken(config, logger, notifyRefresh);
   provider.onRefresh = (listener) => {
     listeners.add(listener);
@@ -42,7 +47,9 @@ async function getAccessToken(
   }
 
   logger?.trace('http', 'OAuth access token is near expiry; refreshing');
-  return refreshCredential(config, credential, logger, notifyRefresh).then((next) => next.accessToken);
+  return refreshCredential(config, credential, logger, notifyRefresh).then(
+    (next) => next.accessToken,
+  );
 }
 
 async function refreshAccessToken(
@@ -51,10 +58,14 @@ async function refreshAccessToken(
   notifyRefresh?: (token: string) => void,
 ): Promise<string | undefined> {
   const credential = await loadCredential(config);
-  return refreshCredential(config, credential, logger, notifyRefresh).then((next) => next.accessToken);
+  return refreshCredential(config, credential, logger, notifyRefresh).then(
+    (next) => next.accessToken,
+  );
 }
 
-async function loadCredential(config: AgentCliConfig): Promise<StoredOAuthCredential> {
+async function loadCredential(
+  config: AgentCliConfig,
+): Promise<StoredOAuthCredential> {
   if (!config.auth) {
     throw new Error(
       'AUTH_AGENT_CREDENTIAL_REQUIRED: run grepmind auth login --hostname <host>',
@@ -86,13 +97,19 @@ async function refreshCredential(
     scope: credential.scopes.join(' '),
   });
   if (!response.access_token) {
-    throw new Error('AUTH_REFRESH_FAILED: refresh response did not include an access token');
+    throw new Error(
+      'AUTH_REFRESH_FAILED: refresh response did not include an access token',
+    );
   }
   if (response.token_type !== 'Bearer') {
-    throw new Error('AUTH_REFRESH_FAILED: refresh response token_type must be Bearer');
+    throw new Error(
+      'AUTH_REFRESH_FAILED: refresh response token_type must be Bearer',
+    );
   }
   if (typeof response.expires_in !== 'number' || response.expires_in <= 0) {
-    throw new Error('AUTH_REFRESH_FAILED: refresh response did not include a valid expires_in');
+    throw new Error(
+      'AUTH_REFRESH_FAILED: refresh response did not include a valid expires_in',
+    );
   }
 
   const nextCredential: StoredOAuthCredential = {

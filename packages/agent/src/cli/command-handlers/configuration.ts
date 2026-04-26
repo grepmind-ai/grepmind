@@ -2,18 +2,13 @@ import path from 'node:path';
 import process from 'node:process';
 import { AgentBackendClient } from '../../backend/agent-backend-client.js';
 import {
-  ensureDataDir,
   removeAgentCliConfig,
   resolveDataDir,
   toBackendOptions,
 } from '../config.js';
 import { createAgentConsole } from '../cli-context.js';
-import {
-  getStringFlag,
-} from '../flags.js';
-import {
-  loadConfigForCommand,
-} from '../command-support.js';
+import { getStringFlag } from '../flags.js';
+import { loadConfigForCommand } from '../command-support.js';
 import type { ParsedArgs } from '../parse-args.js';
 
 export async function resetCommand(args: ParsedArgs): Promise<void> {

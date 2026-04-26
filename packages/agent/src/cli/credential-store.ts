@@ -66,17 +66,14 @@ class MacOSKeychainCredentialStore implements CredentialStore {
 
   async get(key: string): Promise<StoredOAuthCredential | null> {
     try {
-      const { stdout } = await execFileAsync('/usr/bin/security', [
-        'find-generic-password',
-        '-s',
-        KEYCHAIN_SERVICE,
-        '-a',
-        key,
-        '-w',
-      ], {
-        encoding: 'utf8',
-        maxBuffer: 1024 * 1024,
-      });
+      const { stdout } = await execFileAsync(
+        '/usr/bin/security',
+        ['find-generic-password', '-s', KEYCHAIN_SERVICE, '-a', key, '-w'],
+        {
+          encoding: 'utf8',
+          maxBuffer: 1024 * 1024,
+        },
+      );
       return parseCredential(stdout);
     } catch (error) {
       if (isSecurityItemNotFound(error)) {
@@ -87,33 +84,35 @@ class MacOSKeychainCredentialStore implements CredentialStore {
   }
 
   async set(key: string, credential: StoredOAuthCredential): Promise<void> {
-    await execFileAsync('/usr/bin/security', [
-      'add-generic-password',
-      '-U',
-      '-s',
-      KEYCHAIN_SERVICE,
-      '-a',
-      key,
-      '-w',
-      JSON.stringify(credential),
-    ], {
-      encoding: 'utf8',
-      maxBuffer: 1024 * 1024,
-    });
-  }
-
-  async delete(key: string): Promise<void> {
-    try {
-      await execFileAsync('/usr/bin/security', [
-        'delete-generic-password',
+    await execFileAsync(
+      '/usr/bin/security',
+      [
+        'add-generic-password',
+        '-U',
         '-s',
         KEYCHAIN_SERVICE,
         '-a',
         key,
-      ], {
+        '-w',
+        JSON.stringify(credential),
+      ],
+      {
         encoding: 'utf8',
         maxBuffer: 1024 * 1024,
-      });
+      },
+    );
+  }
+
+  async delete(key: string): Promise<void> {
+    try {
+      await execFileAsync(
+        '/usr/bin/security',
+        ['delete-generic-password', '-s', KEYCHAIN_SERVICE, '-a', key],
+        {
+          encoding: 'utf8',
+          maxBuffer: 1024 * 1024,
+        },
+      );
     } catch (error) {
       if (!isSecurityItemNotFound(error)) {
         throw error;
@@ -134,17 +133,19 @@ export function buildCredentialStoreKey(input: {
 function parseCredential(raw: string): StoredOAuthCredential {
   const parsed = JSON.parse(raw.trim()) as Partial<StoredOAuthCredential>;
   if (
-    parsed.credentialType !== 'oauth_token'
-    || typeof parsed.host !== 'string'
-    || typeof parsed.apiBaseUrl !== 'string'
-    || typeof parsed.accessToken !== 'string'
-    || typeof parsed.refreshToken !== 'string'
-    || typeof parsed.tokenEndpoint !== 'string'
-    || typeof parsed.oauthClientId !== 'string'
-    || typeof parsed.expiresAt !== 'string'
-    || !Array.isArray(parsed.scopes)
+    parsed.credentialType !== 'oauth_token' ||
+    typeof parsed.host !== 'string' ||
+    typeof parsed.apiBaseUrl !== 'string' ||
+    typeof parsed.accessToken !== 'string' ||
+    typeof parsed.refreshToken !== 'string' ||
+    typeof parsed.tokenEndpoint !== 'string' ||
+    typeof parsed.oauthClientId !== 'string' ||
+    typeof parsed.expiresAt !== 'string' ||
+    !Array.isArray(parsed.scopes)
   ) {
-    throw new Error('AUTH_CREDENTIAL_INVALID: secure credential payload is invalid');
+    throw new Error(
+      'AUTH_CREDENTIAL_INVALID: secure credential payload is invalid',
+    );
   }
 
   return {
@@ -154,9 +155,13 @@ function parseCredential(raw: string): StoredOAuthCredential {
     accessToken: parsed.accessToken,
     refreshToken: parsed.refreshToken,
     tokenEndpoint: parsed.tokenEndpoint,
-    ...(typeof parsed.userInfoEndpoint === 'string' ? { userInfoEndpoint: parsed.userInfoEndpoint } : {}),
+    ...(typeof parsed.userInfoEndpoint === 'string'
+      ? { userInfoEndpoint: parsed.userInfoEndpoint }
+      : {}),
     oauthClientId: parsed.oauthClientId,
-    scopes: parsed.scopes.filter((scope): scope is string => typeof scope === 'string'),
+    scopes: parsed.scopes.filter(
+      (scope): scope is string => typeof scope === 'string',
+    ),
     expiresAt: parsed.expiresAt,
     accountSubject:
       typeof parsed.accountSubject === 'string' ? parsed.accountSubject : null,
@@ -166,5 +171,10 @@ function parseCredential(raw: string): StoredOAuthCredential {
 }
 
 function isSecurityItemNotFound(error: unknown): boolean {
-  return error instanceof Error && /could not be found|The specified item could not be found/i.test(error.message);
+  return (
+    error instanceof Error &&
+    /could not be found|The specified item could not be found/i.test(
+      error.message,
+    )
+  );
 }

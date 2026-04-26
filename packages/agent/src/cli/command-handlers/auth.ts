@@ -70,25 +70,7 @@ export async function authCommand(args: ParsedArgs): Promise<void> {
 }
 
 async function authLoginCommand(args: ParsedArgs): Promise<void> {
-  rejectUnexpectedPositionals(args, 1);
-  rejectUnknownFlags(args, [
-    'hostname',
-    'scopes',
-    'no-open',
-    'callback-port',
-    'device',
-    'data-dir',
-    'name',
-    'poll-interval-ms',
-    'head-poll-interval-ms',
-    'device-id',
-    'trace',
-  ]);
-  if (args.flags.has('device')) {
-    throw new Error(
-      'AUTH_DEVICE_FLOW_UNSUPPORTED: device flow is not supported; use browser login on this machine',
-    );
-  }
+  validateAuthLoginArgs(args);
 
   const agentConsole = createAgentConsole(args);
   const dataDir = resolveDataDir(
@@ -128,7 +110,10 @@ async function authLoginCommand(args: ParsedArgs): Promise<void> {
     codeChallenge,
   });
 
-  agentConsole.info('config', `Open this URL to authorize Grepmind CLI: ${authorizationUrl}`);
+  agentConsole.info(
+    'config',
+    `Open this URL to authorize Grepmind CLI: ${authorizationUrl}`,
+  );
   if (!hasBooleanFlag(args, 'no-open')) {
     try {
       await openBrowser(authorizationUrl);
@@ -152,10 +137,14 @@ async function authLoginCommand(args: ParsedArgs): Promise<void> {
       );
     }
     if (!callback.code) {
-      throw new Error('AUTH_CALLBACK_INVALID: callback did not include an authorization code');
+      throw new Error(
+        'AUTH_CALLBACK_INVALID: callback did not include an authorization code',
+      );
     }
     if (callback.state !== state) {
-      throw new Error('AUTH_STATE_MISMATCH: authorization callback state did not match');
+      throw new Error(
+        'AUTH_STATE_MISMATCH: authorization callback state did not match',
+      );
     }
 
     const tokenResponse = await authClient.exchangeAuthorizationCode({
@@ -167,14 +156,15 @@ async function authLoginCommand(args: ParsedArgs): Promise<void> {
     });
     validateTokenResponse(tokenResponse);
     const userInfo = metadata.userInfoEndpoint
-      ? await authClient.fetchUserInfo(metadata.userInfoEndpoint, tokenResponse.access_token!)
-        .catch((error) => {
-          agentConsole.warn(
-            'config',
-            `AUTH_USERINFO_FAILED: ${error instanceof Error ? error.message : String(error)}`,
-          );
-          return null;
-        })
+      ? await authClient
+          .fetchUserInfo(metadata.userInfoEndpoint, tokenResponse.access_token!)
+          .catch((error) => {
+            agentConsole.warn(
+              'config',
+              `AUTH_USERINFO_FAILED: ${error instanceof Error ? error.message : String(error)}`,
+            );
+            return null;
+          })
       : null;
 
     const accountSubject = nonEmptyString(userInfo?.sub) ?? null;
@@ -184,7 +174,9 @@ async function authLoginCommand(args: ParsedArgs): Promise<void> {
       accountSubject,
       nonce: randomUUID(),
     });
-    const expiresAt = new Date(Date.now() + tokenResponse.expires_in! * 1000).toISOString();
+    const expiresAt = new Date(
+      Date.now() + tokenResponse.expires_in! * 1000,
+    ).toISOString();
     const credential: StoredOAuthCredential = {
       credentialType: 'oauth_token',
       host: hostname,
@@ -192,7 +184,9 @@ async function authLoginCommand(args: ParsedArgs): Promise<void> {
       accessToken: tokenResponse.access_token!,
       refreshToken: tokenResponse.refresh_token!,
       tokenEndpoint: metadata.tokenEndpoint,
-      ...(metadata.userInfoEndpoint ? { userInfoEndpoint: metadata.userInfoEndpoint } : {}),
+      ...(metadata.userInfoEndpoint
+        ? { userInfoEndpoint: metadata.userInfoEndpoint }
+        : {}),
       oauthClientId: metadata.clientId,
       scopes: requestedScopes,
       expiresAt,
@@ -261,6 +255,28 @@ async function authLoginCommand(args: ParsedArgs): Promise<void> {
   }
 }
 
+function validateAuthLoginArgs(args: ParsedArgs): void {
+  rejectUnexpectedPositionals(args, 1);
+  rejectUnknownFlags(args, [
+    'hostname',
+    'scopes',
+    'no-open',
+    'callback-port',
+    'device',
+    'data-dir',
+    'name',
+    'poll-interval-ms',
+    'head-poll-interval-ms',
+    'device-id',
+    'trace',
+  ]);
+  if (args.flags.has('device')) {
+    throw new Error(
+      'AUTH_DEVICE_FLOW_UNSUPPORTED: device flow is not supported; use browser login on this machine',
+    );
+  }
+}
+
 async function authStatusCommand(args: ParsedArgs): Promise<void> {
   rejectUnexpectedPositionals(args, 1);
   rejectUnknownFlags(args, ['data-dir', 'trace']);
@@ -277,14 +293,19 @@ async function authStatusCommand(args: ParsedArgs): Promise<void> {
   let storeStatus = 'unknown';
   try {
     const store = createCredentialStore();
-    storeStatus = await store.get(config.auth.credentialStoreKey) ? 'available' : 'missing';
+    storeStatus = (await store.get(config.auth.credentialStoreKey))
+      ? 'available'
+      : 'missing';
   } catch {
     storeStatus = 'unavailable';
   }
 
   agentConsole.info('config', `Backend: ${config.apiBaseUrl}`);
   agentConsole.info('config', `Credential: ${config.auth.credentialType}`);
-  agentConsole.info('config', `Account: ${config.auth.accountEmail ?? config.auth.accountSubject ?? 'unknown'}`);
+  agentConsole.info(
+    'config',
+    `Account: ${config.auth.accountEmail ?? config.auth.accountSubject ?? 'unknown'}`,
+  );
   agentConsole.info('config', `Expires: ${config.auth.expiresAt}`);
   agentConsole.info('config', `Refresh: ${storeStatus}`);
   agentConsole.info('config', `Storage: ${config.auth.credentialStoreKind}`);
@@ -299,7 +320,10 @@ async function authLogoutCommand(args: ParsedArgs): Promise<void> {
   );
   const config = await loadOptionalConfig(dataDir);
   if (!config?.auth) {
-    agentConsole.info('config', `No local Grepmind CLI OAuth credential found for ${dataDir}`);
+    agentConsole.info(
+      'config',
+      `No local Grepmind CLI OAuth credential found for ${dataDir}`,
+    );
     return;
   }
 
@@ -328,12 +352,13 @@ function resolveApiBaseUrlFromHostname(hostname: string): string {
   }
 
   const lower = hostname.toLowerCase();
-  const scheme = lower === 'localhost'
-    || lower.startsWith('localhost:')
-    || lower === '127.0.0.1'
-    || lower.startsWith('127.0.0.1:')
-    ? 'http'
-    : 'https';
+  const scheme =
+    lower === 'localhost' ||
+    lower.startsWith('localhost:') ||
+    lower === '127.0.0.1' ||
+    lower.startsWith('127.0.0.1:')
+      ? 'http'
+      : 'https';
   const url = new URL(`${scheme}://${hostname}`);
   return url.toString().replace(/\/$/, '');
 }
@@ -342,7 +367,10 @@ function parseScopes(value: string | undefined): string[] {
   if (!value) {
     return [...DEFAULT_SCOPES];
   }
-  const scopes = value.split(',').map((scope) => scope.trim()).filter(Boolean);
+  const scopes = value
+    .split(',')
+    .map((scope) => scope.trim())
+    .filter(Boolean);
   if (scopes.length === 0) {
     throw new Error('--scopes must include at least one scope');
   }
@@ -353,9 +381,15 @@ async function startCallbackServer(
   metadata: AgentAuthMetadataResponse,
   requestedPort: number | undefined,
 ): Promise<CallbackServer> {
-  const candidatePorts = requestedPort == null ? metadata.callbackPorts : [requestedPort];
-  if (requestedPort != null && !metadata.callbackPorts.includes(requestedPort)) {
-    throw new Error('AUTH_CALLBACK_PORT_UNAVAILABLE: --callback-port must be listed in auth metadata');
+  const candidatePorts =
+    requestedPort == null ? metadata.callbackPorts : [requestedPort];
+  if (
+    requestedPort != null &&
+    !metadata.callbackPorts.includes(requestedPort)
+  ) {
+    throw new Error(
+      'AUTH_CALLBACK_PORT_UNAVAILABLE: --callback-port must be listed in auth metadata',
+    );
   }
 
   const errors: string[] = [];
@@ -399,7 +433,9 @@ function bindCallbackServer(
       errorDescription: url.searchParams.get('error_description') ?? undefined,
     });
     response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    response.end('<!doctype html><title>Grepmind CLI</title><p>Grepmind CLI authorization complete. You can close this tab.</p>');
+    response.end(
+      '<!doctype html><title>Grepmind CLI</title><p>Grepmind CLI authorization complete. You can close this tab.</p>',
+    );
   });
 
   return new Promise<CallbackServer>((resolve, reject) => {
@@ -413,9 +449,10 @@ function bindCallbackServer(
         port,
         redirectUri: `http://127.0.0.1:${port}${metadata.callbackPath}`,
         waitForCallback: () => callbackPromise,
-        close: () => new Promise<void>((closeResolve) => {
-          server.close(() => closeResolve());
-        }),
+        close: () =>
+          new Promise<void>((closeResolve) => {
+            server.close(() => closeResolve());
+          }),
       });
     };
     server.once('error', onError);
@@ -446,16 +483,22 @@ function buildAuthorizationUrl(input: {
 
 function validateTokenResponse(response: OAuthTokenResponse): void {
   if (!response.access_token) {
-    throw new Error('AUTH_TOKEN_EXCHANGE_FAILED: token response did not include an access token');
+    throw new Error(
+      'AUTH_TOKEN_EXCHANGE_FAILED: token response did not include an access token',
+    );
   }
   if (response.token_type !== 'Bearer') {
     throw new Error('AUTH_TOKEN_EXCHANGE_FAILED: token_type must be Bearer');
   }
   if (typeof response.expires_in !== 'number' || response.expires_in <= 0) {
-    throw new Error('AUTH_TOKEN_EXCHANGE_FAILED: token response did not include a valid expires_in');
+    throw new Error(
+      'AUTH_TOKEN_EXCHANGE_FAILED: token response did not include a valid expires_in',
+    );
   }
   if (!response.refresh_token) {
-    throw new Error('AUTH_REFRESH_TOKEN_REQUIRED: token response did not include a refresh token');
+    throw new Error(
+      'AUTH_REFRESH_TOKEN_REQUIRED: token response did not include a refresh token',
+    );
   }
 }
 
@@ -464,14 +507,13 @@ function randomBase64Url(bytes: number): string {
 }
 
 async function openBrowser(url: string): Promise<void> {
-  const command = process.platform === 'darwin'
-    ? '/usr/bin/open'
-    : process.platform === 'win32'
-      ? 'cmd.exe'
-      : 'xdg-open';
-  const args = process.platform === 'win32'
-    ? ['/c', 'start', '', url]
-    : [url];
+  const command =
+    process.platform === 'darwin'
+      ? '/usr/bin/open'
+      : process.platform === 'win32'
+        ? 'cmd.exe'
+        : 'xdg-open';
+  const args = process.platform === 'win32' ? ['/c', 'start', '', url] : [url];
 
   await new Promise<void>((resolve, reject) => {
     const child = spawn(command, args, {
@@ -497,7 +539,10 @@ async function withTimeout<T>(
   return Promise.race([promise, timeout]);
 }
 
-function rejectUnexpectedPositionals(args: ParsedArgs, allowedCount: number): void {
+function rejectUnexpectedPositionals(
+  args: ParsedArgs,
+  allowedCount: number,
+): void {
   if (args.positionals.length > allowedCount) {
     throw new Error(`Unknown command: auth ${args.positionals.join(' ')}`);
   }

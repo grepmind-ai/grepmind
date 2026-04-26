@@ -220,7 +220,7 @@ export class AgentBackendClient {
       headers,
       body,
     });
-    if (response.status === 401 && await this.forceRefreshAccessToken()) {
+    if (response.status === 401 && (await this.forceRefreshAccessToken())) {
       response = await this.fetchImpl(`${this.baseUrl}${path}`, {
         method,
         headers: await this.buildHeaders(options.body !== undefined),
