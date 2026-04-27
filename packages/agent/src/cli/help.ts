@@ -24,6 +24,7 @@ export function printHelp(): void {
       '  search-head --query <text> [--binding-id <id>] [--workspace <path>] [--target code|docs] [--limit <n>] [--threshold <0-1>] [--no-rerank] [--json] [--data-dir <dir>]',
       '  unbind|remove --binding-id <id> [--data-dir <dir>]',
       '  clean --workspace <path> [--data-dir <dir>]',
+      '  clean --all|-a [--data-dir <dir>]',
       '  bootstrap [--data-dir <dir>]',
       '  reset [--data-dir <dir>]',
       '',

@@ -46,6 +46,7 @@ Commands:
   grepmind agent run
   grepmind agent projects
   grepmind agent clean --workspace <path>
+  grepmind agent clean --all
 ```
 
 ### `grepmind auth login`
@@ -114,6 +115,7 @@ Deletes local Grepmind data for a registered workspace.
 
 ```sh
 grepmind agent clean --workspace <path> [--data-dir <dir>]
+grepmind agent clean --all|-a [--data-dir <dir>]
 ```
 
 This command asks for `y/n` confirmation before deleting local runtime data. It does not remove server-side bindings or agent configuration.

@@ -12,6 +12,7 @@ import {
 import { computeWorkspaceFingerprint } from '../config.js';
 import {
   getStringFlag,
+  hasBooleanFlag,
   requireIntegerFlag,
   requireStringFlag,
 } from '../flags.js';
@@ -99,6 +100,11 @@ export async function cleanProjectCommand(args: ParsedArgs): Promise<void> {
     },
   });
 
+  if (targets.length === 0) {
+    agentConsole.info('project', 'No registered projects');
+    return;
+  }
+
   const confirmed = await confirmCleanProjects(targets);
   if (!confirmed) {
     agentConsole.info('project', 'Clean cancelled');
@@ -131,6 +137,17 @@ export async function cleanProjectCommand(args: ParsedArgs): Promise<void> {
   }
 
   const workspacePath = cleanedProjects[0]!.workspacePath;
+  const allSameWorkspace = cleanedProjects.every(
+    (project) => project.workspacePath === workspacePath,
+  );
+  if (!allSameWorkspace) {
+    agentConsole.warn(
+      'project',
+      `Cleaned ${cleanedProjects.length} local project registrations`,
+    );
+    return;
+  }
+
   agentConsole.warn(
     'project',
     `Cleaned ${cleanedProjects.length} local project registrations for ${workspacePath}`,
@@ -145,9 +162,18 @@ async function resolveProjectsForClean(
     throw new Error('clean does not support --binding-id; use --workspace');
   }
 
+  const cleanAll = hasBooleanFlag(args, 'all') || hasBooleanFlag(args, 'a');
   const workspaceArg = getStringFlag(args, 'workspace');
+  if (cleanAll) {
+    if (workspaceArg) {
+      throw new Error('clean does not support --workspace with --all');
+    }
+
+    return items;
+  }
+
   if (!workspaceArg) {
-    throw new Error('--workspace is required');
+    throw new Error('--workspace is required unless --all is set');
   }
   const workspacePath = await resolveWorkspacePath(workspaceArg);
   const matches = items.filter((item) => item.workspacePath === workspacePath);

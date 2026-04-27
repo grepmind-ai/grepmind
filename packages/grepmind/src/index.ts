@@ -63,6 +63,7 @@ function printHelp() {
       '  grepmind agent run',
       '  grepmind agent projects',
       '  grepmind agent clean --workspace <path>',
+      '  grepmind agent clean --all',
       '',
     ].join('\n'),
   );

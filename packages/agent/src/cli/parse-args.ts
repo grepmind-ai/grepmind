@@ -12,8 +12,13 @@ export function parseArgs(argv: string[]): ParsedArgs {
 
   for (let index = 0; index < argv.length; index += 1) {
     const token = argv[index];
-    if (!token.startsWith('--')) {
+    if (!token.startsWith('-')) {
       positionals.push(token);
+      continue;
+    }
+
+    if (!token.startsWith('--')) {
+      flags.set(token.slice(1), true);
       continue;
     }
 
