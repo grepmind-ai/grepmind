@@ -31,7 +31,8 @@
     "test": "npm --workspaces run test --if-present",
     "clean": "npm -ws run clean --if-present",
     "grepmind": "tsx packages/grepmind/src/index.ts",
-    "agent": "npm -w @grepmind/agent run dev:cli --"
+    "agent": "npm -w @grepmind/agent run start --",
+    "agent:dev": "tsx packages/agent/src/cli.ts"
   },
   "author": "Zaytra",
   "license": "Apache-2.0",

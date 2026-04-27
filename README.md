@@ -79,10 +79,16 @@ Run the public CLI from source:
 npm run grepmind -- agent help
 ```
 
-Run the lower-level agent CLI from source:
+Run the lower-level agent CLI from the built package:
 
 ```sh
 npm run agent -- help
+```
+
+Run the lower-level agent CLI from source:
+
+```sh
+npm run agent:dev -- help
 ```
 
 ## Repository Layout
