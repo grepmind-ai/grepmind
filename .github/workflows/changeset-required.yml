@@ -36,6 +36,7 @@ jobs:
           has_package_source=false
           has_package_manifest=false
           has_changeset=false
+          changeset_files=()
 
           if printf '%s\n' "$changed_files" | grep -Eq '^(packages/[^/]+/(src|scripts|drizzle)/)'; then
             has_package_source=true
@@ -47,6 +48,35 @@ jobs:
 
           if printf '%s\n' "$changed_files" | grep -Eq '^\.changeset/[^/]+\.md$'; then
             has_changeset=true
+            mapfile -t changeset_files < <(printf '%s\n' "$changed_files" | grep -E '^\.changeset/[^/]+\.md$')
+          fi
+
+          if [[ "$has_changeset" == "true" ]]; then
+            for changeset_file in "${changeset_files[@]}"; do
+              if [[ ! -f "$changeset_file" ]]; then
+                continue
+              fi
+
+              if awk '
+                BEGIN { in_frontmatter = 0; separator_count = 0 }
+                /^---[[:space:]]*$/ {
+                  separator_count += 1
+                  in_frontmatter = separator_count == 1
+                  if (separator_count == 2) {
+                    exit 0
+                  }
+                  next
+                }
+                in_frontmatter && $0 ~ /^["'\''"]?[^:"'\''"]+["'\''"]?[[:space:]]*:[[:space:]]*major[[:space:]]*$/ {
+                  exit 1
+                }
+              ' "$changeset_file"; then
+                :
+              else
+                echo "::error file=${changeset_file}::Major changesets are not allowed. Use patch or minor."
+                exit 1
+              fi
+            done
           fi
 
           if [[ "$has_package_source" == "false" && "$has_changeset" == "true" && "$has_package_manifest" == "false" ]]; then
