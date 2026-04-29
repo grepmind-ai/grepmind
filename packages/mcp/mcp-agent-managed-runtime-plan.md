@@ -6,7 +6,7 @@
 
 MCP должен считаться подключённым только после того, как:
 
-- workspace root определён из project-local `mcp.json`
+- workspace root определён из project-local MCP config через `--workspace` или проверенный project-local `cwd`
 - пользователь авторизован в Grepmind agent
 - agent runtime запущен
 - workspace зарегистрирован в agent runtime
@@ -17,6 +17,8 @@ MCP должен считаться подключённым только пос
 ## Основной контракт
 
 Grepmind MCP не поддерживает глобальную настройку без workspace. Для поиска требуется project-local MCP config.
+
+Сам MCP не читает `mcp.json`: MCP client читает project-local config и запускает `grepmind-mcp` с правильными `args` или `cwd`. Для Grepmind MCP source of truth на runtime-стороне - `--workspace`; fallback `process.cwd()` нужен только для клиентов, которые не умеют подставлять `${workspaceFolder}`.
 
 Рекомендуемая настройка:
 
@@ -68,12 +70,13 @@ packages/agent-rpc/src/bootstrap.ts
 1. Создать `McpServer`.
 2. Зарегистрировать tools.
 3. Определить workspace root.
-4. Вызвать `ensureAgentReady(...)`.
-5. Проверить/зарегистрировать workspace в agent runtime и получить ровно один project binding.
-6. Сохранить `workspacePath`, `bindingId`, `dataDir`, `AgentRuntimeClient` и registered project в server-side context.
-7. Подключить `StdioServerTransport`.
+4. Найти bundled agent CLI из dependency `@grepmind/agent`.
+5. Вызвать `ensureAgentReady(...)` с явным agent command.
+6. Проверить/зарегистрировать workspace в agent runtime и получить ровно один project binding.
+7. Сохранить `workspacePath`, `bindingId`, `dataDir`, `AgentRuntimeClient` и registered project в server-side context.
+8. Подключить `StdioServerTransport`.
 
-MCP client увидит connected только после шага 7.
+MCP client увидит connected только после шага 8.
 
 ## Workspace Resolution
 
@@ -104,7 +107,7 @@ git -C <path> rev-parse --show-toplevel
 Добавить helper:
 
 ```text
-packages/mcp/src/tools/agent-runtime.ts
+packages/mcp/src/runtime-context.ts
 ```
 
 Пример API:
@@ -133,25 +136,66 @@ export function getReadyAgentRuntimeClient(): AgentRuntimeClient;
 Логика `prepareMcpRuntime`:
 
 1. Resolve `dataDir` из `GREPMIND_AGENT_DATA_DIR` или default `~/.grepmind-agent`.
-2. Вызвать:
+2. Resolve bundled agent command из установленного `@grepmind/agent`.
+3. Вызвать:
 
 ```ts
+const agentCommand = await resolveBundledAgentCommand();
+
 await ensureAgentReady({
   dataDir,
   hostname: process.env.GREPMIND_AGENT_HOSTNAME,
   noOpen: false,
+  timeoutMs: resolveMcpStartupTimeoutMs(),
+  command: agentCommand,
 });
 ```
 
-3. Если пользователь не залогинен и `GREPMIND_AGENT_HOSTNAME` не задан, завершить startup с ошибкой.
-4. Если нужен login, открыть browser OAuth flow во время startup.
-5. После готовности runtime создать/закэшировать `AgentRuntimeClient`.
-6. Вызвать workspace registration helper, получить `bindingId` и project.
-7. Вернуть и закэшировать полный `McpWorkspaceContext`.
+4. Если пользователь не залогинен и `GREPMIND_AGENT_HOSTNAME` не задан, завершить startup с ошибкой.
+5. Если нужен login, открыть browser OAuth flow во время startup.
+6. После готовности runtime создать/закэшировать `AgentRuntimeClient`.
+7. Вызвать workspace registration helper, получить `bindingId` и project.
+8. Вернуть и закэшировать полный `McpWorkspaceContext`.
 
 `noOpen` должен быть `false`: если login нужен, MCP startup должен открыть браузер.
 
 Использовать `resolveAgentDataDir(...)` из `@grepmind/agent-rpc`, чтобы default и relative path semantics совпадали с agent bootstrap.
+
+OAuth/runtime startup не должен висеть бесконечно. `resolveMcpStartupTimeoutMs()` должен брать `GREPMIND_MCP_STARTUP_TIMEOUT_MS` или default `120000`. Если timeout истёк, ошибка должна предлагать сначала выполнить pre-login вручную. Основной вариант в error copy - exact command через bundled agent entrypoint:
+
+```text
+node <agentEntrypointPath> auth login --hostname <host> --data-dir <dataDir>
+```
+
+Если у пользователя отдельно установлен public `grepmind` CLI, можно дополнительно показать shortcut `grepmind auth login --hostname <host>`.
+
+## Agent Runtime Packaging
+
+`@grepmind/mcp` должен приносить совместимую версию agent runtime как package dependency:
+
+```json
+{
+  "dependencies": {
+    "@grepmind/agent": "<compatible-version>"
+  }
+}
+```
+
+MCP не должен полагаться на глобальный `PATH` и наличие `grepmind-agent` у пользователя. Вместо этого добавить helper `resolveBundledAgentCommand()`:
+
+1. `createRequire(import.meta.url).resolve('@grepmind/agent/package.json')`.
+2. Прочитать package root и `bin["grepmind-agent"]`.
+3. Проверить, что entrypoint существует.
+4. Вернуть:
+
+```ts
+{
+  command: process.execPath,
+  baseArgs: [agentEntrypointPath],
+}
+```
+
+Если `@grepmind/agent` или entrypoint не найден, startup должен падать с ошибкой про повреждённую установку `@grepmind/mcp` и рекомендацией переустановить пакет. Ошибка "grepmind-agent not found in PATH" не должна появляться при нормальной установке MCP.
 
 ## Workspace Registration
 
@@ -161,25 +205,35 @@ await ensureAgentReady({
 
 1. Вычислить startup `workspaceFingerprint` через `realpath`, `stat.dev`, `stat.ino`, `sha256`.
 2. Вызвать `client.listProjects()`.
-3. Найти projects, у которых `path.resolve(project.workspacePath) === workspaceContext.workspacePath` или `project.workspaceFingerprint === workspaceFingerprint`.
-4. Если найден ровно один project, сохранить его `bindingId` и продолжить startup.
-5. Если найдено больше одного project, завершить startup с ошибкой: MCP не должен сам выбирать между duplicate local bindings. Ошибка должна предложить очистить duplicate registrations вручную.
-6. Если project не найден, собрать metadata из Git workspace:
+3. Найти projects, у которых:
+   - нормализованный Git root совпадает с `workspaceContext.workspacePath`
+   - или, если path существует, `realpath(project.workspacePath)` совпадает с startup realpath
+   - или `project.workspaceFingerprint === workspaceFingerprint`
+4. Дедуплицировать matches по `bindingId`.
+5. Если найден ровно один unique project, сохранить его `bindingId` и продолжить startup.
+6. Если найдено больше одного unique project, завершить startup с ошибкой: MCP не должен сам выбирать между duplicate local bindings. Ошибка должна предложить очистить duplicate registrations вручную.
+7. Если project не найден, собрать metadata из Git workspace:
    - `remoteUrl` из `git remote get-url origin` - обязательное поле для авто-регистрации
    - `displayName` из basename root
    - `repoFullName` из remote URL, если распознаётся
    - `defaultBranch` из Git refs/config, если доступно
    - уже вычисленный `workspaceFingerprint` - обязательное поле
    - `preferredActiveBranch` из текущего branch, если доступно
-7. Вызвать `client.registerProject(...)` с `idempotencyKey`.
-8. Сохранить `result.snapshot.project.bindingId`.
-9. Опционально сразу вызвать `client.syncProject({ bindingId, targets: ['code', 'docs'], idempotencyKey })`.
+8. Вызвать `client.registerProject(...)` с deterministic `idempotencyKey`.
+9. Сохранить `result.snapshot.project.bindingId`.
 
 Регистрация происходит только на startup и только для workspace root из project-local config. `code_search` не регистрирует workspace.
 
 Если metadata для регистрации недостаточно, startup должен завершиться понятной ошибкой с командой ручной регистрации.
 
-Metadata helpers нельзя импортировать из `@grepmind/agent`, потому что `@grepmind/mcp` не должен зависеть от полного agent package. Для MVP добавить локальный helper в MCP, повторяющий agent CLI алгоритмы:
+`idempotencyKey` для регистрации должен быть стабильным для одного workspace:
+
+```ts
+const idempotencyMaterial = `${workspaceFingerprint}\0${remoteUrl}`;
+const idempotencyKey = `mcp-register:${sha256(idempotencyMaterial)}`;
+```
+
+Metadata helpers нельзя импортировать из private modules `@grepmind/agent`, даже если `@grepmind/mcp` зависит от `@grepmind/agent` для bundled CLI. MCP должен использовать только public `@grepmind/agent-rpc` API и собственные локальные helpers. Для MVP добавить локальный helper в MCP, повторяющий agent CLI алгоритмы:
 
 - `git -C <workspace> remote get-url origin`
 - `git -C <workspace> symbolic-ref --short refs/remotes/origin/HEAD`
@@ -187,6 +241,24 @@ Metadata helpers нельзя импортировать из `@grepmind/agent`,
 - `workspaceFingerprint` через `realpath`, `stat.dev`, `stat.ino`, `sha256`
 
 Если helper понадобится ещё где-то, следующим шагом его можно вынести в `@grepmind/agent-rpc`.
+
+## Sync Policy
+
+Startup readiness boundary для MCP - auth, runtime, workspace registration и unique `bindingId`. Полная синхронизация и материализация search index не входят в startup boundary. Это значит, что MCP может быть connected, но первый `code_search` всё ещё может вернуть ошибку "index is not ready yet".
+
+Для MVP не запускать blocking `syncProject` на startup по умолчанию. Причины:
+
+- initial sync может занять дольше startup timeout MCP client
+- runtime уже умеет синхронизировать registered projects в своём loop
+- `code_search` должен уметь вернуть actionable ошибку "index is not ready yet"
+
+Не добавлять `GREPMIND_MCP_SYNC_ON_STARTUP` в MVP. Если позже понадобится явный startup sync, добавить отдельный opt-in flag/env, например `GREPMIND_MCP_SYNC_ON_STARTUP=1`, и использовать отдельный deterministic key:
+
+```ts
+const syncIdempotencyKey = `mcp-sync:${bindingId}:${workspaceFingerprint}`;
+```
+
+Даже в opt-in режиме startup sync не должен скрыто выбирать workspace или менять `bindingId`; он работает только с уже resolved server-side context.
 
 ## Tool API
 
@@ -254,8 +326,9 @@ Startup errors:
 
 - workspace не передан и `process.cwd()` не является Git workspace
 - агент не авторизован и `GREPMIND_AGENT_HOSTNAME` не задан
-- OAuth login не завершился
+- OAuth login не завершился до `GREPMIND_MCP_STARTUP_TIMEOUT_MS`
 - agent runtime не удалось запустить
+- bundled `@grepmind/agent` entrypoint не найден или установка MCP повреждена
 - workspace не имеет `origin` remote, а project ещё не зарегистрирован
 - workspace не удалось зарегистрировать
 - найдено несколько local project bindings для одного workspace
@@ -264,7 +337,7 @@ Tool errors после успешного startup:
 
 - agent runtime умер после подключения MCP
 - search index для текущего workspace ещё не готов
-- sync завершился ошибкой
+- background/previous sync для текущего workspace завершился ошибкой
 
 `code_search` не должен возвращать ошибку "выберите workspace" или "зарегистрируйте workspace", если startup прошёл успешно. Ошибка "No local project is registered" после успешного startup считается bug в MCP preparation.
 
@@ -275,21 +348,26 @@ Tool errors после успешного startup:
 ```text
 GREPMIND_AGENT_DATA_DIR
 GREPMIND_AGENT_HOSTNAME
+GREPMIND_MCP_STARTUP_TIMEOUT_MS
 ```
+
+`GREPMIND_MCP_SYNC_ON_STARTUP` не поддерживать в MVP; это reserved future opt-in из секции Sync Policy.
 
 `GREPMIND_WORKSPACE_PATH` не нужен. Workspace должен приходить из project-local MCP config через `--workspace` или project-local `cwd`.
 
 ## Риски
 
-### Не установлен `grepmind-agent`
+### Bundled agent runtime
 
-`ensureAgentReady(...)` по умолчанию запускает `grepmind-agent`. Если бинарь недоступен в `PATH`, MCP startup должен завершиться понятной ошибкой.
+`@grepmind/mcp` не должен зависеть от глобального `grepmind-agent` в `PATH`. Он должен запускать CLI entrypoint из dependency `@grepmind/agent` через `process.execPath`.
+
+Если bundled entrypoint не найден, это считается повреждённой установкой MCP. Startup должен завершиться понятной ошибкой с рекомендацией переустановить `@grepmind/mcp`.
 
 ### OAuth при startup
 
 MCP startup может открыть браузер и ждать login. Это ожидаемое поведение: MCP считается connected только когда агент работает и залогинен.
 
-Нужно сохранить понятный timeout/error copy: если OAuth не завершился, MCP startup должен завершиться с actionable сообщением, а не зависать без объяснения.
+Нужно сохранить понятный timeout/error copy: если OAuth не завершился до `GREPMIND_MCP_STARTUP_TIMEOUT_MS`, MCP startup должен завершиться с actionable сообщением, а не зависать без объяснения. Сообщение должно предлагать pre-login через exact bundled agent command `node <agentEntrypointPath> auth login --hostname <host> --data-dir <dataDir>` для MCP clients с коротким startup timeout. Если отдельно установлен public `grepmind` CLI, сообщение может дополнительно показать `grepmind auth login --hostname <host>` как shortcut.
 
 ### Project-local cwd зависит от клиента
 
@@ -311,18 +389,22 @@ MCP startup может открыть браузер и ждать login. Это
 
 1. Добавить parsing `--workspace <path>`.
 2. Добавить workspace resolver: `--workspace`, иначе `process.cwd()`, затем Git top-level.
-3. Добавить `packages/mcp/src/tools/agent-runtime.ts`.
-4. Вызвать startup preparation в `packages/mcp/src/index.ts` до `server.connect(transport)`.
-5. Добавить MCP-local Git metadata helpers для авто-регистрации.
-6. Добавить авто-регистрацию startup workspace и resolve ровно одного `bindingId`.
-7. Сохранить `bindingId`, `workspacePath`, `dataDir`, `AgentRuntimeClient` в server-side context.
-8. Убрать `workspacePath` из `code_search` schema.
-9. Передавать `bindingId` в `searchHead(...)`; `workspacePath` оставить в context для diagnostics/errors.
-10. Сохранить текущую overfetch/post-filter обработку `path` и `tags`.
-11. Обновить ошибки.
-12. Добавить `grepmind_agent_status`.
-13. Обновить `packages/mcp/README.md`: project-local config, `--workspace`, startup auth/runtime/register, отсутствие `workspacePath` в tool input.
-14. Запустить build для проверки новой версии кода.
+3. Добавить dependency `@grepmind/agent` в `packages/mcp/package.json`.
+4. Добавить `resolveBundledAgentCommand()` для запуска bundled agent через `process.execPath`.
+5. Добавить `packages/mcp/src/runtime-context.ts`.
+6. Вызвать startup preparation в `packages/mcp/src/index.ts` до `server.connect(transport)`.
+7. Добавить MCP-local Git metadata helpers для авто-регистрации.
+8. Добавить авто-регистрацию startup workspace и resolve ровно одного `bindingId` с dedupe по `bindingId`.
+9. Использовать deterministic idempotency key для `registerProject`.
+10. Сохранить `bindingId`, `workspacePath`, `dataDir`, `AgentRuntimeClient` в server-side context.
+11. Убрать `workspacePath` из `code_search` schema.
+12. Передавать `bindingId` в `searchHead(...)`; `workspacePath` оставить в context для diagnostics/errors.
+13. Сохранить текущую overfetch/post-filter обработку `path` и `tags`.
+14. Не запускать blocking sync на startup в MVP; `code_search` должен возвращать понятную ошибку, если index ещё не готов.
+15. Обновить ошибки.
+16. Добавить `grepmind_agent_status`.
+17. Обновить `packages/mcp/README.md`: project-local config, `--workspace`, startup auth/runtime/register, отсутствие `workspacePath` в tool input.
+18. Запустить build для проверки новой версии кода.
 
 ## Минимальный MVP
 
@@ -330,8 +412,10 @@ MCP startup может открыть браузер и ждать login. Это
 
 - `--workspace <path>`
 - resolve Git root
+- bundled `@grepmind/agent` command без зависимости от global `PATH`
 - `ensureAgentReady(...)` на startup
-- регистрация workspace на startup
+- finite startup timeout с pre-login error copy
+- регистрация workspace на startup с deterministic idempotency key
 - resolve и cache `bindingId`
 - `code_search` без `workspacePath`
 - server-side подстановка `bindingId`, при сохранении `workspacePath` в context
