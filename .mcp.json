@@ -1,7 +1,11 @@
 {
   "mcpServers": {
     "grepmind": {
-      "command": "grepmind-mcp"
+      "command": "node",
+      "args": ["packages/mcp/dist/index.js"],
+      "env": {
+        "GREPMIND_AGENT_HOSTNAME": "localhost:3847"
+      }
     }
   }
 }
