@@ -1,14 +1,14 @@
-// Shared client for grepmind local agent search RPC
-
-import os from 'node:os';
 import path from 'node:path';
 import {
-  AgentRuntimeClient,
   AgentRuntimeClientError,
   isRuntimeUnavailableError,
   type SearchHeadRpcResult,
   type SearchResultItem,
 } from '@grepmind/agent-rpc';
+import {
+  getMcpWorkspaceContext,
+  getReadyAgentRuntimeClient,
+} from '../runtime-context.js';
 
 export interface SearchResult {
   symbol: {
@@ -43,31 +43,12 @@ export function estimateTokens(text: string): number {
   return Math.ceil(text.length / 4);
 }
 
-const DEFAULT_AGENT_DATA_DIR = path.join(os.homedir(), '.grepmind-agent');
 const DEFAULT_SEARCH_LIMIT = 10;
 const FILTER_OVERFETCH_MULTIPLIER = 5;
 const MIN_FILTER_OVERFETCH_LIMIT = 50;
 const MAX_FILTER_OVERFETCH_LIMIT = 200;
-let cachedAgentDataDir: string | null = null;
-let cachedAgentRuntimeClient: AgentRuntimeClient | null = null;
-
-function getAgentDataDir(): string {
-  const configured = process.env.GREPMIND_AGENT_DATA_DIR?.trim();
-  return configured ? path.resolve(configured) : DEFAULT_AGENT_DATA_DIR;
-}
-
-function createAgentRuntimeClient(): AgentRuntimeClient {
-  const dataDir = getAgentDataDir();
-  if (!cachedAgentRuntimeClient || cachedAgentDataDir !== dataDir) {
-    cachedAgentDataDir = dataDir;
-    cachedAgentRuntimeClient = new AgentRuntimeClient(dataDir);
-  }
-
-  return cachedAgentRuntimeClient;
-}
 
 export async function searchCode(params: {
-  workspacePath: string;
   query: string;
   mode: 'semantic' | 'text';
   target?: 'code' | 'docs';
@@ -82,8 +63,9 @@ export async function searchCode(params: {
     );
   }
 
+  const workspaceContext = getMcpWorkspaceContext();
+
   try {
-    const workspacePath = path.resolve(params.workspacePath);
     const requestedLimit = params.limit ?? DEFAULT_SEARCH_LIMIT;
     const searchLimit = shouldOverfetch(params)
       ? Math.min(
@@ -94,8 +76,8 @@ export async function searchCode(params: {
           MAX_FILTER_OVERFETCH_LIMIT,
         )
       : requestedLimit;
-    const response = await createAgentRuntimeClient().searchHead({
-      workspacePath,
+    const response = await getReadyAgentRuntimeClient().searchHead({
+      bindingId: workspaceContext.bindingId,
       query: params.query,
       target: params.target ?? 'code',
       limit: searchLimit,
@@ -110,7 +92,7 @@ export async function searchCode(params: {
       limit: requestedLimit,
     });
   } catch (error) {
-    throw normalizeAgentSearchError(error, params.workspacePath);
+    throw normalizeAgentSearchError(error, workspaceContext);
   }
 }
 
@@ -199,24 +181,36 @@ function normalizeTags(tags: string[] | undefined): string[] {
 
 function normalizeAgentSearchError(
   error: unknown,
-  workspacePath: string,
+  workspaceContext: {
+    workspacePath: string;
+    bindingId: number;
+    dataDir: string;
+  },
 ): Error {
-  const resolvedWorkspacePath = path.resolve(workspacePath);
+  const resolvedWorkspacePath = path.resolve(workspaceContext.workspacePath);
 
   if (isRuntimeUnavailableError(error)) {
-    const dataDir = getAgentDataDir();
     return new Error(
-      `Local Grepmind agent runtime is not running for ${dataDir}. ` +
-        `Start it with "grepmind agent run --data-dir ${dataDir}" and retry. ` +
-        'If this workspace is not registered yet, register it with "grepmind agent register --workspace <path>".',
+      `Grepmind agent runtime stopped after MCP startup for ${workspaceContext.dataDir}. Restart this MCP server to prepare the bundled runtime again.`,
     );
   }
 
   if (error instanceof AgentRuntimeClientError && error.code === 'NOT_FOUND') {
     return new Error(
-      `${error.message}. Register this workspace with "grepmind agent register --workspace ${resolvedWorkspacePath}" and make sure it is synced.`,
+      `Grepmind MCP prepared binding #${workspaceContext.bindingId} for ${resolvedWorkspacePath}, but the runtime no longer has that local project. Restart this MCP server to re-run workspace registration. Original error: ${error.message}`,
+    );
+  }
+
+  if (isSearchIndexNotReadyError(error)) {
+    return new Error(
+      `Search index is not ready yet for workspace ${resolvedWorkspacePath} (binding #${workspaceContext.bindingId}). Wait for Grepmind background sync to finish, then retry. Original error: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
 
   return error instanceof Error ? error : new Error(String(error));
+}
+
+function isSearchIndexNotReadyError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /not synced yet|search cannot run|index is not ready/i.test(message);
 }

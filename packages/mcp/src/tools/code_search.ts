@@ -11,50 +11,46 @@ import {
 const DEFAULT_SEARCH_LIMIT = 10;
 const MAX_SEARCH_LIMIT = 100;
 
-export const codeSearchSchema = z.object({
-  workspacePath: z
-    .string()
-    .min(1)
-    .describe(
-      'Absolute path to the agent project root/workspace. Use your current project root, not the MCP server cwd.',
-    ),
-  query: z
-    .string()
-    .describe(
-      'Describe what the code does in natural language (e.g., "validate user input", "handle HTTP errors")',
-    ),
-  target: z
-    .enum(['code', 'docs'])
-    .optional()
-    .describe(
-      'Search target in the local agent HEAD: "code" (default) or "docs" (markdown/docs files)',
-    ),
-  limit: z
-    .number()
-    .int()
-    .min(1)
-    .max(MAX_SEARCH_LIMIT)
-    .optional()
-    .describe('Max results (default: 10, max: 100)'),
-  threshold: z
-    .number()
-    .min(0)
-    .max(1)
-    .optional()
-    .describe('Min similarity 0-1 (default: 0.5). Lower = more results'),
-  path: z
-    .string()
-    .optional()
-    .describe('Filter by path prefix (e.g., "src/api")'),
-  tags: z
-    .array(z.string())
-    .optional()
-    .describe('Filter docs by tags (e.g., ["architecture", "guide"])'),
-  compact: z
-    .boolean()
-    .optional()
-    .describe('Return only signatures, not full code'),
-});
+export const codeSearchSchema = z
+  .object({
+    query: z
+      .string()
+      .describe(
+        'Describe what the code does in natural language (e.g., "validate user input", "handle HTTP errors")',
+      ),
+    target: z
+      .enum(['code', 'docs'])
+      .optional()
+      .describe(
+        'Search target in the local agent HEAD: "code" (default) or "docs" (markdown/docs files)',
+      ),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(MAX_SEARCH_LIMIT)
+      .optional()
+      .describe('Max results (default: 10, max: 100)'),
+    threshold: z
+      .number()
+      .min(0)
+      .max(1)
+      .optional()
+      .describe('Min similarity 0-1 (default: 0.5). Lower = more results'),
+    path: z
+      .string()
+      .optional()
+      .describe('Filter by path prefix (e.g., "src/api")'),
+    tags: z
+      .array(z.string())
+      .optional()
+      .describe('Filter docs by tags (e.g., ["architecture", "guide"])'),
+    compact: z
+      .boolean()
+      .optional()
+      .describe('Return only signatures, not full code'),
+  })
+  .strict();
 
 export type CodeSearchInput = z.infer<typeof codeSearchSchema>;
 
@@ -125,7 +121,6 @@ export async function codeSearchTool(input: CodeSearchInput): Promise<{
 }> {
   try {
     const { results } = await searchCode({
-      workspacePath: input.workspacePath,
       query: input.query,
       mode: 'semantic',
       target: input.target,
