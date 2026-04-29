@@ -33,8 +33,8 @@ async function main(): Promise<void> {
     agentStatusTool,
   );
 
-  const cliOptions = parseMcpCliArgs(process.argv.slice(2));
-  const workspacePath = await resolveWorkspaceRoot(cliOptions.workspace);
+  parseMcpCliArgs(process.argv.slice(2));
+  const workspacePath = await resolveWorkspaceRoot();
   await prepareMcpRuntime({ workspacePath });
 
   const transport = new StdioServerTransport();

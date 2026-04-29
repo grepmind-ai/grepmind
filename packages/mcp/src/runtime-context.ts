@@ -243,7 +243,7 @@ async function findUniqueRegisteredProject(input: {
   }
 
   throw new Error(
-    `Grepmind MCP found multiple local project bindings for ${input.workspacePath}: ${uniqueMatches.map((project) => `#${project.bindingId}`).join(', ')}. MCP cannot choose between duplicate bindings; clean them manually with "${formatAgentCleanCommand(input.agentEntrypointPath, input.dataDir, input.workspacePath)}" and retry.`,
+    `Grepmind MCP found multiple local project bindings for ${input.workspacePath}: ${uniqueMatches.map((project) => `#${project.bindingId}`).join(', ')}. MCP cannot choose between duplicate bindings; clean them manually and retry.`,
   );
 }
 
@@ -291,7 +291,7 @@ async function collectWorkspaceRegistrationMetadata(input: {
     remoteUrl = await resolveWorkspaceRemoteUrl(input.workspacePath);
   } catch (error) {
     throw new Error(
-      `Workspace ${input.workspacePath} is not registered and does not have a readable origin remote, so Grepmind MCP cannot auto-register it. Configure origin, then retry MCP startup or run "${formatAgentRegisterCommand(input.agentEntrypointPath, input.dataDir, input.workspacePath)}". ${formatError(error)}`,
+      `Workspace ${input.workspacePath} is not registered and does not have a readable origin remote, so Grepmind MCP cannot auto-register it. Configure origin, then retry MCP startup or register this workspace manually. ${formatError(error)}`,
     );
   }
 
@@ -471,38 +471,6 @@ function formatAgentLoginCommand(
     'login',
     '--hostname',
     hostname,
-    '--data-dir',
-    dataDir,
-  ]);
-}
-
-function formatAgentRegisterCommand(
-  agentEntrypointPath: string,
-  dataDir: string,
-  workspacePath: string,
-): string {
-  return formatCommand([
-    process.execPath,
-    agentEntrypointPath,
-    'register',
-    '--workspace',
-    workspacePath,
-    '--data-dir',
-    dataDir,
-  ]);
-}
-
-function formatAgentCleanCommand(
-  agentEntrypointPath: string,
-  dataDir: string,
-  workspacePath: string,
-): string {
-  return formatCommand([
-    process.execPath,
-    agentEntrypointPath,
-    'clean',
-    '--workspace',
-    workspacePath,
     '--data-dir',
     dataDir,
   ]);

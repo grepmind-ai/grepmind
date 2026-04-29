@@ -5,51 +5,20 @@ import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
 
-export interface McpCliOptions {
-  workspace?: string;
-}
-
-export function parseMcpCliArgs(argv: string[]): McpCliOptions {
-  const options: McpCliOptions = {};
-
-  for (let index = 0; index < argv.length; index += 1) {
-    const token = argv[index];
-
-    if (token === '--workspace') {
-      const value = argv[index + 1];
-      if (!value || value.startsWith('--')) {
-        throw new Error('--workspace requires a path');
-      }
-      setWorkspace(options, value);
-      index += 1;
-      continue;
-    }
-
-    if (token.startsWith('--workspace=')) {
-      const value = token.slice('--workspace='.length);
-      if (!value) {
-        throw new Error('--workspace requires a path');
-      }
-      setWorkspace(options, value);
-      continue;
-    }
-
+export function parseMcpCliArgs(argv: string[]): void {
+  for (const token of argv) {
     if (token === '--help' || token === '-h') {
       throw new Error(
-        'Usage: grepmind-mcp [--workspace <path>]. Configure this as a project-local MCP server.',
+        'Usage: grepmind-mcp. Launch it from a project-local Git workspace.',
       );
     }
 
     throw new Error(`Unknown grepmind-mcp argument: ${token}`);
   }
-
-  return options;
 }
 
-export async function resolveWorkspaceRoot(
-  workspacePathInput?: string,
-): Promise<string> {
-  const candidate = path.resolve(workspacePathInput ?? process.cwd());
+export async function resolveWorkspaceRoot(): Promise<string> {
+  const candidate = path.resolve('.');
 
   try {
     const { stdout } = await execFileAsync(
@@ -70,17 +39,9 @@ export async function resolveWorkspaceRoot(
     return path.resolve(root);
   } catch (error) {
     throw new Error(
-      `Grepmind MCP requires a project-local Git workspace. Configure your MCP client with args ["--workspace", "\${workspaceFolder}"], or launch grepmind-mcp with cwd set to a Git workspace root. Failed to resolve Git root for ${candidate}: ${formatError(error)}`,
+      `Grepmind MCP requires a project-local Git workspace. Launch grepmind-mcp from a Git workspace root. Failed to resolve Git root for ${candidate}: ${formatError(error)}`,
     );
   }
-}
-
-function setWorkspace(options: McpCliOptions, value: string): void {
-  if (options.workspace != null) {
-    throw new Error('--workspace may only be provided once');
-  }
-
-  options.workspace = value;
 }
 
 function formatError(error: unknown): string {

@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "grepmind": {
+      "command": "grepmind-mcp"
+    }
+  }
+}
