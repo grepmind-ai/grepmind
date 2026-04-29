@@ -2,7 +2,7 @@
 
 Project-local MCP server for Grepmind-backed code and docs search.
 
-`@grepmind/mcp` runs over stdio. One MCP server process is bound to one Git workspace, and the workspace is fixed during startup from `--workspace` or the process `cwd`.
+`@grepmind/mcp` runs over stdio. One MCP server process is bound to one Git workspace, and the workspace is fixed during startup from the project-local launch directory.
 
 ## Requirements
 
@@ -26,21 +26,7 @@ Recommended project-local stdio configuration:
 {
   "mcpServers": {
     "grepmind": {
-      "command": "grepmind-mcp",
-      "args": ["--workspace", "${workspaceFolder}"]
-    }
-  }
-}
-```
-
-If your MCP client does not support `${workspaceFolder}`, configure the server project-locally with `cwd` set to the Git workspace root and omit `--workspace`:
-
-```json
-{
-  "mcpServers": {
-    "grepmind": {
-      "command": "grepmind-mcp",
-      "cwd": "/Users/you/work/your-repo"
+      "command": "grepmind-mcp"
     }
   }
 }
@@ -52,7 +38,7 @@ Global MCP configuration without a workspace is not supported. For multiple repo
 
 The MCP client is connected only after startup has completed all required preparation:
 
-1. Resolve the Git workspace root from `--workspace` or project-local `cwd`.
+1. Resolve the Git workspace root from the project-local launch directory.
 2. Resolve the bundled `@grepmind/agent` CLI entrypoint.
 3. Ensure Grepmind agent authentication.
 4. Start or reuse the local agent runtime.
@@ -133,10 +119,10 @@ From the repository root:
 npm run build:mcp
 ```
 
-Run the built server for a specific workspace:
+Run the built server from the repository root:
 
 ```sh
-npm -w @grepmind/mcp run start -- --workspace /Users/you/work/your-repo
+npm -w @grepmind/mcp run start
 ```
 
 ## Support

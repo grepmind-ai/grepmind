@@ -6,7 +6,7 @@
 
 MCP должен считаться подключённым только после того, как:
 
-- workspace root определён из project-local MCP config через `--workspace` или проверенный project-local `cwd`
+- workspace root определён из project-local launch directory
 - пользователь авторизован в Grepmind agent
 - agent runtime запущен
 - workspace зарегистрирован в agent runtime
@@ -21,13 +21,13 @@ Cutover выполняется одним breaking commit без обратно�
 - старые инструкции "запустите agent runtime вручную" удаляются из ошибок `code_search`
 - global MCP config без workspace не поддерживается
 - feature flag, dual mode, deprecated alias и migration window не добавляются
-- старые MCP client configs должны быть обновлены сразу на project-local config с `--workspace`
+- старые MCP client configs должны быть обновлены сразу на project-local config
 
 ## Основной контракт
 
 Grepmind MCP не поддерживает глобальную настройку без workspace. Для поиска требуется project-local MCP config.
 
-Сам MCP не читает `mcp.json`: MCP client читает project-local config и запускает `grepmind-mcp` с правильными `args` или `cwd`. Для Grepmind MCP source of truth на runtime-стороне - `--workspace`; `process.cwd()` разрешён только как project-local launch mode для клиентов без `${workspaceFolder}`.
+Сам MCP не читает `mcp.json`: MCP client читает project-local config и запускает `grepmind-mcp` из root проекта. Для Grepmind MCP source of truth на runtime-стороне - project-local launch directory.
 
 Рекомендуемая настройка:
 
@@ -35,16 +35,15 @@ Grepmind MCP не поддерживает глобальную настройк
 {
   "mcpServers": {
     "grepmind": {
-      "command": "grepmind-mcp",
-      "args": ["--workspace", "${workspaceFolder}"]
+      "command": "grepmind-mcp"
     }
   }
 }
 ```
 
-Если MCP client не поддерживает `${workspaceFolder}`, он должен запускать project-local config с `cwd` равным root проекта. В этом случае MCP может использовать `process.cwd()`, но только после проверки, что это Git workspace.
+MCP client должен запускать project-local config из root проекта. MCP проверяет, что launch directory является Git workspace.
 
-Один workspace = один MCP server process. Multi-root в одном Grepmind MCP instance не поддерживается. Для нескольких репозиториев нужно несколько project-local configs или несколько server instances, каждый со своим `--workspace`.
+Один workspace = один MCP server process. Multi-root в одном Grepmind MCP instance не поддерживается. Для нескольких репозиториев нужно несколько project-local configs или несколько server instances.
 
 Server-side context должен содержать не только путь, но и resolved project binding. Tool calls не выбирают repository и не ищут binding повторно: они используют `bindingId` и `workspacePath`, подготовленные на startup.
 
@@ -89,25 +88,18 @@ MCP client увидит connected только после шага 8.
 
 ## Workspace Resolution
 
-Добавить CLI argument:
-
-```text
---workspace <path>
-```
-
 Resolver:
 
-1. Если передан `--workspace`, использовать его.
-2. Иначе использовать `process.cwd()`.
-3. Нормализовать путь через `path.resolve`.
-4. Найти Git top-level:
+1. Использовать project-local launch directory.
+2. Нормализовать путь через `path.resolve`.
+3. Найти Git top-level:
 
 ```bash
 git -C <path> rev-parse --show-toplevel
 ```
 
-5. Если Git root не найден, завершить startup с ошибкой.
-6. Сохранить Git root как `workspaceContext.workspacePath`.
+4. Если Git root не найден, завершить startup с ошибкой.
+5. Сохранить Git root как `workspaceContext.workspacePath`.
 
 Не использовать MCP roots, env fallback или путь установки MCP как основной механизм. В этой модели source of truth - project-local MCP config.
 
@@ -329,7 +321,7 @@ grepmind_agent_status
 
 Startup errors:
 
-- workspace не передан и `process.cwd()` не является Git workspace
+- launch directory не является Git workspace
 - агент не авторизован и `GREPMIND_AGENT_HOSTNAME` не задан
 - OAuth login не завершился до `GREPMIND_MCP_STARTUP_TIMEOUT_MS`
 - agent runtime не удалось запустить
@@ -358,7 +350,7 @@ GREPMIND_MCP_STARTUP_TIMEOUT_MS
 
 `GREPMIND_MCP_SYNC_ON_STARTUP` не поддерживается.
 
-`GREPMIND_WORKSPACE_PATH` не поддерживается. Workspace приходит из project-local MCP config через `--workspace` или project-local `cwd`.
+`GREPMIND_WORKSPACE_PATH` не поддерживается. Workspace приходит из project-local launch directory.
 
 ## Риски
 
@@ -374,9 +366,9 @@ MCP startup может открыть браузер и ждать login. Это
 
 Нужно сохранить понятный timeout/error copy: если OAuth не завершился до `GREPMIND_MCP_STARTUP_TIMEOUT_MS`, MCP startup должен завершиться с actionable сообщением, а не зависать без объяснения. Сообщение должно предлагать pre-login через exact bundled agent command `node <agentEntrypointPath> auth login --hostname <host> --data-dir <dataDir>` для MCP clients с коротким startup timeout.
 
-### Project-local cwd зависит от клиента
+### Project-local launch directory зависит от клиента
 
-Некоторые MCP clients могут запускать server не из root проекта даже при project-local config. Поэтому preferred path - явный `--workspace`.
+Некоторые MCP clients могут запускать server не из root проекта даже при project-local config. Поэтому client должен запускать server из root проекта.
 
 ### Multi-root
 
@@ -394,8 +386,8 @@ MCP startup может открыть браузер и ждать login. Это
 
 Все изменения ниже входят в один commit. Не добавлять промежуточный compatibility layer и не оставлять старый public tool contract.
 
-1. Добавить parsing `--workspace <path>`.
-2. Добавить workspace resolver: `--workspace`, иначе project-local `process.cwd()`, затем Git top-level.
+1. Добавить project-local workspace resolver.
+2. Workspace resolver: project-local launch directory, затем Git top-level.
 3. Добавить dependency `@grepmind/agent` в `packages/mcp/package.json`.
 4. Добавить `resolveBundledAgentCommand()` для запуска bundled agent через `process.execPath`.
 5. Добавить `packages/mcp/src/runtime-context.ts`.
@@ -410,14 +402,13 @@ MCP startup может открыть браузер и ждать login. Это
 14. Не запускать blocking sync на startup; `code_search` должен возвращать понятную ошибку, если index ещё не готов.
 15. Обновить ошибки.
 16. Добавить `grepmind_agent_status`.
-17. Обновить `packages/mcp/README.md`: project-local config, `--workspace`, startup auth/runtime/register, отсутствие `workspacePath` в tool input.
+17. Обновить `packages/mcp/README.md`: project-local config, startup auth/runtime/register, отсутствие `workspacePath` в tool input.
 18. Запустить build для проверки новой версии кода.
 
 ## Cutover Scope
 
 Commit должен включать весь обязательный cutover scope:
 
-- `--workspace <path>`
 - resolve Git root
 - bundled `@grepmind/agent` command без зависимости от global `PATH`
 - `ensureAgentReady(...)` на startup
