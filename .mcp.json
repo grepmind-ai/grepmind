@@ -2,9 +2,9 @@
   "mcpServers": {
     "grepmind": {
       "command": "node",
-      "args": ["packages/mcp/dist/index.js"],
+      "args": ["/Users/phl/Projects/zaytra/grepmind-public/packages/mcp/dist/index.js"],
       "env": {
-        "GREPMIND_AGENT_HOSTNAME": "localhost:3847"
+        "GREPMIND_AGENT_HOSTNAME": "127.0.0.1:5173"
       }
     }
   }
