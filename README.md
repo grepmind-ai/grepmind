@@ -6,12 +6,13 @@ Grepmind connects a local Git workspace to a Grepmind backend, keeps branch-awar
 
 ## Packages
 
-| Package                                     | Description                                             |
-| ------------------------------------------- | ------------------------------------------------------- |
-| [`grepmind`](packages/grepmind)             | Public, human-facing CLI entrypoint.                    |
-| [`@grepmind/agent`](packages/agent)         | Local branch-aware agent runtime and lower-level CLI.   |
-| [`@grepmind/agent-rpc`](packages/agent-rpc) | Typed client for the local agent runtime socket.        |
-| [`@grepmind/mcp`](packages/mcp)             | MCP server exposing Grepmind-backed local search tools. |
+| Package                                         | Description                                             |
+| ----------------------------------------------- | ------------------------------------------------------- |
+| [`grepmind`](packages/grepmind)                 | Public, human-facing CLI entrypoint.                    |
+| [`@grepmind/agent`](packages/agent)             | Local branch-aware agent runtime and lower-level CLI.   |
+| [`@grepmind/agent-rpc`](packages/agent-rpc)     | Typed client for the local agent runtime socket.        |
+| [`@grepmind/mcp`](packages/mcp)                 | MCP server exposing Grepmind-backed local search tools. |
+| [`@grepmind/deployment`](packages/deployment)   | Deployment templates consumed by `grepmind deploy`.     |
 
 ## Requirements
 
@@ -70,6 +71,7 @@ Build individual packages:
 npm run build:agent-rpc
 npm run build:agent
 npm run build:mcp
+npm run build:deployment
 npm run build:grepmind
 ```
 
@@ -77,6 +79,7 @@ Run the public CLI from source:
 
 ```sh
 npm run grepmind -- agent help
+npm run grepmind -- deploy list
 ```
 
 Run the lower-level agent CLI from the built package:
@@ -97,6 +100,7 @@ npm run agent:dev -- help
 packages/
   agent/      Local runtime and lower-level CLI
   agent-rpc/  Runtime socket client and protocol types
+  deployment/ Docker Compose and AWS Terraform deployment templates
   grepmind/   Public CLI wrapper
   mcp/        MCP stdio server
 tools/        Shared build and release scripts
@@ -115,8 +119,9 @@ npm run changeset
 ```
 
 The `Changeset Required` workflow enforces this for pull requests that touch
-package source files under `packages/**/src` or package scripts/migrations.
-Documentation-only changes do not trigger a new version.
+package source files under `packages/**/src`, package scripts/migrations, or
+deployment templates under `packages/**/templates`. Documentation-only changes
+do not trigger a new version.
 
 Stable releases use the `main` branch:
 

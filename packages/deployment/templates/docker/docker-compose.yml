@@ -1,0 +1,38 @@
+services:
+  grepmind-app:
+    image: ${GREPMIND_IMAGE:-ghcr.io/zaytra-labs/grepmind-app}:${GREPMIND_TAG:-latest}
+    command:
+      - node
+      - packages/app/dist/index.js
+      - --config
+      - /etc/grepmind/config.yml
+    env_file:
+      - .env
+    volumes:
+      - ./config.yml:/etc/grepmind/config.yml:ro
+      - grepmind-repos:/var/lib/grepmind/repos
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - node -e "fetch('http://127.0.0.1:3847/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  grepmind-migrate:
+    image: ${GREPMIND_IMAGE:-ghcr.io/zaytra-labs/grepmind-app}:${GREPMIND_TAG:-latest}
+    command:
+      - npm
+      - run
+      - db:migrate
+    env_file:
+      - .env
+    volumes:
+      - ./config.yml:/etc/grepmind/config.yml:ro
+      - grepmind-repos:/var/lib/grepmind/repos
+    restart: "no"
+
+volumes:
+  grepmind-repos:

@@ -1,0 +1,4 @@
+services:
+  grepmind-app:
+    ports:
+      - ${GREPMIND_HTTP_PORT:-3847}:3847

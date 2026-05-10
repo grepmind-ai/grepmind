@@ -1,8 +1,12 @@
 # grepmind
 
-Public command-line utility for running a local Grepmind agent.
+Public command-line utility for running a local Grepmind agent and initializing
+self-hosted Grepmind deployments.
 
-`grepmind` is the operator-friendly entrypoint into the Grepmind workflow. It wraps `@grepmind/agent` and exposes a deliberately small command surface for configuring a machine, starting the local runtime, registering Git workspaces, and listing or cleaning local projects.
+`grepmind` is the operator-friendly entrypoint into the Grepmind workflow. It
+wraps `@grepmind/agent` for local agent commands and consumes
+`@grepmind/deployment` for Docker Compose and AWS Terraform deployment
+templates.
 
 ## Requirements
 
@@ -32,6 +36,32 @@ grepmind agent projects
 
 Agent authentication is browser-based OAuth Authorization Code + PKCE. The previous manual token/API key agent configuration flow has been removed.
 
+## Deployment Setup
+
+Use the deployment wizard for guided setup:
+
+```sh
+npx grepmind deploy init
+```
+
+Copy a Docker Compose deployment template without prompting:
+
+```sh
+npx grepmind deploy init docker --dir grepmind-deployment
+```
+
+Copy an AWS Terraform deployment template without prompting:
+
+```sh
+npx grepmind deploy init aws-terraform --dir grepmind-aws-terraform
+```
+
+List shipped deployment targets:
+
+```sh
+grepmind deploy list
+```
+
 ## Commands
 
 ```text
@@ -47,6 +77,10 @@ Commands:
   grepmind agent projects
   grepmind agent clean --workspace <path>
   grepmind agent clean --all
+  grepmind deploy init
+  grepmind deploy init docker
+  grepmind deploy init aws-terraform
+  grepmind deploy list
 ```
 
 ### `grepmind auth login`
@@ -141,7 +175,8 @@ By default, local state is stored in `~/.grepmind-agent`.
 - Binary: `grepmind`.
 - Public npm package: `grepmind`.
 - Runtime implementation: delegated to `@grepmind/agent`.
-- Supported public command namespace: `grepmind auth`, `grepmind agent auth`, `grepmind agent run`, `register`, `projects`, `list`, and `clean`.
+- Deployment templates: delegated to `@grepmind/deployment`.
+- Supported public command namespace: `grepmind auth`, `grepmind agent auth`, `grepmind agent run`, `register`, `projects`, `list`, `clean`, and `deploy`.
 
 Use `grepmind` for the stable public CLI. Use `@grepmind/agent` directly when you need lower-level runtime commands such as `stop`, `sync`, `status`, `search-head`, `remove`, `reset`, or `bootstrap`.
 
@@ -152,6 +187,7 @@ From the repository root:
 ```sh
 npm run build:grepmind
 npm run grepmind -- agent help
+npm run grepmind -- deploy list
 ```
 
 ## Support

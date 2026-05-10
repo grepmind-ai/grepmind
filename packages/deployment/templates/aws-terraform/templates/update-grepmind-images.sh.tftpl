@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+AWS_REGION='${aws_region}'
+GREPMIND_IMAGE='${grepmind_image}'
+GREPMIND_TAG='${grepmind_tag}'
+CLERK_SECRET_ARN='${clerk_secret_arn}'
+VOYAGE_API_KEY_SECRET_ARN='${voyage_api_key_arn}'
+DATABASE_URL_SECRET_ARN='${database_url_secret_arn}'
+
+quote_shell() {
+  printf "'%s'" "$(printf "%s" "$1" | sed "s/'/'\\\\''/g")"
+}
+
+read_secret() {
+  aws secretsmanager get-secret-value \
+    --region "$AWS_REGION" \
+    --secret-id "$1" \
+    --query SecretString \
+    --output text
+}
+
+CLERK_SECRET_KEY="$(read_secret "$CLERK_SECRET_ARN")"
+VOYAGE_API_KEY="$(read_secret "$VOYAGE_API_KEY_SECRET_ARN")"
+DATABASE_URL="$(read_secret "$DATABASE_URL_SECRET_ARN")"
+
+${grepmind_env_writer}
+
+write_grepmind_env
+
+docker pull "$GREPMIND_IMAGE:$GREPMIND_TAG"
+
+docker run --rm \
+  --name grepmind-migrate \
+  --env-file /opt/grepmind/.env \
+  --volume /opt/grepmind/config.yml:/etc/grepmind/config.yml:ro \
+  --volume grepmind-repos:/var/lib/grepmind/repos \
+  "$GREPMIND_IMAGE:$GREPMIND_TAG" \
+  npm run db:migrate
+
+if docker ps -a --format '{{.Names}}' | grep -Fxq grepmind-app; then
+  docker stop grepmind-app >/dev/null 2>&1 || true
+  docker rm grepmind-app >/dev/null 2>&1 || true
+fi
+
+docker run -d \
+  --name grepmind-app \
+  --restart unless-stopped \
+  --env-file /opt/grepmind/.env \
+  --volume /opt/grepmind/config.yml:/etc/grepmind/config.yml:ro \
+  --volume grepmind-repos:/var/lib/grepmind/repos \
+  --publish 3847:3847 \
+  "$GREPMIND_IMAGE:$GREPMIND_TAG" \
+  node packages/app/dist/index.js --config /etc/grepmind/config.yml

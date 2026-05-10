@@ -4,6 +4,7 @@ const publicPackageJsonPaths = [
   'packages/agent-rpc/package.json',
   'packages/agent/package.json',
   'packages/mcp/package.json',
+  'packages/deployment/package.json',
   'packages/grepmind/package.json',
 ];
 

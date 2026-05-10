@@ -8,6 +8,7 @@ on:
       - 'packages/**/src/**'
       - 'packages/**/scripts/**'
       - 'packages/**/drizzle/**'
+      - 'packages/**/templates/**'
       - '.github/workflows/changeset-required.yml'
 
 permissions:
@@ -38,7 +39,7 @@ jobs:
           has_changeset=false
           changeset_files=()
 
-          if printf '%s\n' "$changed_files" | grep -Eq '^(packages/[^/]+/(src|scripts|drizzle)/)'; then
+          if printf '%s\n' "$changed_files" | grep -Eq '^(packages/[^/]+/(src|scripts|drizzle|templates)/)'; then
             has_package_source=true
           fi
 

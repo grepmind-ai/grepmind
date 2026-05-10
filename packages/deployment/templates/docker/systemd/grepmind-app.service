@@ -1,0 +1,15 @@
+[Unit]
+Description=Grepmind Docker Compose application
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/grepmind
+ExecStart=/opt/grepmind/bin/start-grepmind.sh
+ExecStop=/usr/bin/docker compose -f /opt/grepmind/docker-compose.yml stop grepmind-app
+
+[Install]
+WantedBy=multi-user.target

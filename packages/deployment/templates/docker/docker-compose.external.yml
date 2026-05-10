@@ -1,0 +1,8 @@
+services:
+  grepmind-app:
+    env_file:
+      - .env
+
+  grepmind-migrate:
+    env_file:
+      - .env

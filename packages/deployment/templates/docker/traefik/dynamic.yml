@@ -1,0 +1,12 @@
+http:
+  middlewares:
+    security-headers:
+      headers:
+        stsSeconds: 31536000
+        stsIncludeSubdomains: true
+        stsPreload: true
+
+tls:
+  options:
+    default:
+      minVersion: VersionTLS12

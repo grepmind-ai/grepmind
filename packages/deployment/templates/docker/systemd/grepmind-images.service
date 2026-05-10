@@ -1,0 +1,10 @@
+[Unit]
+Description=Update Grepmind container images
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/grepmind
+ExecStart=/opt/grepmind/bin/update-grepmind-images.sh

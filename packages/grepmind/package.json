@@ -37,7 +37,8 @@
     "build:publish": "node ../../tools/build-package.mjs"
   },
   "dependencies": {
-    "@grepmind/agent": "0.1.2"
+    "@grepmind/agent": "0.1.2",
+    "@grepmind/deployment": "0.1.0"
   },
   "engines": {
     "node": ">=18.0.0"
