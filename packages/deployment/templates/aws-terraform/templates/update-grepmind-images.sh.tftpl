@@ -20,9 +20,23 @@ read_secret() {
     --output text
 }
 
+read_private_ipv4() {
+  local token
+  token="$(
+    curl -fsS \
+      -X PUT \
+      -H 'X-aws-ec2-metadata-token-ttl-seconds: 21600' \
+      http://169.254.169.254/latest/api/token
+  )"
+  curl -fsS \
+    -H "X-aws-ec2-metadata-token: $token" \
+    http://169.254.169.254/latest/meta-data/local-ipv4
+}
+
 CLERK_SECRET_KEY="$(read_secret "$CLERK_SECRET_ARN")"
 VOYAGE_API_KEY="$(read_secret "$VOYAGE_API_KEY_SECRET_ARN")"
 DATABASE_URL="$(read_secret "$DATABASE_URL_SECRET_ARN")"
+PRIVATE_IPV4="$(read_private_ipv4)"
 
 ${grepmind_env_writer}
 
@@ -49,6 +63,6 @@ docker run -d \
   --env-file /opt/grepmind/.env \
   --volume /opt/grepmind/config.yml:/etc/grepmind/config.yml:ro \
   --volume grepmind-repos:/var/lib/grepmind/repos \
-  --publish 3847:3847 \
+  --publish "$PRIVATE_IPV4:3847:3847" \
   "$GREPMIND_IMAGE:$GREPMIND_TAG" \
   node packages/app/dist/index.js --config /etc/grepmind/config.yml

@@ -7,6 +7,7 @@ Requires=docker.service
 [Service]
 Type=oneshot
 RemainAfterExit=yes
+WorkingDirectory=/opt/grepmind
 ExecStart=/opt/grepmind/bin/update-grepmind-images.sh
 ExecStop=/usr/bin/docker stop grepmind-app
 ExecStopPost=/usr/bin/docker rm grepmind-app

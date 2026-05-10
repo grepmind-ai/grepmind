@@ -4,9 +4,11 @@ import {
   copyFile,
   lstat,
   mkdir,
+  open,
   readdir,
+  rename,
+  rm,
   stat,
-  writeFile,
 } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
@@ -594,13 +596,15 @@ async function resolveForce(parsed: ParsedArgs, targetDirectory: string) {
 
 async function renderDockerConfig(targetDirectory: string, config: DockerRenderConfig) {
   validateDockerConfig(config);
-  await writePrivateFile(path.join(targetDirectory, '.env'), renderDockerEnv(config));
-  await writeFile(path.join(targetDirectory, 'config.yml'), renderDockerYaml(config), 'utf8');
+  await writeSafeFile(targetDirectory, '.env', renderDockerEnv(config), 0o600);
+  await writeSafeFile(targetDirectory, 'config.yml', renderDockerYaml(config), 0o644);
 
   if (config.mode === 'bundled' && config.generateSecrets) {
-    await writePrivateFile(
-      path.join(targetDirectory, '.env.grepmind-generated'),
+    await writeSafeFile(
+      targetDirectory,
+      '.env.grepmind-generated',
       renderGeneratedBundledSecrets(),
+      0o600,
     );
   }
 }
@@ -746,10 +750,12 @@ function validateDockerConfig(config: DockerRenderConfig) {
 
 async function renderAwsConfig(targetDirectory: string, config: AwsRenderConfig) {
   validateAwsConfig(config);
-  await writeFile(path.join(targetDirectory, 'terraform.tfvars'), renderTerraformTfvars(config), 'utf8');
-  await writePrivateFile(
-    path.join(targetDirectory, 'secrets.auto.tfvars'),
+  await writeSafeFile(targetDirectory, 'terraform.tfvars', renderTerraformTfvars(config), 0o644);
+  await writeSafeFile(
+    targetDirectory,
+    'secrets.auto.tfvars',
     renderTerraformSecrets(config),
+    0o600,
   );
 }
 
@@ -938,7 +944,10 @@ async function assertNoSymlinkParents(rootTarget: string, targetPath: string) {
 async function writeAwsPlaceholderSecrets(targetDirectory: string) {
   const secretsPath = path.join(targetDirectory, 'secrets.auto.tfvars');
   try {
-    await lstat(secretsPath);
+    const secretsStat = await lstat(secretsPath);
+    if (secretsStat.isSymbolicLink()) {
+      throw new Error(`Refusing to overwrite symlink: ${secretsPath}`);
+    }
     return;
   } catch (error) {
     if (!isNotFound(error)) {
@@ -946,14 +955,16 @@ async function writeAwsPlaceholderSecrets(targetDirectory: string) {
     }
   }
 
-  await writePrivateFile(
-    secretsPath,
+  await writeSafeFile(
+    targetDirectory,
+    'secrets.auto.tfvars',
     [
       'clerk_secret_key = "replace_me"',
       'voyage_api_key = "replace_me"',
       'database_password = "replace_me"',
       '',
     ].join('\n'),
+    0o600,
   );
 }
 
@@ -1183,9 +1194,36 @@ function randomAlphaNumeric(length: number) {
   return result.slice(0, length);
 }
 
-async function writePrivateFile(filePath: string, content: string) {
-  await writeFile(filePath, content, { encoding: 'utf8', mode: 0o600 });
-  await chmod(filePath, 0o600);
+async function writeSafeFile(
+  rootTarget: string,
+  relativePath: string,
+  content: string,
+  mode: number,
+) {
+  const targetPath = path.join(rootTarget, relativePath);
+  assertInside(rootTarget, targetPath);
+  await assertNoSymlinkParents(rootTarget, targetPath);
+  await assertDestinationIsNotSymlink(targetPath);
+  await mkdir(path.dirname(targetPath), { recursive: true });
+
+  const temporaryPath = path.join(
+    path.dirname(targetPath),
+    `.${path.basename(targetPath)}.${process.pid}.${randomAlphaNumeric(12)}.tmp`,
+  );
+
+  const handle = await open(temporaryPath, 'wx', mode);
+  try {
+    await handle.writeFile(content, 'utf8');
+  } catch (error) {
+    await rm(temporaryPath, { force: true });
+    throw error;
+  } finally {
+    await handle.close();
+  }
+
+  await chmod(temporaryPath, mode);
+  await rename(temporaryPath, targetPath);
+  await chmod(targetPath, mode);
 }
 
 function resolveTargetDirectory(value: string) {

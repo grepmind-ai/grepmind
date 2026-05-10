@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-dnf install -y docker awscli
+dnf install -y docker awscli curl
 systemctl enable --now docker
 
 mkdir -p /opt/grepmind/bin
