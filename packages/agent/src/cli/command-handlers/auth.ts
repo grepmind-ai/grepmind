@@ -248,7 +248,7 @@ async function authLoginCommand(args: ParsedArgs): Promise<void> {
       bootstrap = await bootstrapClient.bootstrap();
     } catch (error) {
       if (error instanceof AgentBackendClientError) {
-        throw new Error(
+        throw new TypeError(
           `${error.message} (status=${error.status}, code=${error.code}, OAuth client id from metadata: ${metadata.clientId})`,
         );
       }

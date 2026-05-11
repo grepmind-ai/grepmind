@@ -9,7 +9,7 @@ agentAuth:
   cliOAuthClientId: <clerk-cli-oauth-client-id>
 
 clerk:
-  publishableKey: ""
+  publishableKey: ''
 
 database:
   host: postgres

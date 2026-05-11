@@ -32,7 +32,7 @@ services:
     volumes:
       - ./config.yml:/etc/grepmind/config.yml:ro
       - grepmind-repos:/var/lib/grepmind/repos
-    restart: "no"
+    restart: 'no'
 
 volumes:
   grepmind-repos:

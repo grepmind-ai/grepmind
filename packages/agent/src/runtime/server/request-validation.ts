@@ -108,7 +108,10 @@ export function normalizeRegisterProjectParams(
   return {
     remoteUrl: requiredNonEmptyString(record.remoteUrl, 'remoteUrl'),
     repoFullName: optionalNonEmptyString(record.repoFullName, 'repoFullName'),
-    defaultBranch: optionalNonEmptyString(record.defaultBranch, 'defaultBranch'),
+    defaultBranch: optionalNonEmptyString(
+      record.defaultBranch,
+      'defaultBranch',
+    ),
     displayName: requiredNonEmptyString(record.displayName, 'displayName'),
     workspacePath: requiredNonEmptyString(
       record.workspacePath,

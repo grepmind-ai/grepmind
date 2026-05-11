@@ -11,7 +11,10 @@ import {
 
 const execFileAsync = promisify(execFile);
 
-export const DEFAULT_AGENT_DATA_DIR = path.join(os.homedir(), '.grepmind-agent');
+export const DEFAULT_AGENT_DATA_DIR = path.join(
+  os.homedir(),
+  '.grepmind-agent',
+);
 export const AGENT_CONFIG_FILENAME = 'agent-config.json';
 
 const DEFAULT_AGENT_COMMAND: AgentControlCommand = {
@@ -100,8 +103,7 @@ export interface EnsureAgentRuntimeOptions {
 }
 
 export interface EnsureAgentReadyOptions
-  extends EnsureAgentAuthOptions,
-    EnsureAgentRuntimeOptions {}
+  extends EnsureAgentAuthOptions, EnsureAgentRuntimeOptions {}
 
 export interface EnsureAgentReadyResult {
   dataDir: string;

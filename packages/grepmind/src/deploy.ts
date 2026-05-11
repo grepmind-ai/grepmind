@@ -1,3 +1,5 @@
+/* eslint-disable max-lines */
+
 import { randomBytes } from 'node:crypto';
 import {
   chmod,
@@ -84,7 +86,11 @@ type AwsRenderConfig = {
   sshAllowedCidrs: string[];
 };
 
-const booleanOptions = new Set(['force', 'non-interactive', 'generate-secrets']);
+const booleanOptions = new Set([
+  'force',
+  'non-interactive',
+  'generate-secrets',
+]);
 
 const valueOptions = new Set([
   'aws-region',
@@ -150,7 +156,9 @@ export async function runDeployCommand(args: string[]) {
 
 function printDeployList() {
   for (const template of Object.values(deploymentTemplates)) {
-    process.stdout.write(`${template.id}\t${template.title}\t${template.description}\n`);
+    process.stdout.write(
+      `${template.id}\t${template.title}\t${template.description}\n`,
+    );
   }
 }
 
@@ -208,14 +216,21 @@ async function runDeployInit(args: string[]) {
   }
 }
 
-async function copyTemplateCommand(id: DeploymentTemplateId, parsed: ParsedArgs) {
+async function copyTemplateCommand(
+  id: DeploymentTemplateId,
+  parsed: ParsedArgs,
+) {
   assertAllowedOptions(parsed, ['dir', 'force']);
   const manifest = deploymentTemplates[id];
   const targetDirectory = resolveTargetDirectory(
     getOption(parsed, 'dir') ?? manifest.defaultTargetDirectory,
   );
 
-  await copyDeploymentTemplate(id, targetDirectory, hasBoolean(parsed, 'force'));
+  await copyDeploymentTemplate(
+    id,
+    targetDirectory,
+    hasBoolean(parsed, 'force'),
+  );
   if (id === 'aws-terraform') {
     await writeAwsPlaceholderSecrets(targetDirectory);
   }
@@ -254,7 +269,11 @@ async function initDockerNonInteractive(parsed: ParsedArgs) {
 
   const targetDirectory = resolveTargetDirectory(requireOption(parsed, 'dir'));
   const config = readDockerNonInteractiveConfig(parsed);
-  await copyDeploymentTemplate('docker', targetDirectory, hasBoolean(parsed, 'force'));
+  await copyDeploymentTemplate(
+    'docker',
+    targetDirectory,
+    hasBoolean(parsed, 'force'),
+  );
   await renderDockerConfig(targetDirectory, config);
 
   process.stdout.write(
@@ -272,17 +291,37 @@ async function initDockerNonInteractive(parsed: ParsedArgs) {
   );
 }
 
-function readDockerNonInteractiveConfig(parsed: ParsedArgs): DockerRenderConfig {
+function readDockerNonInteractiveConfig(
+  parsed: ParsedArgs,
+): DockerRenderConfig {
   const mode = parseMode(requireOption(parsed, 'mode'));
-  const reverseProxy = parseReverseProxy(requireOption(parsed, 'reverse-proxy'));
+  const reverseProxy = parseReverseProxy(
+    requireOption(parsed, 'reverse-proxy'),
+  );
   const config: DockerRenderConfig = {
     mode,
-    publicBaseUrl: requireUrl(requireOption(parsed, 'public-base-url'), 'public-base-url'),
-    serverInstanceId: requireServerInstanceId(requireOption(parsed, 'server-instance-id')),
-    clerkFrontendApiUrl: requireUrl(requireOption(parsed, 'clerk-frontend-api-url'), 'clerk-frontend-api-url'),
-    clerkCliOAuthClientId: requireNonEmpty(requireOption(parsed, 'clerk-cli-oauth-client-id'), 'clerk-cli-oauth-client-id'),
-    clerkPublishableKey: requireNonEmpty(requireOption(parsed, 'clerk-publishable-key'), 'clerk-publishable-key'),
-    clerkSecretKey: readRequiredEnv(requireOption(parsed, 'clerk-secret-key-env')),
+    publicBaseUrl: requireUrl(
+      requireOption(parsed, 'public-base-url'),
+      'public-base-url',
+    ),
+    serverInstanceId: requireServerInstanceId(
+      requireOption(parsed, 'server-instance-id'),
+    ),
+    clerkFrontendApiUrl: requireUrl(
+      requireOption(parsed, 'clerk-frontend-api-url'),
+      'clerk-frontend-api-url',
+    ),
+    clerkCliOAuthClientId: requireNonEmpty(
+      requireOption(parsed, 'clerk-cli-oauth-client-id'),
+      'clerk-cli-oauth-client-id',
+    ),
+    clerkPublishableKey: requireNonEmpty(
+      requireOption(parsed, 'clerk-publishable-key'),
+      'clerk-publishable-key',
+    ),
+    clerkSecretKey: readRequiredEnv(
+      requireOption(parsed, 'clerk-secret-key-env'),
+    ),
     voyageApiKey: readRequiredEnv(requireOption(parsed, 'voyage-api-key-env')),
     reverseProxy,
     publicHost: '',
@@ -291,7 +330,10 @@ function readDockerNonInteractiveConfig(parsed: ParsedArgs): DockerRenderConfig 
   };
 
   if (reverseProxy === 'traefik') {
-    config.publicHost = requireNonEmpty(requireOption(parsed, 'public-host'), 'public-host');
+    config.publicHost = requireNonEmpty(
+      requireOption(parsed, 'public-host'),
+      'public-host',
+    );
     config.traefikAcmeEmail = requireNonEmpty(
       requireOption(parsed, 'traefik-acme-email'),
       'traefik-acme-email',
@@ -301,7 +343,9 @@ function readDockerNonInteractiveConfig(parsed: ParsedArgs): DockerRenderConfig 
 
   if (mode === 'bundled') {
     if (!config.generateSecrets) {
-      throw new Error('--generate-secrets is required for bundled non-interactive Docker init');
+      throw new Error(
+        '--generate-secrets is required for bundled non-interactive Docker init',
+      );
     }
     return config;
   }
@@ -312,11 +356,26 @@ function readDockerNonInteractiveConfig(parsed: ParsedArgs): DockerRenderConfig 
 
   config.external = {
     databaseUrl: readRequiredEnv(requireOption(parsed, 'database-url-env')),
-    postgresHost: requireNonEmpty(requireOption(parsed, 'postgres-host'), 'postgres-host'),
-    postgresPort: parsePort(requireOption(parsed, 'postgres-port'), 'postgres-port'),
-    postgresDatabase: requireNonEmpty(requireOption(parsed, 'postgres-database'), 'postgres-database'),
-    postgresUser: requireNonEmpty(requireOption(parsed, 'postgres-user'), 'postgres-user'),
-    s3Endpoint: requireTrimmed(requireOption(parsed, 's3-endpoint'), 's3-endpoint'),
+    postgresHost: requireNonEmpty(
+      requireOption(parsed, 'postgres-host'),
+      'postgres-host',
+    ),
+    postgresPort: parsePort(
+      requireOption(parsed, 'postgres-port'),
+      'postgres-port',
+    ),
+    postgresDatabase: requireNonEmpty(
+      requireOption(parsed, 'postgres-database'),
+      'postgres-database',
+    ),
+    postgresUser: requireNonEmpty(
+      requireOption(parsed, 'postgres-user'),
+      'postgres-user',
+    ),
+    s3Endpoint: requireTrimmed(
+      requireOption(parsed, 's3-endpoint'),
+      's3-endpoint',
+    ),
     s3Port: parsePort(requireOption(parsed, 's3-port'), 's3-port'),
     s3UseSsl: parseBoolean(requireOption(parsed, 's3-use-ssl'), 's3-use-ssl'),
     s3Bucket: requireTrimmed(requireOption(parsed, 's3-bucket'), 's3-bucket'),
@@ -357,7 +416,11 @@ async function initAwsNonInteractive(parsed: ParsedArgs) {
 
   const targetDirectory = resolveTargetDirectory(requireOption(parsed, 'dir'));
   const config = readAwsNonInteractiveConfig(parsed);
-  await copyDeploymentTemplate('aws-terraform', targetDirectory, hasBoolean(parsed, 'force'));
+  await copyDeploymentTemplate(
+    'aws-terraform',
+    targetDirectory,
+    hasBoolean(parsed, 'force'),
+  );
   await renderAwsConfig(targetDirectory, config);
 
   process.stdout.write(
@@ -375,23 +438,56 @@ async function initAwsNonInteractive(parsed: ParsedArgs) {
 }
 
 function readAwsNonInteractiveConfig(parsed: ParsedArgs): AwsRenderConfig {
-  const domainName = requireHost(requireOption(parsed, 'domain-name'), 'domain-name');
+  const domainName = requireHost(
+    requireOption(parsed, 'domain-name'),
+    'domain-name',
+  );
 
   return {
-    projectName: requireNonEmpty(requireOption(parsed, 'project-name'), 'project-name'),
-    awsRegion: requireNonEmpty(requireOption(parsed, 'aws-region'), 'aws-region'),
+    projectName: requireNonEmpty(
+      requireOption(parsed, 'project-name'),
+      'project-name',
+    ),
+    awsRegion: requireNonEmpty(
+      requireOption(parsed, 'aws-region'),
+      'aws-region',
+    ),
     domainName,
-    route53ZoneId: requireNonEmpty(requireOption(parsed, 'route53-zone-id'), 'route53-zone-id'),
+    route53ZoneId: requireNonEmpty(
+      requireOption(parsed, 'route53-zone-id'),
+      'route53-zone-id',
+    ),
     publicBaseUrl: `https://${domainName}`,
-    serverInstanceId: requireServerInstanceId(requireOption(parsed, 'server-instance-id')),
-    clerkFrontendApiUrl: requireUrl(requireOption(parsed, 'clerk-frontend-api-url'), 'clerk-frontend-api-url'),
-    clerkCliOAuthClientId: requireNonEmpty(requireOption(parsed, 'clerk-cli-oauth-client-id'), 'clerk-cli-oauth-client-id'),
-    clerkPublishableKey: requireNonEmpty(requireOption(parsed, 'clerk-publishable-key'), 'clerk-publishable-key'),
-    clerkSecretKey: readRequiredEnv(requireOption(parsed, 'clerk-secret-key-env')),
+    serverInstanceId: requireServerInstanceId(
+      requireOption(parsed, 'server-instance-id'),
+    ),
+    clerkFrontendApiUrl: requireUrl(
+      requireOption(parsed, 'clerk-frontend-api-url'),
+      'clerk-frontend-api-url',
+    ),
+    clerkCliOAuthClientId: requireNonEmpty(
+      requireOption(parsed, 'clerk-cli-oauth-client-id'),
+      'clerk-cli-oauth-client-id',
+    ),
+    clerkPublishableKey: requireNonEmpty(
+      requireOption(parsed, 'clerk-publishable-key'),
+      'clerk-publishable-key',
+    ),
+    clerkSecretKey: readRequiredEnv(
+      requireOption(parsed, 'clerk-secret-key-env'),
+    ),
     voyageApiKey: readRequiredEnv(requireOption(parsed, 'voyage-api-key-env')),
-    databasePassword: readRequiredEnv(requireOption(parsed, 'database-password-env')),
-    databaseName: requireNonEmpty(requireOption(parsed, 'database-name'), 'database-name'),
-    databaseUsername: requireNonEmpty(requireOption(parsed, 'database-username'), 'database-username'),
+    databasePassword: readRequiredEnv(
+      requireOption(parsed, 'database-password-env'),
+    ),
+    databaseName: requireNonEmpty(
+      requireOption(parsed, 'database-name'),
+      'database-name',
+    ),
+    databaseUsername: requireNonEmpty(
+      requireOption(parsed, 'database-username'),
+      'database-username',
+    ),
     databaseInstanceClass: requireNonEmpty(
       requireOption(parsed, 'database-instance-class'),
       'database-instance-class',
@@ -401,10 +497,17 @@ function readAwsNonInteractiveConfig(parsed: ParsedArgs): AwsRenderConfig {
       'database-allocated-storage-gb',
       20,
     ),
-    s3BucketName: requireTrimmed(requireOption(parsed, 's3-bucket-name'), 's3-bucket-name'),
+    s3BucketName: requireTrimmed(
+      requireOption(parsed, 's3-bucket-name'),
+      's3-bucket-name',
+    ),
     s3Prefix: requireTrimmed(requireOption(parsed, 's3-prefix'), 's3-prefix'),
-    instanceType: requireNonEmpty(requireOption(parsed, 'instance-type'), 'instance-type'),
-    grepmindImage: getOption(parsed, 'grepmind-image') ?? 'ghcr.io/zaytra-labs/grepmind-app',
+    instanceType: requireNonEmpty(
+      requireOption(parsed, 'instance-type'),
+      'instance-type',
+    ),
+    grepmindImage:
+      getOption(parsed, 'grepmind-image') ?? 'ghcr.io/zaytra-labs/grepmind-app',
     grepmindTag: getOption(parsed, 'grepmind-tag') ?? 'latest',
     sshAllowedCidrs: getOptions(parsed, 'ssh-allowed-cidr'),
   };
@@ -412,7 +515,9 @@ function readAwsNonInteractiveConfig(parsed: ParsedArgs): AwsRenderConfig {
 
 async function runInteractiveWizard(parsed: ParsedArgs) {
   if (hasBoolean(parsed, 'non-interactive')) {
-    throw new Error('grepmind deploy init --non-interactive requires a platform');
+    throw new Error(
+      'grepmind deploy init --non-interactive requires a platform',
+    );
   }
   assertAllowedOptions(parsed, ['dir', 'force']);
   if (!process.stdin.isTTY || !process.stdout.isTTY) {
@@ -446,11 +551,11 @@ async function runDockerWizard(parsed: ParsedArgs) {
   ])) as ReverseProxyMode;
 
   const publicHost =
-    reverseProxy === 'traefik'
-      ? await promptRequired('Public hostname')
-      : '';
+    reverseProxy === 'traefik' ? await promptRequired('Public hostname') : '';
   const publicBaseUrlDefault =
-    reverseProxy === 'traefik' ? `https://${publicHost}` : 'http://203.0.113.10:3847';
+    reverseProxy === 'traefik'
+      ? `https://${publicHost}`
+      : 'http://203.0.113.10:3847';
 
   const config: DockerRenderConfig = {
     mode,
@@ -472,7 +577,9 @@ async function runDockerWizard(parsed: ParsedArgs) {
     reverseProxy,
     publicHost,
     traefikAcmeEmail:
-      reverseProxy === 'traefik' ? await promptRequired('Traefik ACME email') : '',
+      reverseProxy === 'traefik'
+        ? await promptRequired('Traefik ACME email')
+        : '',
     generateSecrets: mode === 'bundled',
   };
 
@@ -484,14 +591,23 @@ async function runDockerWizard(parsed: ParsedArgs) {
     config.external = {
       databaseUrl: await promptSecretRequired('PostgreSQL DATABASE_URL'),
       postgresHost: await promptRequired('PostgreSQL host'),
-      postgresPort: parsePort(await promptRequired('PostgreSQL port', '5432'), 'PostgreSQL port'),
+      postgresPort: parsePort(
+        await promptRequired('PostgreSQL port', '5432'),
+        'PostgreSQL port',
+      ),
       postgresDatabase: await promptRequired('PostgreSQL database', 'grepmind'),
       postgresUser: await promptRequired('PostgreSQL user', 'grepmind'),
-      s3Endpoint: requireTrimmed(await promptRequired('S3 endpoint'), 'S3 endpoint'),
+      s3Endpoint: requireTrimmed(
+        await promptRequired('S3 endpoint'),
+        'S3 endpoint',
+      ),
       s3Port: parsePort(await promptRequired('S3 port', '443'), 'S3 port'),
       s3UseSsl: await promptBoolean('S3 use SSL', true),
       s3Bucket: requireTrimmed(await promptRequired('S3 bucket'), 'S3 bucket'),
-      s3Prefix: requireTrimmed(await promptRequired('S3 prefix', 'artifacts'), 'S3 prefix'),
+      s3Prefix: requireTrimmed(
+        await promptRequired('S3 prefix', 'artifacts'),
+        'S3 prefix',
+      ),
       s3AccessKey: await promptSecretRequired('S3 access key'),
       s3SecretKey: await promptSecretRequired('S3 secret key'),
     };
@@ -518,7 +634,10 @@ async function runAwsWizard(parsed: ParsedArgs) {
   const manifest = deploymentTemplates['aws-terraform'];
   const targetDirectory = await promptTargetDirectory(parsed, manifest);
   const force = await resolveForce(parsed, targetDirectory);
-  const domainName = requireHost(await promptRequired('Domain name'), 'domain name');
+  const domainName = requireHost(
+    await promptRequired('Domain name'),
+    'domain name',
+  );
   const publicBaseUrl = `https://${domainName}`;
   process.stdout.write(`public_base_url will be ${publicBaseUrl}\n`);
 
@@ -542,18 +661,30 @@ async function runAwsWizard(parsed: ParsedArgs) {
     databasePassword: await promptSecretRequired('RDS database password'),
     databaseName: await promptRequired('RDS database name', 'grepmind'),
     databaseUsername: await promptRequired('RDS database username', 'grepmind'),
-    databaseInstanceClass: await promptRequired('RDS instance class', 'db.t4g.micro'),
+    databaseInstanceClass: await promptRequired(
+      'RDS instance class',
+      'db.t4g.micro',
+    ),
     databaseAllocatedStorageGb: parsePositiveInteger(
       await promptRequired('RDS allocated storage GiB', '20'),
       'RDS allocated storage GiB',
       20,
     ),
-    s3BucketName: requireTrimmed(await promptRequired('S3 bucket name'), 'S3 bucket name'),
-    s3Prefix: requireTrimmed(await promptRequired('S3 prefix', 'artifacts'), 'S3 prefix'),
+    s3BucketName: requireTrimmed(
+      await promptRequired('S3 bucket name'),
+      'S3 bucket name',
+    ),
+    s3Prefix: requireTrimmed(
+      await promptRequired('S3 prefix', 'artifacts'),
+      'S3 prefix',
+    ),
     instanceType: await promptRequired('EC2 instance type', 't3.small'),
     grepmindImage: 'ghcr.io/zaytra-labs/grepmind-app',
     grepmindTag: 'latest',
-    sshAllowedCidrs: await promptStringList('SSH allowed CIDR blocks, comma-separated', ''),
+    sshAllowedCidrs: await promptStringList(
+      'SSH allowed CIDR blocks, comma-separated',
+      '',
+    ),
   };
 
   await copyDeploymentTemplate('aws-terraform', targetDirectory, force);
@@ -588,16 +719,27 @@ async function resolveForce(parsed: ParsedArgs, targetDirectory: string) {
   }
 
   if (await isNonEmptyDirectory(targetDirectory)) {
-    return promptBoolean(`Target ${targetDirectory} is non-empty. Overwrite template files`, false);
+    return promptBoolean(
+      `Target ${targetDirectory} is non-empty. Overwrite template files`,
+      false,
+    );
   }
 
   return false;
 }
 
-async function renderDockerConfig(targetDirectory: string, config: DockerRenderConfig) {
+async function renderDockerConfig(
+  targetDirectory: string,
+  config: DockerRenderConfig,
+) {
   validateDockerConfig(config);
   await writeSafeFile(targetDirectory, '.env', renderDockerEnv(config), 0o600);
-  await writeSafeFile(targetDirectory, 'config.yml', renderDockerYaml(config), 0o644);
+  await writeSafeFile(
+    targetDirectory,
+    'config.yml',
+    renderDockerYaml(config),
+    0o644,
+  );
 
   if (config.mode === 'bundled' && config.generateSecrets) {
     await writeSafeFile(
@@ -740,7 +882,9 @@ function validateDockerConfig(config: DockerRenderConfig) {
 
   if (config.mode === 'external') {
     if (config.external == null) {
-      throw new Error('External Docker mode requires external database and S3 config');
+      throw new Error(
+        'External Docker mode requires external database and S3 config',
+      );
     }
     requireNonEmpty(config.external.databaseUrl, 'DATABASE_URL');
     requireNonEmpty(config.external.s3AccessKey, 'GREPMIND_S3_ACCESS_KEY');
@@ -748,9 +892,17 @@ function validateDockerConfig(config: DockerRenderConfig) {
   }
 }
 
-async function renderAwsConfig(targetDirectory: string, config: AwsRenderConfig) {
+async function renderAwsConfig(
+  targetDirectory: string,
+  config: AwsRenderConfig,
+) {
   validateAwsConfig(config);
-  await writeSafeFile(targetDirectory, 'terraform.tfvars', renderTerraformTfvars(config), 0o644);
+  await writeSafeFile(
+    targetDirectory,
+    'terraform.tfvars',
+    renderTerraformTfvars(config),
+    0o644,
+  );
   await writeSafeFile(
     targetDirectory,
     'secrets.auto.tfvars',
@@ -829,7 +981,11 @@ async function copyDeploymentTemplate(
 ) {
   const sourceDirectory = getDeploymentTemplateDirectory(id);
   await prepareTargetDirectory(targetDirectory, force);
-  await copyDirectoryContents(sourceDirectory, targetDirectory, targetDirectory);
+  await copyDirectoryContents(
+    sourceDirectory,
+    targetDirectory,
+    targetDirectory,
+  );
 }
 
 async function prepareTargetDirectory(targetDirectory: string, force: boolean) {
@@ -874,7 +1030,11 @@ async function copyDirectoryContents(
   }
 }
 
-async function copyEntry(sourcePath: string, targetPath: string, rootTarget: string) {
+async function copyEntry(
+  sourcePath: string,
+  targetPath: string,
+  rootTarget: string,
+) {
   const sourceStat = await lstat(sourcePath);
   if (sourceStat.isSymbolicLink()) {
     throw new Error(`Template contains unsupported symlink: ${sourcePath}`);
@@ -899,7 +1059,10 @@ async function copyEntry(sourcePath: string, targetPath: string, rootTarget: str
   await copyFile(sourcePath, targetPath);
 
   const relativeTarget = path.relative(rootTarget, targetPath);
-  if (relativeTarget.startsWith(`bin${path.sep}`) && relativeTarget.endsWith('.sh')) {
+  if (
+    relativeTarget.startsWith(`bin${path.sep}`) &&
+    relativeTarget.endsWith('.sh')
+  ) {
     await chmod(targetPath, 0o755);
   } else {
     await chmod(targetPath, sourceStat.mode & 0o777);
@@ -931,7 +1094,9 @@ async function assertNoSymlinkParents(rootTarget: string, targetPath: string) {
     try {
       const parentStat = await lstat(parent);
       if (parentStat.isSymbolicLink()) {
-        throw new Error(`Refusing to write through symlink directory: ${parent}`);
+        throw new Error(
+          `Refusing to write through symlink directory: ${parent}`,
+        );
       }
     } catch (error) {
       if (!isNotFound(error)) {
@@ -970,7 +1135,10 @@ async function writeAwsPlaceholderSecrets(targetDirectory: string) {
 
 function assertInside(root: string, target: string) {
   const relative = path.relative(root, target);
-  if (relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative))) {
+  if (
+    relative === '' ||
+    (!relative.startsWith('..') && !path.isAbsolute(relative))
+  ) {
     return;
   }
   throw new Error(`Refusing to write outside target directory: ${target}`);
@@ -980,10 +1148,14 @@ function printTemplateSummary(
   manifest: DeploymentTemplateManifest,
   targetDirectory: string,
 ) {
-  process.stdout.write(`Initialized ${manifest.title} template in ${targetDirectory}\n`);
+  process.stdout.write(
+    `Initialized ${manifest.title} template in ${targetDirectory}\n`,
+  );
   process.stdout.write('Next steps:\n');
   for (const step of manifest.nextSteps) {
-    process.stdout.write(`  ${step.replaceAll('{targetDirectory}', targetDirectory)}\n`);
+    process.stdout.write(
+      `  ${step.replaceAll('{targetDirectory}', targetDirectory)}\n`,
+    );
   }
 }
 
@@ -1000,7 +1172,8 @@ function parseArgs(args: string[]): ParsedArgs {
     }
 
     const equalsIndex = arg.indexOf('=');
-    const rawName = equalsIndex === -1 ? arg.slice(2) : arg.slice(2, equalsIndex);
+    const rawName =
+      equalsIndex === -1 ? arg.slice(2) : arg.slice(2, equalsIndex);
     if (!booleanOptions.has(rawName) && !valueOptions.has(rawName)) {
       throw new Error(`Unknown option: --${rawName}`);
     }
@@ -1013,7 +1186,8 @@ function parseArgs(args: string[]): ParsedArgs {
       continue;
     }
 
-    const value = equalsIndex === -1 ? args[index + 1] : arg.slice(equalsIndex + 1);
+    const value =
+      equalsIndex === -1 ? args[index + 1] : arg.slice(equalsIndex + 1);
     if (value == null || value.startsWith('--')) {
       throw new Error(`Option --${rawName} requires a value`);
     }
@@ -1045,7 +1219,7 @@ function assertAllowedOptions(parsed: ParsedArgs, allowed: string[]) {
 function getOption(parsed: ParsedArgs, name: string) {
   const values = parsed.options.get(name);
   if (values == null) {
-    return undefined;
+    return;
   }
   if (values.length !== 1) {
     throw new Error(`Option --${name} can be provided only once`);
@@ -1087,7 +1261,12 @@ function parsePort(value: string, name: string) {
   return parsePositiveInteger(value, name, 1, 65_535);
 }
 
-function parsePositiveInteger(value: string, name: string, min = 1, max = Number.MAX_SAFE_INTEGER) {
+function parsePositiveInteger(
+  value: string,
+  name: string,
+  min = 1,
+  max = Number.MAX_SAFE_INTEGER,
+) {
   if (!/^[0-9]+$/.test(value)) {
     throw new Error(`${name} must be an integer`);
   }
@@ -1162,7 +1341,9 @@ function requireHost(value: string, name: string) {
 function requireServerInstanceId(value: string) {
   requireNonEmpty(value, 'serverInstanceId');
   if (!/^[A-Za-z0-9._:-]+$/.test(value)) {
-    throw new Error('serverInstanceId may contain only letters, digits, dot, underscore, colon, and hyphen');
+    throw new Error(
+      'serverInstanceId may contain only letters, digits, dot, underscore, colon, and hyphen',
+    );
   }
   return value;
 }
@@ -1170,7 +1351,9 @@ function requireServerInstanceId(value: string) {
 function assertHttpsForTraefik(publicBaseUrl: string, publicHost: string) {
   const parsed = new URL(publicBaseUrl);
   if (parsed.protocol !== 'https:' || parsed.hostname !== publicHost) {
-    throw new Error('Traefik mode requires --public-base-url to be https://<public-host>');
+    throw new Error(
+      'Traefik mode requires --public-base-url to be https://<public-host>',
+    );
   }
 }
 
@@ -1189,7 +1372,9 @@ function randomSecret() {
 function randomAlphaNumeric(length: number) {
   let result = '';
   while (result.length < length) {
-    result += randomBytes(24).toString('base64').replace(/[^A-Za-z0-9]/g, '');
+    result += randomBytes(24)
+      .toString('base64')
+      .replaceAll(/[^A-Za-z0-9]/g, '');
   }
   return result.slice(0, length);
 }
@@ -1300,7 +1485,9 @@ async function promptChoice(label: string, choices: [string, string][]) {
 async function promptBoolean(label: string, defaultValue: boolean) {
   const defaultText = defaultValue ? 'yes' : 'no';
   while (true) {
-    const answer = (await promptText(`${label} (yes/no)`, defaultText)).toLowerCase();
+    const answer = (
+      await promptText(`${label} (yes/no)`, defaultText)
+    ).toLowerCase();
     if (answer === 'yes' || answer === 'y' || answer === 'true') {
       return true;
     }

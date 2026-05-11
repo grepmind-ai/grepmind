@@ -19,7 +19,10 @@ export async function confirmCleanProjects(
   const workspaceLines =
     workspacePaths.length === 1
       ? [`Workspace: ${workspacePaths[0]}`]
-      : ['Workspaces:', ...workspacePaths.map((workspace) => `  - ${workspace}`)];
+      : [
+          'Workspaces:',
+          ...workspacePaths.map((workspace) => `  - ${workspace}`),
+        ];
 
   process.stdout.write(
     [

@@ -6,13 +6,13 @@ Grepmind connects a local Git workspace to a Grepmind backend, keeps branch-awar
 
 ## Packages
 
-| Package                                         | Description                                             |
-| ----------------------------------------------- | ------------------------------------------------------- |
-| [`grepmind`](packages/grepmind)                 | Public, human-facing CLI entrypoint.                    |
-| [`@grepmind/agent`](packages/agent)             | Local branch-aware agent runtime and lower-level CLI.   |
-| [`@grepmind/agent-rpc`](packages/agent-rpc)     | Typed client for the local agent runtime socket.        |
-| [`@grepmind/mcp`](packages/mcp)                 | MCP server exposing Grepmind-backed local search tools. |
-| [`@grepmind/deployment`](packages/deployment)   | Deployment templates consumed by `grepmind deploy`.     |
+| Package                                       | Description                                             |
+| --------------------------------------------- | ------------------------------------------------------- |
+| [`grepmind`](packages/grepmind)               | Public, human-facing CLI entrypoint.                    |
+| [`@grepmind/agent`](packages/agent)           | Local branch-aware agent runtime and lower-level CLI.   |
+| [`@grepmind/agent-rpc`](packages/agent-rpc)   | Typed client for the local agent runtime socket.        |
+| [`@grepmind/mcp`](packages/mcp)               | MCP server exposing Grepmind-backed local search tools. |
+| [`@grepmind/deployment`](packages/deployment) | Deployment templates consumed by `grepmind deploy`.     |
 
 ## Requirements
 

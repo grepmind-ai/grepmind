@@ -1,12 +1,12 @@
 services:
   grepmind-app:
     labels:
-      traefik.enable: "true"
+      traefik.enable: 'true'
       traefik.http.routers.grepmind.rule: Host(`${GREPMIND_PUBLIC_HOST:?GREPMIND_PUBLIC_HOST is required}`)
       traefik.http.routers.grepmind.entrypoints: websecure
-      traefik.http.routers.grepmind.tls: "true"
+      traefik.http.routers.grepmind.tls: 'true'
       traefik.http.routers.grepmind.tls.certresolver: grepmind-acme
-      traefik.http.services.grepmind.loadbalancer.server.port: "3847"
+      traefik.http.services.grepmind.loadbalancer.server.port: '3847'
 
   traefik:
     image: traefik:v3.3

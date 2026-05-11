@@ -201,7 +201,9 @@ function parseRemoteUrlPath(
   remoteUrl: string,
 ): { pathSegments: string[] } | null {
   const raw = remoteUrl.trim();
-  const scp = /^(?:[A-Za-z0-9._-]+)@(?<host>[^:/\s]+):(?<path>[^?#\s]+)$/.exec(raw);
+  const scp = /^(?:[A-Za-z0-9._-]+)@(?<host>[^:/\s]+):(?<path>[^?#\s]+)$/.exec(
+    raw,
+  );
   if (scp?.groups?.path && !/^\d+\//.test(scp.groups.path)) {
     return normalizePath(scp.groups.path);
   }

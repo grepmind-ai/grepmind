@@ -96,7 +96,7 @@ services:
         fi
         mc admin policy attach grepmind-minio grepmind-app --user "$$GREPMIND_S3_ACCESS_KEY" >/dev/null
         mc anonymous set none grepmind-minio/grepmind >/dev/null
-    restart: "no"
+    restart: 'no'
 
 volumes:
   grepmind-postgres:
