@@ -16,7 +16,8 @@
     "baseUrl": ".",
     "paths": {
       "@grepmind/agent": ["packages/agent/dist/index.d.ts"],
-      "@grepmind/agent-rpc": ["packages/agent-rpc/dist/index.d.ts"]
+      "@grepmind/agent-rpc": ["packages/agent-rpc/dist/index.d.ts"],
+      "@grepmind/deployment": ["packages/deployment/dist/index.d.ts"]
     }
   }
 }

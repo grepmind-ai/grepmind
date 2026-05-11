@@ -36,7 +36,9 @@ export class ProjectRegistryService {
     input: RegisterLocalProjectInput,
   ): Promise<LocalProjectSnapshot> {
     const remoteProject = await this.backend.registerProject({
-      remoteFingerprint: input.remoteFingerprint,
+      remoteUrl: input.remoteUrl,
+      repoFullName: input.repoFullName,
+      defaultBranch: input.defaultBranch,
       displayName: input.displayName,
       workspaceFingerprint: input.workspaceFingerprint,
       preferredActiveBranch: input.preferredActiveBranch,

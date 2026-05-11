@@ -1,0 +1,10 @@
+[mcp_servers.grepmind]
+command = "node"
+args = ["/Users/phl/Projects/zaytra/grepmind-public/packages/mcp/dist/index.js"]
+cwd = "/Users/phl/Projects/zaytra/grepmind-public"
+startup_timeout_sec = 120
+tool_timeout_sec = 60
+
+[mcp_servers.grepmind.env]
+GREPMIND_AGENT_HOSTNAME = "127.0.0.1:5173"
+GREPMIND_MCP_STARTUP_TIMEOUT_MS = "120000"

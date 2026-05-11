@@ -101,7 +101,7 @@ async function refreshCredential(
       'AUTH_REFRESH_FAILED: refresh response did not include an access token',
     );
   }
-  if (response.token_type !== 'Bearer') {
+  if (response.token_type?.toLowerCase() !== 'bearer') {
     throw new Error(
       'AUTH_REFRESH_FAILED: refresh response token_type must be Bearer',
     );

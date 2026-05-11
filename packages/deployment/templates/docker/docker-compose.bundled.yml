@@ -1,0 +1,103 @@
+services:
+  grepmind-app:
+    env_file:
+      - .env
+      - .env.grepmind-generated
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+
+  grepmind-migrate:
+    env_file:
+      - .env
+      - .env.grepmind-generated
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+
+  postgres:
+    image: postgres:16-alpine
+    env_file:
+      - .env.grepmind-generated
+    environment:
+      POSTGRES_DB: grepmind
+      POSTGRES_USER: grepmind
+    volumes:
+      - grepmind-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U grepmind -d grepmind
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    command:
+      - server
+      - /data
+    env_file:
+      - .env.grepmind-generated
+    volumes:
+      - grepmind-minio:/data
+    healthcheck:
+      test:
+        - CMD
+        - mc
+        - ready
+        - local
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    restart: unless-stopped
+
+  minio-init:
+    image: minio/mc:RELEASE.2025-04-16T18-13-26Z
+    depends_on:
+      minio:
+        condition: service_healthy
+    env_file:
+      - .env.grepmind-generated
+    entrypoint:
+      - /bin/sh
+      - -ceu
+      - |
+        umask 077
+        mc alias set grepmind-minio http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD" >/dev/null
+        mc mb --ignore-existing grepmind-minio/grepmind >/dev/null
+        cat > /tmp/grepmind-app-policy.json <<'JSON'
+        {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": ["s3:ListBucket", "s3:GetBucketLocation"],
+              "Resource": ["arn:aws:s3:::grepmind"]
+            },
+            {
+              "Effect": "Allow",
+              "Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
+              "Resource": ["arn:aws:s3:::grepmind/*"]
+            }
+          ]
+        }
+        JSON
+        mc admin policy create grepmind-minio grepmind-app /tmp/grepmind-app-policy.json >/dev/null 2>&1 || true
+        if ! mc admin user info grepmind-minio "$$GREPMIND_S3_ACCESS_KEY" >/dev/null 2>&1; then
+          mc admin user add grepmind-minio "$$GREPMIND_S3_ACCESS_KEY" "$$GREPMIND_S3_SECRET_KEY" >/dev/null
+        fi
+        mc admin policy attach grepmind-minio grepmind-app --user "$$GREPMIND_S3_ACCESS_KEY" >/dev/null
+        mc anonymous set none grepmind-minio/grepmind >/dev/null
+    restart: 'no'
+
+volumes:
+  grepmind-postgres:
+  grepmind-minio:

@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+dnf install -y docker awscli curl
+systemctl enable --now docker
+
+mkdir -p /opt/grepmind/bin
+chmod 755 /opt/grepmind /opt/grepmind/bin
+
+cat > /opt/grepmind/config.yml <<'CONFIG'
+${grepmind_config}
+CONFIG
+chmod 644 /opt/grepmind/config.yml
+
+cat > /opt/grepmind/bin/update-grepmind-images.sh <<'SCRIPT'
+${update_script}
+SCRIPT
+chmod 755 /opt/grepmind/bin/update-grepmind-images.sh
+
+cat > /etc/systemd/system/grepmind-app.service <<'UNIT'
+${grepmind_service}
+UNIT
+
+cat > /etc/systemd/system/grepmind-images.service <<'UNIT'
+[Unit]
+Description=Update Grepmind container image
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/grepmind/bin/update-grepmind-images.sh
+TimeoutStartSec=900
+UNIT
+
+cat > /etc/systemd/system/grepmind-images.timer <<'UNIT'
+[Unit]
+Description=Daily Grepmind image update
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+UNIT
+
+systemctl daemon-reload
+systemctl enable --now grepmind-app.service
+systemctl enable --now grepmind-images.timer

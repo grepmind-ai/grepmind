@@ -1,0 +1,2 @@
+# Keep deployment template dotfiles such as templates/**/.gitignore in the
+# published package. Package contents are controlled by package.json "files".

@@ -11,6 +11,7 @@ on:
       - 'packages/**/src/**'
       - 'packages/**/scripts/**'
       - 'packages/**/drizzle/**'
+      - 'packages/**/templates/**'
   workflow_dispatch:
 
 permissions:
@@ -64,7 +65,7 @@ jobs:
           has_package_manifest=false
           has_changeset=false
 
-          if printf '%s\n' "$changed_files" | grep -Eq '^(packages/[^/]+/(src|scripts|drizzle)/)'; then
+          if printf '%s\n' "$changed_files" | grep -Eq '^(packages/[^/]+/(src|scripts|drizzle|templates)/)'; then
             has_package_source=true
           fi
 

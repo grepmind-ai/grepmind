@@ -1,0 +1,39 @@
+services:
+  grepmind-app:
+    labels:
+      traefik.enable: 'true'
+      traefik.http.routers.grepmind.rule: Host(`${GREPMIND_PUBLIC_HOST:?GREPMIND_PUBLIC_HOST is required}`)
+      traefik.http.routers.grepmind.entrypoints: websecure
+      traefik.http.routers.grepmind.tls: 'true'
+      traefik.http.routers.grepmind.tls.certresolver: grepmind-acme
+      traefik.http.services.grepmind.loadbalancer.server.port: '3847'
+
+  traefik:
+    image: traefik:v3.3
+    command:
+      - --api.dashboard=false
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --providers.file.filename=/etc/traefik/dynamic.yml
+      - --entrypoints.web.address=:80
+      - --entrypoints.web.http.redirections.entrypoint.to=websecure
+      - --entrypoints.web.http.redirections.entrypoint.scheme=https
+      - --entrypoints.websecure.address=:443
+      - --certificatesresolvers.grepmind-acme.acme.email=${TRAEFIK_ACME_EMAIL:?TRAEFIK_ACME_EMAIL is required}
+      - --certificatesresolvers.grepmind-acme.acme.storage=/letsencrypt/acme.json
+      - --certificatesresolvers.grepmind-acme.acme.httpchallenge=true
+      - --certificatesresolvers.grepmind-acme.acme.httpchallenge.entrypoint=web
+    ports:
+      - ${GREPMIND_HTTP_PORT:-80}:80
+      - ${GREPMIND_HTTPS_PORT:-443}:443
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
+      - traefik-acme:/letsencrypt
+    depends_on:
+      grepmind-app:
+        condition: service_started
+    restart: unless-stopped
+
+volumes:
+  traefik-acme:

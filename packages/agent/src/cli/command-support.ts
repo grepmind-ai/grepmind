@@ -116,7 +116,7 @@ export async function resolveWorkspacePath(
   return resolved;
 }
 
-export async function resolveWorkspaceRemoteFingerprint(
+export async function resolveWorkspaceRemoteUrl(
   workspacePath: string,
 ): Promise<string> {
   try {
@@ -144,6 +144,45 @@ export async function resolveWorkspaceRemoteFingerprint(
   }
 }
 
+export async function resolveWorkspaceDefaultBranch(
+  workspacePath: string,
+): Promise<string | undefined> {
+  try {
+    const { stdout } = await execFileAsync(
+      'git',
+      ['symbolic-ref', '--short', 'refs/remotes/origin/HEAD'],
+      {
+        cwd: workspacePath,
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          GIT_TERMINAL_PROMPT: '0',
+        },
+      },
+    );
+    const remoteHead = stdout.trim();
+    const branch = remoteHead.startsWith('origin/')
+      ? remoteHead.slice('origin/'.length)
+      : remoteHead;
+    return branch || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export function deriveRepoFullNameFromRemoteUrl(
+  remoteUrl: string,
+): string | undefined {
+  const parsed = parseRemoteUrlPath(remoteUrl);
+  if (!parsed || parsed.pathSegments.length !== 2) {
+    return undefined;
+  }
+
+  return parsed.pathSegments.join('/');
+}
+
+export const resolveWorkspaceRemoteFingerprint = resolveWorkspaceRemoteUrl;
+
 export function formatError(error: unknown): string {
   if (!error) {
     return '';
@@ -156,6 +195,49 @@ export function formatError(error: unknown): string {
   } catch {
     return String(error);
   }
+}
+
+function parseRemoteUrlPath(
+  remoteUrl: string,
+): { pathSegments: string[] } | null {
+  const raw = remoteUrl.trim();
+  const scp = /^(?:[A-Za-z0-9._-]+)@(?<host>[^:/\s]+):(?<path>[^?#\s]+)$/.exec(
+    raw,
+  );
+  if (scp?.groups?.path && !/^\d+\//.test(scp.groups.path)) {
+    return normalizePath(scp.groups.path);
+  }
+
+  if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(raw)) {
+    return null;
+  }
+
+  try {
+    const url = new URL(raw);
+    if (url.search || url.hash || url.password) {
+      return null;
+    }
+    if (url.protocol === 'https:' && url.username) {
+      return null;
+    }
+    if (url.protocol !== 'https:' && url.protocol !== 'ssh:') {
+      return null;
+    }
+    return normalizePath(url.pathname);
+  } catch {
+    return null;
+  }
+}
+
+function normalizePath(pathname: string): { pathSegments: string[] } | null {
+  const trimmed = pathname.trim().replace(/^\/+/, '').replace(/\/+$/, '');
+  const withoutGit = trimmed.replace(/\.git$/i, '');
+  const pathSegments = withoutGit
+    .split('/')
+    .map((segment) => segment.trim().toLowerCase())
+    .filter(Boolean);
+
+  return pathSegments.length >= 2 ? { pathSegments } : null;
 }
 
 export function isIdleSyncResult(result: {

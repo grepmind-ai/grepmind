@@ -89,7 +89,9 @@ export class AgentRuntimeRequestDispatcher {
               params,
               async () =>
                 this.requireCommandExecutor().registerProject({
-                  remoteFingerprint: params.remoteFingerprint,
+                  remoteUrl: params.remoteUrl,
+                  repoFullName: params.repoFullName,
+                  defaultBranch: params.defaultBranch,
                   displayName: params.displayName,
                   workspacePath: params.workspacePath,
                   workspaceFingerprint: params.workspaceFingerprint,

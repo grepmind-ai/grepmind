@@ -1,15 +1,16 @@
 # @grepmind/mcp
 
-MCP server for Grepmind-backed local search.
+Project-local MCP server for Grepmind-backed code and docs search.
 
-`@grepmind/mcp` runs over stdio and exposes tools that search the current indexed local HEAD through a running Grepmind agent runtime. It is intended for MCP clients that need semantic code or docs search over registered local workspaces.
+`@grepmind/mcp` runs over stdio. One MCP server process is bound to one Git workspace, and the workspace is fixed during startup from the project-local launch directory.
 
 ## Requirements
 
 - Node.js 18 or newer.
-- A running Grepmind agent runtime.
-- A registered and synced workspace.
-- An MCP client that supports stdio servers.
+- A project-local MCP client configuration.
+- A Git workspace with an `origin` remote when the workspace is not registered yet.
+
+The MCP package includes the compatible `@grepmind/agent` runtime and starts it through the bundled package entrypoint. It does not depend on a global `grepmind-agent` binary.
 
 ## Install
 
@@ -17,67 +18,62 @@ MCP server for Grepmind-backed local search.
 npm install -g @grepmind/mcp
 ```
 
-## Setup
-
-Configure and start the local agent first:
-
-```sh
-grepmind agent configure --url https://your-grepmind-server.example
-grepmind agent run -d
-grepmind agent register --workspace ~/work/your-repo
-```
-
-Then run the MCP server:
-
-```sh
-grepmind-mcp
-```
-
-The server communicates over stdio, so it is normally launched by your MCP client rather than run directly in a terminal.
-
 ## MCP Client Configuration
 
-Example stdio configuration:
+Recommended project-local stdio configuration:
 
 ```json
 {
   "mcpServers": {
     "grepmind": {
-      "command": "grepmind-mcp",
-      "env": {
-        "GREPMIND_AGENT_DATA_DIR": "/Users/you/.grepmind-agent"
-      }
+      "command": "grepmind-mcp"
     }
   }
 }
 ```
 
-`GREPMIND_AGENT_DATA_DIR` is optional when the agent uses the default `~/.grepmind-agent` directory.
+Global MCP configuration without a workspace is not supported. For multiple repositories, configure one Grepmind MCP server instance per repository.
+
+## Startup Behavior
+
+The MCP client is connected only after startup has completed all required preparation:
+
+1. Resolve the Git workspace root from the project-local launch directory.
+2. Resolve the bundled `@grepmind/agent` CLI entrypoint.
+3. Ensure Grepmind agent authentication.
+4. Start or reuse the local agent runtime.
+5. Register the workspace if needed.
+6. Resolve exactly one local project `bindingId`.
+7. Connect stdio transport.
+
+If login is required, set `GREPMIND_AGENT_HOSTNAME` so MCP startup can open the OAuth flow. Startup is bounded by `GREPMIND_MCP_STARTUP_TIMEOUT_MS` and reports a pre-login command if OAuth or runtime startup takes too long.
+
+Workspace registration happens only during startup. Tool calls do not choose repositories, run OAuth, start runtime, or register workspaces.
 
 ## Tools
 
 ### `code_search`
 
-Finds code or documentation by describing what it does in natural language.
+Finds code or documentation in the startup workspace by describing what it does in natural language.
 
 Input fields:
 
-| Field           | Type               | Description                                                       |
-| --------------- | ------------------ | ----------------------------------------------------------------- |
-| `workspacePath` | `string`           | Absolute path to the registered workspace.                        |
-| `query`         | `string`           | Natural-language search query.                                    |
-| `target`        | `"code" \| "docs"` | Optional target. Defaults to `code`.                              |
-| `limit`         | `number`           | Optional maximum result count. Defaults to `10`.                  |
-| `threshold`     | `number`           | Optional similarity threshold from `0` to `1`. Defaults to `0.5`. |
-| `path`          | `string`           | Optional relative path prefix filter, such as `src/api`.          |
-| `tags`          | `string[]`         | Optional docs tag filter.                                         |
-| `compact`       | `boolean`          | Optional compact output without full previews.                    |
+| Field       | Type               | Description                                                       |
+| ----------- | ------------------ | ----------------------------------------------------------------- |
+| `query`     | `string`           | Natural-language search query.                                    |
+| `target`    | `"code" \| "docs"` | Optional target. Defaults to `code`.                              |
+| `limit`     | `number`           | Optional maximum result count. Defaults to `10`.                  |
+| `threshold` | `number`           | Optional similarity threshold from `0` to `1`. Defaults to `0.5`. |
+| `path`      | `string`           | Optional relative path prefix filter, such as `src/api`.          |
+| `tags`      | `string[]`         | Optional docs tag filter.                                         |
+| `compact`   | `boolean`          | Optional compact output without full previews.                    |
+
+`workspacePath` is not accepted. The repository scope always comes from the server-side `bindingId` resolved during MCP startup.
 
 Example tool input:
 
 ```json
 {
-  "workspacePath": "/Users/you/work/your-repo",
   "query": "validate user input before saving settings",
   "target": "code",
   "limit": 5,
@@ -85,13 +81,27 @@ Example tool input:
 }
 ```
 
+### `grepmind_agent_status`
+
+Returns JSON diagnostics for the current MCP workspace:
+
+- `workspacePath`
+- `bindingId`
+- `dataDir`
+- auth status
+- runtime status
+- registered project
+- latest sync/materialization status visible to the local runtime
+
 ## Environment Variables
 
-| Variable                  | Description                                                                            |
-| ------------------------- | -------------------------------------------------------------------------------------- |
-| `GREPMIND_AGENT_DATA_DIR` | Agent data directory used to find the runtime socket. Defaults to `~/.grepmind-agent`. |
+| Variable                          | Description                                                         |
+| --------------------------------- | ------------------------------------------------------------------- |
+| `GREPMIND_AGENT_DATA_DIR`         | Agent data directory. Defaults to `~/.grepmind-agent`.              |
+| `GREPMIND_AGENT_HOSTNAME`         | Grepmind hostname used when startup needs to run OAuth login.       |
+| `GREPMIND_MCP_STARTUP_TIMEOUT_MS` | Startup timeout for auth/runtime preparation. Defaults to `120000`. |
 
-The server also loads `.env` through `dotenv/config`, so local environment files can provide the same value.
+The server also loads `.env` through `dotenv/config`.
 
 ## Technical Notes
 
@@ -99,8 +109,7 @@ The server also loads `.env` through `dotenv/config`, so local environment files
 - Binary: `grepmind-mcp`.
 - MCP transport: stdio.
 - MCP server name: `grepmind-search`.
-- Current tool surface: `code_search`.
-- Search is delegated to `@grepmind/agent-rpc` and requires a running local runtime.
+- Startup does not block on a full sync. If the current HEAD is not indexed yet, `code_search` returns an index-not-ready error.
 
 ## Development
 
@@ -110,7 +119,7 @@ From the repository root:
 npm run build:mcp
 ```
 
-Run the built server:
+Run the built server from the repository root:
 
 ```sh
 npm -w @grepmind/mcp run start

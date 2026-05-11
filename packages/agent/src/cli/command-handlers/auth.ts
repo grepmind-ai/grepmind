@@ -4,7 +4,10 @@ import process from 'node:process';
 import { spawn } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
 import { AgentAuthClient } from '../../backend/agent-auth-client.js';
-import { AgentBackendClient } from '../../backend/agent-backend-client.js';
+import {
+  AgentBackendClient,
+  AgentBackendClientError,
+} from '../../backend/agent-backend-client.js';
 import type {
   AgentAuthMetadataResponse,
   OAuthTokenResponse,
@@ -35,7 +38,7 @@ import {
 import { loadOptionalConfig } from '../command-support.js';
 import type { ParsedArgs } from '../parse-args.js';
 
-const DEFAULT_SCOPES = ['openid', 'profile', 'email'] as const;
+const DEFAULT_SCOPES = ['profile', 'email'] as const;
 const CALLBACK_TIMEOUT_MS = 10 * 60 * 1000;
 
 interface CallbackResult {
@@ -96,7 +99,9 @@ async function authLoginCommand(args: ParsedArgs): Promise<void> {
   );
   const callbackServer = await startCallbackServer(metadata, callbackPort);
   const state = randomBase64Url(32);
-  const nonce = randomBase64Url(32);
+  const nonce = requestedScopes.includes('openid')
+    ? randomBase64Url(32)
+    : undefined;
   const codeVerifier = randomBase64Url(64);
   const codeChallenge = createHash('sha256')
     .update(codeVerifier)
@@ -193,8 +198,6 @@ async function authLoginCommand(args: ParsedArgs): Promise<void> {
       accountSubject,
       accountEmail,
     };
-    await store.set(credentialStoreKey, credential);
-
     const config: AgentCliConfig = {
       apiBaseUrl,
       name:
@@ -231,16 +234,29 @@ async function authLoginCommand(args: ParsedArgs): Promise<void> {
         oauthClientId: metadata.clientId,
       },
     };
-    const configPath = await saveAgentCliConfig(config);
     const bootstrapAccessToken = tokenResponse.access_token!;
-    const bootstrap = await new AgentBackendClient({
+    const bootstrapClient = new AgentBackendClient({
       baseUrl: apiBaseUrl,
       accessToken: () => bootstrapAccessToken,
       defaultHeaders: {
         'X-Grepmind-Agent-Name': config.name,
       },
       logger: agentConsole,
-    }).bootstrap();
+    });
+    let bootstrap: Awaited<ReturnType<AgentBackendClient['bootstrap']>>;
+    try {
+      bootstrap = await bootstrapClient.bootstrap();
+    } catch (error) {
+      if (error instanceof AgentBackendClientError) {
+        throw new TypeError(
+          `${error.message} (status=${error.status}, code=${error.code}, OAuth client id from metadata: ${metadata.clientId})`,
+        );
+      }
+      throw error;
+    }
+
+    await store.set(credentialStoreKey, credential);
+    const configPath = await saveAgentCliConfig(config);
 
     agentConsole.success(
       'config',
@@ -466,7 +482,7 @@ function buildAuthorizationUrl(input: {
   redirectUri: string;
   scopes: string[];
   state: string;
-  nonce: string;
+  nonce?: string;
   codeChallenge: string;
 }): string {
   const url = new URL(input.metadata.authorizationEndpoint);
@@ -475,7 +491,9 @@ function buildAuthorizationUrl(input: {
   url.searchParams.set('redirect_uri', input.redirectUri);
   url.searchParams.set('scope', input.scopes.join(' '));
   url.searchParams.set('state', input.state);
-  url.searchParams.set('nonce', input.nonce);
+  if (input.nonce) {
+    url.searchParams.set('nonce', input.nonce);
+  }
   url.searchParams.set('code_challenge', input.codeChallenge);
   url.searchParams.set('code_challenge_method', 'S256');
   return url.toString();
@@ -487,7 +505,7 @@ function validateTokenResponse(response: OAuthTokenResponse): void {
       'AUTH_TOKEN_EXCHANGE_FAILED: token response did not include an access token',
     );
   }
-  if (response.token_type !== 'Bearer') {
+  if (response.token_type?.toLowerCase() !== 'bearer') {
     throw new Error('AUTH_TOKEN_EXCHANGE_FAILED: token_type must be Bearer');
   }
   if (typeof response.expires_in !== 'number' || response.expires_in <= 0) {

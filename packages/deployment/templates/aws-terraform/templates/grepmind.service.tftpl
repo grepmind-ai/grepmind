@@ -1,0 +1,17 @@
+[Unit]
+Description=Grepmind application container
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/grepmind
+ExecStart=/opt/grepmind/bin/update-grepmind-images.sh
+ExecStop=/usr/bin/docker stop grepmind-app
+ExecStopPost=/usr/bin/docker rm grepmind-app
+TimeoutStartSec=900
+
+[Install]
+WantedBy=multi-user.target

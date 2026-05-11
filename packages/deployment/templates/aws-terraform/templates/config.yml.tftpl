@@ -1,0 +1,37 @@
+app:
+  host: 0.0.0.0
+  port: 3847
+  publicBaseUrl: ${public_base_url}
+  serverInstanceId: ${server_instance_id}
+
+agentAuth:
+  frontendApiUrl: ${clerk_frontend_api_url}
+  cliOAuthClientId: ${clerk_cli_oauth_client_id}
+
+clerk:
+  publishableKey: ${clerk_publishable_key}
+
+database:
+  host: ${database_endpoint}
+  port: 5432
+  name: ${database_name}
+  user: ${database_username}
+
+storage:
+  endPoint: s3.${aws_region}.amazonaws.com
+  port: 443
+  useSSL: true
+  bucket: ${s3_bucket_name}
+  prefix: ${s3_prefix}
+
+embedding:
+  provider: voyage
+  model: voyage-code-3
+
+docsEmbedding:
+  provider: voyage
+  model: voyage-context-3
+
+reranker:
+  provider: voyage
+  model: rerank-2

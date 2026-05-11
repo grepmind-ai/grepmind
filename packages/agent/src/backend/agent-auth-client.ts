@@ -84,7 +84,7 @@ export class AgentAuthClient {
 
   validateMetadata(
     metadata: AgentAuthMetadataResponse,
-    requestedScopes: string[] = ['openid', 'profile', 'email'],
+    requestedScopes: string[] = ['profile', 'email'],
   ): AgentAuthMetadataResponse {
     const missing = [
       ['issuer', metadata.issuer],

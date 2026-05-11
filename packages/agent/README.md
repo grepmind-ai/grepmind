@@ -61,6 +61,7 @@ Commands:
   search-head --query <text> [--binding-id <id>] [--workspace <path>] [--target code|docs] [--limit <n>] [--threshold <0-1>] [--no-rerank] [--json] [--data-dir <dir>]
   unbind|remove --binding-id <id> [--data-dir <dir>]
   clean --workspace <path> [--data-dir <dir>]
+  clean --all|-a [--data-dir <dir>]
   bootstrap [--data-dir <dir>]
   reset [--data-dir <dir>]
 ```
@@ -81,7 +82,7 @@ Commands:
 - `projects` lists registered local workspaces.
 - `sync` requests project sync for one binding or all registered bindings.
 - `unbind` / `remove` removes a local binding.
-- `clean` deletes local runtime data for a workspace after interactive confirmation.
+- `clean` deletes local runtime data for one workspace, or all local projects with `--all` / `-a`, after interactive confirmation.
 
 ### Inspection Commands
 

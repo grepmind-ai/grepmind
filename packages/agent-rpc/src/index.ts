@@ -4,9 +4,35 @@ export {
   isRuntimeUnavailableError,
 } from './client.js';
 export {
+  AGENT_CONFIG_FILENAME,
+  DEFAULT_AGENT_DATA_DIR,
+  ensureAgentAuth,
+  ensureAgentReady,
+  ensureAgentRuntime,
+  getAgentAuthStatus,
+  getAgentConfigPath,
+  loginAgent,
+  readAgentCliConfig,
+  resolveAgentDataDir,
+  startAgentRuntime,
+  waitForAgentRuntimeReady,
+} from './bootstrap.js';
+export {
   AGENT_RUNTIME_PROTOCOL_VERSION,
   isMutatingRpcMethod,
 } from './protocol.js';
+export type {
+  AgentAuthStatus,
+  AgentCliAuthConfig,
+  AgentCliConfigSnapshot,
+  AgentControlCommand,
+  AgentCredentialStatus,
+  AgentLoginOptions,
+  EnsureAgentAuthOptions,
+  EnsureAgentReadyOptions,
+  EnsureAgentReadyResult,
+  EnsureAgentRuntimeOptions,
+} from './bootstrap.js';
 export type {
   AgentCommandMode,
   AgentRpcError,

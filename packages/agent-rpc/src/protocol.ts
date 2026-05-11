@@ -188,7 +188,9 @@ export interface SearchResponsePayload {
 }
 
 export interface RegisterProjectRpcParams {
-  remoteFingerprint: string;
+  remoteUrl: string;
+  repoFullName?: string;
+  defaultBranch?: string;
   displayName: string;
   workspacePath: string;
   workspaceFingerprint: string;
