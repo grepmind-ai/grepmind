@@ -18,11 +18,14 @@ export {
   waitForAgentRuntimeReady,
 } from './bootstrap.js';
 export {
+  AGENT_ACCOUNT_SESSION_ERROR_CODES,
   AGENT_RUNTIME_PROTOCOL_VERSION,
+  isAgentAccountSessionErrorCode,
   isMutatingRpcMethod,
 } from './protocol.js';
 export type {
   AgentAuthStatus,
+  AgentAccountSessionStatus,
   AgentCliAuthConfig,
   AgentCliConfigSnapshot,
   AgentControlCommand,
@@ -35,6 +38,7 @@ export type {
 } from './bootstrap.js';
 export type {
   AgentCommandMode,
+  AgentAccountSessionErrorCode,
   AgentRpcError,
   AgentRpcFailureResponse,
   AgentRpcMethod,

@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: grepmind-beta
+  labels:
+    app.kubernetes.io/name: grepmind
+    grepmind.zaytra.dev/deployment-context: beta

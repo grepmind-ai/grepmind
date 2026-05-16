@@ -448,9 +448,9 @@ function normalizeStartupPreparationError(
     );
   }
 
-  if (/not authenticated|credentials/i.test(message)) {
+  if (/not authenticated|credentials|account session|AGENT_ACCOUNT_SESSION/i.test(message)) {
     return new Error(
-      `Grepmind agent authentication is required before MCP can connect. Set GREPMIND_AGENT_HOSTNAME so startup can open OAuth, or pre-login with "${formatAgentLoginCommand(context.agentEntrypointPath, context.dataDir, context.hostname ?? '<host>')}". Original error: ${message}`,
+      `Grepmind agent authentication and account selection are required before MCP can connect. Set GREPMIND_AGENT_HOSTNAME so startup can open OAuth/account selection, or pre-login with "${formatAgentLoginCommand(context.agentEntrypointPath, context.dataDir, context.hostname ?? '<host>')}". Original error: ${message}`,
     );
   }
 

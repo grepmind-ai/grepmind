@@ -1,0 +1,68 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grepmind-config
+  labels:
+    app.kubernetes.io/name: grepmind
+    grepmind.zaytra.dev/deployment-context: beta
+data:
+  config.yml: |
+    app:
+      host: 0.0.0.0
+      port: 3847
+      publicBaseUrl: https://<beta-host>
+
+    clerk:
+      publishableKey: <clerk-publishable-key>
+
+    agentAuth:
+      frontendApiUrl: https://<clerk-frontend-api-url>
+      cliOAuthClientId: <clerk-cli-oauth-client-id>
+
+    deployment:
+      context: beta
+
+    pubsub:
+      transport: redis-compatible
+      provider: upstash-redis
+      keyPrefix: grepmind:v1:<environment>
+      connectTimeoutMs: 5000
+      reconnect:
+        minDelayMs: 250
+        maxDelayMs: 5000
+      coalescing:
+        progressMinIntervalMs: 500
+
+    concurrency:
+      enabled: true
+      permits:
+        githubArchiveDownloads: 2
+        canonicalIndexing: 2
+        privateMaterialization: 1
+        embeddingCode: 4
+        embeddingDocs: 2
+        reranking: 4
+        searchRequests: 20
+        s3ArtifactWrites: 8
+        dbMaintenance: 1
+
+    storage:
+      endPoint: <s3-endpoint>
+      port: 443
+      useSSL: true
+      bucket: <bucket>
+      prefix: artifacts
+
+    embedding:
+      provider: voyage
+      model: voyage-code-3
+      concurrency: 4
+
+    docsEmbedding:
+      provider: voyage
+      model: voyage-context-3
+      concurrency: 4
+
+    reranker:
+      provider: voyage
+      model: rerank-2

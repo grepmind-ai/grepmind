@@ -131,7 +131,7 @@ export class ProjectRegistryService {
         {
           bindingId: input.project.bindingId,
           repoId: input.project.repoId,
-          userRepoId: input.project.userRepoId ?? null,
+          userRepoId: input.project.accountRepoId ?? null,
           repoFullName: input.project.repoFullName,
           displayName: input.project.displayName,
           workspacePath,
@@ -187,7 +187,7 @@ export class ProjectRegistryService {
         {
           bindingId: project.bindingId,
           repoId: project.repoId,
-          userRepoId: project.userRepoId,
+          userRepoId: project.accountRepoId,
           repoFullName: project.repoFullName,
           displayName: project.displayName,
           workspacePath: project.workspacePath,
@@ -211,11 +211,12 @@ export class ProjectRegistryService {
   }
 
   async listProjects(): Promise<LocalProjectRecord[]> {
-    return this.repositories.projects.listAll();
+    return (await this.repositories.projects.listAll()).map(toLocalProjectRecord);
   }
 
   async getProject(bindingId: number): Promise<LocalProjectRecord | null> {
-    return this.repositories.projects.findByBindingId(bindingId);
+    const row = await this.repositories.projects.findByBindingId(bindingId);
+    return row ? toLocalProjectRecord(row) : null;
   }
 
   async requireProject(bindingId: number): Promise<LocalProjectRecord> {
@@ -306,6 +307,18 @@ export class ProjectRegistryService {
       await this.repositories.projects.deleteByBindingId(bindingId, tx);
     });
   }
+}
+
+function toLocalProjectRecord(
+  row: NonNullable<
+    Awaited<ReturnType<AgentRepositories['projects']['findByBindingId']>>
+  >,
+): LocalProjectRecord {
+  return {
+    ...row,
+    accountRepoId: row.userRepoId,
+    userRepoId: row.userRepoId,
+  };
 }
 
 function toBranchDescriptor(row: ProjectBranchRow): BranchDescriptor {

@@ -173,11 +173,13 @@ function printDeployHelp() {
       '  grepmind deploy init docker --non-interactive --mode <mode> [options]',
       '  grepmind deploy init aws-terraform [--dir <path>] [--force]',
       '  grepmind deploy init aws-terraform --non-interactive [options]',
+      '  grepmind deploy init kubernetes-beta [--dir <path>] [--force]',
       '  grepmind deploy list',
       '',
       'Platforms:',
       '  docker  Docker Compose deployment for one Linux VM',
       '  aws-terraform  AWS deployment behind ALB, ACM, and Route53',
+      '  kubernetes-beta  Controlled SaaS beta app/worker split for Kubernetes',
       '',
     ].join('\n'),
   );
@@ -209,6 +211,11 @@ async function runDeployInit(args: string[]) {
     return;
   }
 
+  if (platform === 'kubernetes-beta') {
+    await copyTemplateCommand('kubernetes-beta', parsed);
+    return;
+  }
+
   if (hasBoolean(parsed, 'non-interactive')) {
     await initAwsNonInteractive(parsed);
   } else {
@@ -220,7 +227,7 @@ async function copyTemplateCommand(
   id: DeploymentTemplateId,
   parsed: ParsedArgs,
 ) {
-  assertAllowedOptions(parsed, ['dir', 'force']);
+  assertAllowedOptions(parsed, ['dir', 'force', 'non-interactive']);
   const manifest = deploymentTemplates[id];
   const targetDirectory = resolveTargetDirectory(
     getOption(parsed, 'dir') ?? manifest.defaultTargetDirectory,
@@ -527,12 +534,15 @@ async function runInteractiveWizard(parsed: ParsedArgs) {
   const target = (await promptChoice('Deployment target', [
     ['docker', 'Docker Compose'],
     ['aws-terraform', 'AWS Terraform'],
+    ['kubernetes-beta', 'Kubernetes beta'],
   ])) as DeploymentTemplateId;
 
   if (target === 'docker') {
     await runDockerWizard(parsed);
-  } else {
+  } else if (target === 'aws-terraform') {
     await runAwsWizard(parsed);
+  } else {
+    await copyTemplateCommand('kubernetes-beta', parsed);
   }
 }
 
@@ -1440,7 +1450,7 @@ function isNotFound(error: unknown) {
 }
 
 function isDeploymentTemplateId(value: string): value is DeploymentTemplateId {
-  return value === 'docker' || value === 'aws-terraform';
+  return value === 'docker' || value === 'aws-terraform' || value === 'kubernetes-beta';
 }
 
 async function promptRequired(label: string, defaultValue?: string) {

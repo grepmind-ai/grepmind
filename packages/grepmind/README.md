@@ -1,12 +1,12 @@
 # grepmind
 
 Public command-line utility for running a local Grepmind agent and initializing
-self-hosted Grepmind deployments.
+Grepmind deployment templates.
 
 `grepmind` is the operator-friendly entrypoint into the Grepmind workflow. It
 wraps `@grepmind/agent` for local agent commands and consumes
-`@grepmind/deployment` for Docker Compose and AWS Terraform deployment
-templates.
+`@grepmind/deployment` for Docker Compose, AWS Terraform and Kubernetes beta
+deployment templates.
 
 ## Requirements
 
@@ -56,6 +56,12 @@ Copy an AWS Terraform deployment template without prompting:
 npx grepmind deploy init aws-terraform --dir grepmind-aws-terraform
 ```
 
+Copy the controlled Kubernetes beta template without prompting:
+
+```sh
+npx grepmind deploy init kubernetes-beta --dir grepmind-kubernetes-beta
+```
+
 List shipped deployment targets:
 
 ```sh
@@ -80,6 +86,7 @@ Commands:
   grepmind deploy init
   grepmind deploy init docker
   grepmind deploy init aws-terraform
+  grepmind deploy init kubernetes-beta
   grepmind deploy list
 ```
 

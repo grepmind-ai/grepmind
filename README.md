@@ -100,7 +100,7 @@ npm run agent:dev -- help
 packages/
   agent/      Local runtime and lower-level CLI
   agent-rpc/  Runtime socket client and protocol types
-  deployment/ Docker Compose and AWS Terraform deployment templates
+  deployment/ Docker Compose, AWS Terraform and Kubernetes beta deployment templates
   grepmind/   Public CLI wrapper
   mcp/        MCP stdio server
 tools/        Shared build and release scripts

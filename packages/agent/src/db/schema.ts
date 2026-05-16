@@ -9,7 +9,8 @@ export type AgentDb = PGlite;
 export interface LocalProjectRecord {
   bindingId: number;
   repoId: number;
-  userRepoId: number | null;
+  accountRepoId: number | null;
+  userRepoId?: number | null;
   repoFullName: string;
   displayName: string;
   workspacePath: string;

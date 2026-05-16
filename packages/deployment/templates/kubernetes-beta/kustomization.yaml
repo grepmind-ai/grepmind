@@ -1,0 +1,13 @@
+# Static review only. Do not use `kubectl apply -k .` for beta rollout.
+# Follow README.md ordered apply commands so migration completes before Deployments.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - migration-job.yaml
+  - worker-deployment.yaml
+  - app-service.yaml
+  - app-deployment.yaml
+  - app-ingress.yaml
+  - pdb.yaml
