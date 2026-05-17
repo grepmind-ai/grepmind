@@ -21,6 +21,7 @@ data:
 
     deployment:
       context: beta
+      edition: saas
 
     pubsub:
       transport: redis-compatible
