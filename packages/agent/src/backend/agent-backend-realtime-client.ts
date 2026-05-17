@@ -133,19 +133,23 @@ export class AgentBackendRealtimeClient {
   ): Promise<SearchResponsePayload> {
     const request = normalizeSearchRequestPayload(input);
     if (!request.ok) {
-      throw new AgentRealtimeSearchError(request.error, 'CONTRACT_MISMATCH');
+      throw new AgentRealtimeSearchError(request.error, 'CONTRACT_MISMATCH', {
+        retryable: false,
+      });
     }
 
     if (this.ws?.readyState !== SOCKET_OPEN_STATE) {
       throw new AgentRealtimeSearchError(
         'Agent realtime socket is not connected',
         'NOT_CONNECTED',
+        { retryable: true },
       );
     }
     if (this.pendingSearchRuns.has(request.value.requestId)) {
       throw new AgentRealtimeSearchError(
         `Search request ${request.value.requestId} is already in flight`,
         'DUPLICATE_REQUEST',
+        { retryable: false },
       );
     }
 
@@ -160,6 +164,7 @@ export class AgentBackendRealtimeClient {
           new AgentRealtimeSearchError(
             `Timed out waiting for search.run.response for ${request.value.requestId}`,
             'TIMEOUT',
+            { retryable: true },
           ),
         );
       }, timeoutMs);
@@ -411,14 +416,23 @@ export class AgentBackendRealtimeClient {
 
     clearTimeout(pending.timer);
     this.pendingSearchRuns.delete(error.requestId);
-    pending.reject(new AgentRealtimeSearchError(error.message, error.code));
+    pending.reject(new AgentRealtimeSearchError(error.message, error.code, {
+      retryable: error.retryable,
+      details: {
+        nextAction: error.nextAction,
+        retryAfterMs: error.retryAfterMs,
+        quota: error.quota,
+      },
+    }));
   }
 
   private rejectPendingSearchRuns(message: string): void {
     for (const pending of this.pendingSearchRuns.values()) {
       clearTimeout(pending.timer);
       pending.reject(
-        new AgentRealtimeSearchError(message, 'CONNECTION_CLOSED'),
+        new AgentRealtimeSearchError(message, 'CONNECTION_CLOSED', {
+          retryable: true,
+        }),
       );
     }
     this.pendingSearchRuns.clear();

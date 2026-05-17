@@ -81,6 +81,10 @@ export interface SearchErrorPayload {
   requestId: string;
   code: string;
   message: string;
+  retryable: boolean;
+  nextAction?: string | null;
+  retryAfterMs?: number | null;
+  quota?: unknown;
 }
 
 export interface SearchIndexRequestPayload {

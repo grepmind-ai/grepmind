@@ -54,6 +54,10 @@ interface AgentErrorPayload {
     code?: string;
     message?: string;
     retryable?: boolean;
+    nextAction?: string | null;
+    accountStatus?: string;
+    quota?: unknown;
+    retryAfterMs?: number | null;
     details?: unknown;
   };
 }
@@ -385,8 +389,41 @@ export class AgentBackendClient {
         status: response.status,
         code: payload?.error?.code ?? 'RETRYABLE_BACKEND_ERROR',
         retryable: payload?.error?.retryable,
-        details: payload?.error?.details,
+        details: normalizeBackendErrorDetails(payload?.error),
       },
     );
   }
+}
+
+function normalizeBackendErrorDetails(
+  error: AgentErrorPayload['error'] | undefined,
+): unknown {
+  if (!error) {
+    return undefined;
+  }
+
+  const details: Record<string, unknown> = isRecord(error.details)
+    ? { ...error.details }
+    : error.details == null
+      ? {}
+      : { value: error.details };
+
+  if (error.nextAction !== undefined) {
+    details.nextAction = error.nextAction;
+  }
+  if (error.accountStatus) {
+    details.accountStatus = error.accountStatus;
+  }
+  if (error.quota !== undefined) {
+    details.quota = error.quota;
+  }
+  if (error.retryAfterMs !== undefined) {
+    details.retryAfterMs = error.retryAfterMs;
+  }
+
+  return Object.keys(details).length > 0 ? details : undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

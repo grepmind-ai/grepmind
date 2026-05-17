@@ -7,6 +7,7 @@ import process from 'node:process';
 import { promisify } from 'node:util';
 import {
   AgentRuntimeClient,
+  AgentRuntimeClientError,
   ensureAgentReady,
   getAgentAuthStatus,
   resolveAgentDataDir,
@@ -441,6 +442,13 @@ function normalizeStartupPreparationError(
     hostname?: string;
   },
 ): Error {
+  if (error instanceof AgentRuntimeClientError) {
+    const stableError = normalizeStableStartupError(error, context);
+    if (stableError) {
+      return stableError;
+    }
+  }
+
   const message = formatError(error);
   if (/timed out|timeout|RUNTIME_START_TIMEOUT/i.test(message)) {
     return new Error(
@@ -457,6 +465,49 @@ function normalizeStartupPreparationError(
   return new Error(
     `Grepmind MCP could not prepare the bundled agent runtime for ${context.workspacePath}: ${message}`,
   );
+}
+
+function normalizeStableStartupError(
+  error: AgentRuntimeClientError,
+  context: {
+    workspacePath: string;
+    dataDir: string;
+    startupTimeoutMs: number;
+    agentEntrypointPath: string;
+    hostname?: string;
+  },
+): Error | null {
+  switch (error.code) {
+    case 'AUTH_AGENT_CREDENTIAL_REQUIRED':
+    case 'AUTH_OAUTH_TOKEN_REQUIRED':
+    case 'AUTH_USER_SUBJECT_REQUIRED':
+    case 'AGENT_ACCOUNT_SESSION_REQUIRED':
+    case 'AGENT_ACCOUNT_SESSION_EXPIRED':
+    case 'AGENT_ACCOUNT_SESSION_REVOKED':
+    case 'AGENT_UPGRADE_REQUIRED':
+      return new Error(
+        `Grepmind agent authentication and account selection are required before MCP can connect. Set GREPMIND_AGENT_HOSTNAME so startup can open OAuth/account selection, or pre-login with "${formatAgentLoginCommand(context.agentEntrypointPath, context.dataDir, context.hostname ?? '<host>')}".`,
+      );
+    case 'ACCOUNT_SUSPENDED':
+      return new Error(
+        'The selected Grepmind account is not active. Contact support or select another account before starting MCP.',
+      );
+    case 'PLAN_REQUIRED':
+      return new Error(
+        'The selected Grepmind account needs an active plan before MCP can use search. Open the Grepmind app, select a plan, then restart MCP.',
+      );
+    case 'PLAN_INACTIVE':
+      return new Error(
+        'The selected Grepmind account plan is not active. Renew the plan or contact support, then restart MCP.',
+      );
+    case 'RUNTIME_BACKPRESSURE':
+    case 'RETRYABLE_BACKEND_ERROR':
+      return new Error(
+        `Grepmind backend is temporarily unavailable while preparing MCP for ${context.workspacePath}. Retry shortly.`,
+      );
+    default:
+      return null;
+  }
 }
 
 function formatAgentLoginCommand(
