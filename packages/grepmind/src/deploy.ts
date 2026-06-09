@@ -514,7 +514,7 @@ function readAwsNonInteractiveConfig(parsed: ParsedArgs): AwsRenderConfig {
       'instance-type',
     ),
     grepmindImage:
-      getOption(parsed, 'grepmind-image') ?? 'ghcr.io/zaytra-labs/grepmind-app',
+      getOption(parsed, 'grepmind-image') ?? 'ghcr.io/grepmind-ai/grepmind-app',
     grepmindTag: getOption(parsed, 'grepmind-tag') ?? 'latest',
     sshAllowedCidrs: getOptions(parsed, 'ssh-allowed-cidr'),
   };
@@ -689,7 +689,7 @@ async function runAwsWizard(parsed: ParsedArgs) {
       'S3 prefix',
     ),
     instanceType: await promptRequired('EC2 instance type', 't3.small'),
-    grepmindImage: 'ghcr.io/zaytra-labs/grepmind-app',
+    grepmindImage: 'ghcr.io/grepmind-ai/grepmind-app',
     grepmindTag: 'latest',
     sshAllowedCidrs: await promptStringList(
       'SSH allowed CIDR blocks, comma-separated',
@@ -763,7 +763,7 @@ async function renderDockerConfig(
 
 function renderDockerEnv(config: DockerRenderConfig) {
   const lines = [
-    ['GREPMIND_IMAGE', 'ghcr.io/zaytra-labs/grepmind-app'],
+    ['GREPMIND_IMAGE', 'ghcr.io/grepmind-ai/grepmind-app'],
     ['GREPMIND_TAG', 'latest'],
     ['GREPMIND_DEPLOYMENT_MODE', config.mode],
     ['GREPMIND_HTTP_PORT', config.reverseProxy === 'traefik' ? '80' : '3847'],

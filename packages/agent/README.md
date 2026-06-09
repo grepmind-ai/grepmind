@@ -131,7 +131,7 @@ npm -w @grepmind/agent run build:migrations
 
 ## Support
 
-Report bugs and request features through [GitHub Issues](https://github.com/zaytra-labs/grepmind/issues).
+Report bugs and request features through [GitHub Issues](https://github.com/grepmind-ai/grepmind/issues).
 
 ## License
 

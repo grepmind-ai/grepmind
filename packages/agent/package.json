@@ -27,11 +27,11 @@
   "author": "Zaytra",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/zaytra-labs/grepmind.git"
+    "url": "git+https://github.com/grepmind-ai/grepmind.git"
   },
-  "homepage": "https://github.com/zaytra-labs/grepmind#readme",
+  "homepage": "https://github.com/grepmind-ai/grepmind#readme",
   "bugs": {
-    "url": "https://github.com/zaytra-labs/grepmind/issues"
+    "url": "https://github.com/grepmind-ai/grepmind/issues"
   },
   "scripts": {
     "build": "node ../../tools/build-package.mjs",

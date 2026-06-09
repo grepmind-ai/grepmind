@@ -36,7 +36,7 @@ variable "route53_zone_id" {
 variable "grepmind_image" {
   type        = string
   description = "Grepmind app container image."
-  default     = "ghcr.io/zaytra-labs/grepmind-app"
+  default     = "ghcr.io/grepmind-ai/grepmind-app"
 }
 
 variable "grepmind_tag" {
