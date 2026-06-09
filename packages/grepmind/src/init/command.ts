@@ -291,7 +291,7 @@ async function writeSelectedMcpConfigs(input: {
       yes: input.parsed.yes,
       explicit: explicit.has(agent),
       dryRun: input.parsed.dryRun,
-      promptReplace: promptBoolean,
+      promptReplace: promptReplaceMcpEntry,
     };
     if (agent === 'codex') {
       results.push(await writeCodexConfig(common));
@@ -450,6 +450,10 @@ async function promptBoolean(
     }
     process.stdout.write('Answer yes or no.\n');
   }
+}
+
+function promptReplaceMcpEntry(message: string): Promise<boolean> {
+  return promptBoolean(message, false);
 }
 
 function normalizeRuntimeError(
