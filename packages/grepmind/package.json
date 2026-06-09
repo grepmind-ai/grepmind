@@ -38,6 +38,7 @@
   },
   "dependencies": {
     "@grepmind/agent": "0.1.2",
+    "@grepmind/agent-rpc": "0.1.1",
     "@grepmind/deployment": "0.1.0"
   },
   "engines": {

@@ -20,19 +20,40 @@ npm install -g @grepmind/mcp
 
 ## MCP Client Configuration
 
-Recommended project-local stdio configuration:
+Recommended setup is to run the public CLI from the Git workspace:
+
+```sh
+grepmind init --codex
+grepmind init --claude --yes
+grepmind init --cursor --dry-run
+```
+
+`grepmind init` writes commit-safe `.grepmind.json` and updates the selected
+project-local MCP client config without writing OAuth secrets or binding ids to
+project files. It starts or reuses the local Grepmind agent runtime and registers
+or reuses the current workspace unless `--dry-run` is passed.
+
+Manual project-local stdio configuration:
 
 ```json
 {
   "mcpServers": {
     "grepmind": {
-      "command": "grepmind-mcp"
+      "command": "npx",
+      "args": ["-y", "@grepmind/mcp@0.1.1"],
+      "env": {
+        "GREPMIND_AGENT_HOSTNAME": "app.grepmind.ai",
+        "GREPMIND_MCP_STARTUP_TIMEOUT_MS": "120000"
+      }
     }
   }
 }
 ```
 
 Global MCP configuration without a workspace is not supported. For multiple repositories, configure one Grepmind MCP server instance per repository.
+
+To update the package used by project configs, rerun `grepmind init --force
+--mcp-package @grepmind/mcp@latest`.
 
 ## Startup Behavior
 
@@ -46,7 +67,7 @@ The MCP client is connected only after startup has completed all required prepar
 6. Resolve exactly one local project `bindingId`.
 7. Connect stdio transport.
 
-If login is required, set `GREPMIND_AGENT_HOSTNAME` so MCP startup can open the OAuth flow. Startup is bounded by `GREPMIND_MCP_STARTUP_TIMEOUT_MS` and reports a pre-login command if OAuth or runtime startup takes too long.
+If login is required, set `GREPMIND_AGENT_HOSTNAME` so MCP startup can open the OAuth flow. Startup is bounded by `GREPMIND_MCP_STARTUP_TIMEOUT_MS` and reports a pre-login command if OAuth or runtime startup takes too long. `grepmind init --yes --no-open` can be used to verify fully non-interactive readiness before starting an MCP client.
 
 Workspace registration happens only during startup. Tool calls do not choose repositories, run OAuth, start runtime, or register workspaces.
 

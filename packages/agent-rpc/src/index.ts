@@ -17,6 +17,7 @@ export {
   startAgentRuntime,
   waitForAgentRuntimeReady,
 } from './bootstrap.js';
+export { ensureWorkspaceRegistered } from './workspace-registration.js';
 export {
   AGENT_ACCOUNT_SESSION_ERROR_CODES,
   AGENT_RUNTIME_PROTOCOL_VERSION,
@@ -36,6 +37,7 @@ export type {
   EnsureAgentReadyResult,
   EnsureAgentRuntimeOptions,
 } from './bootstrap.js';
+export type { EnsureWorkspaceRegisteredOptions } from './workspace-registration.js';
 export type {
   AgentCommandMode,
   AgentAccountSessionErrorCode,
