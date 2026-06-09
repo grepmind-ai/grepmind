@@ -1,6 +1,6 @@
 {
   "name": "grepmind",
-  "version": "0.1.3",
+  "version": "0.2.0",
   "description": "Grepmind command-line utility",
   "type": "module",
   "main": "dist/index.js",
@@ -38,7 +38,7 @@
   },
   "dependencies": {
     "@grepmind/agent": "0.1.2",
-    "@grepmind/deployment": "0.1.0"
+    "@grepmind/deployment": "0.2.0"
   },
   "engines": {
     "node": ">=18.0.0"
