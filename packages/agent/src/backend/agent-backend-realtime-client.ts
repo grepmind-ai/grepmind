@@ -1,8 +1,15 @@
 import { noopAgentLogger, type AgentLogger } from '../logging/agent-logger.js';
 import {
-  RealtimeWebSocket,
+  AGENT_ACCOUNT_SESSION_CAPABILITY,
+  AGENT_ACCOUNT_SESSION_CAPABILITY_HEADER,
+  AGENT_ACCOUNT_SESSION_DEVICE_HEADER,
+  AGENT_ACCOUNT_SESSION_HEADER,
+  type AgentBackendAccountSessionProvider,
+} from './account-session.js';
+import {
   SOCKET_OPEN_STATE,
   buildRealtimeUrl,
+  createRealtimeWebSocket,
 } from './realtime/connection.js';
 import { createHeartbeatPayload } from './realtime/heartbeat.js';
 import {
@@ -37,6 +44,7 @@ const DEFAULT_SEARCH_REQUEST_TIMEOUT_MS = 30_000;
 export class AgentBackendRealtimeClient {
   private readonly baseUrl: string;
   private readonly accessToken?: AgentBackendRealtimeClientOptions['accessToken'];
+  private readonly accountSession?: AgentBackendAccountSessionProvider;
   private readonly deviceId: string;
   private readonly deviceName: string;
   private readonly protocolVersion: string;
@@ -65,6 +73,7 @@ export class AgentBackendRealtimeClient {
   constructor(options: AgentBackendRealtimeClientOptions) {
     this.baseUrl = options.baseUrl.replace(/\/+$/, '');
     this.accessToken = options.accessToken;
+    this.accountSession = options.accountSession;
     this.deviceId = options.deviceId;
     this.deviceName = options.deviceName;
     this.protocolVersion = options.protocolVersion ?? 'v1';
@@ -82,13 +91,7 @@ export class AgentBackendRealtimeClient {
   }
 
   start(bindings: AgentBackendRealtimeBinding[]): void {
-    if (this.started || !RealtimeWebSocket) {
-      if (!RealtimeWebSocket) {
-        this.logger.warn(
-          'runtime',
-          'Global WebSocket is unavailable; agent realtime transport is disabled',
-        );
-      }
+    if (this.started) {
       return;
     }
 
@@ -130,19 +133,23 @@ export class AgentBackendRealtimeClient {
   ): Promise<SearchResponsePayload> {
     const request = normalizeSearchRequestPayload(input);
     if (!request.ok) {
-      throw new AgentRealtimeSearchError(request.error, 'CONTRACT_MISMATCH');
+      throw new AgentRealtimeSearchError(request.error, 'CONTRACT_MISMATCH', {
+        retryable: false,
+      });
     }
 
     if (this.ws?.readyState !== SOCKET_OPEN_STATE) {
       throw new AgentRealtimeSearchError(
         'Agent realtime socket is not connected',
         'NOT_CONNECTED',
+        { retryable: true },
       );
     }
     if (this.pendingSearchRuns.has(request.value.requestId)) {
       throw new AgentRealtimeSearchError(
         `Search request ${request.value.requestId} is already in flight`,
         'DUPLICATE_REQUEST',
+        { retryable: false },
       );
     }
 
@@ -157,6 +164,7 @@ export class AgentBackendRealtimeClient {
           new AgentRealtimeSearchError(
             `Timed out waiting for search.run.response for ${request.value.requestId}`,
             'TIMEOUT',
+            { retryable: true },
           ),
         );
       }, timeoutMs);
@@ -173,12 +181,7 @@ export class AgentBackendRealtimeClient {
   }
 
   private async connect(): Promise<void> {
-    if (
-      !RealtimeWebSocket ||
-      this.stopping ||
-      !this.started ||
-      this.connecting
-    ) {
+    if (this.stopping || !this.started || this.connecting) {
       return;
     }
 
@@ -188,9 +191,11 @@ export class AgentBackendRealtimeClient {
       if (this.stopping || !this.started) {
         return;
       }
+      const headers = await this.buildHandshakeHeaders(accessToken);
 
-      const ws = new RealtimeWebSocket(
-        buildRealtimeUrl(this.baseUrl, accessToken),
+      const ws = createRealtimeWebSocket(
+        buildRealtimeUrl(this.baseUrl),
+        headers,
       );
       this.ws = ws;
 
@@ -230,7 +235,12 @@ export class AgentBackendRealtimeClient {
         }
       };
 
-      ws.onerror = () => {
+      ws.onerror = (error) => {
+        const message =
+          error instanceof Error ? error.message : String(error ?? '');
+        if (message.includes('AGENT_ACCOUNT_SESSION_EXPIRED')) {
+          void this.refreshAccountSessionForReconnect();
+        }
         // onclose handles retries.
       };
     } catch (error) {
@@ -264,6 +274,43 @@ export class AgentBackendRealtimeClient {
 
   private async resolveAccessToken(): Promise<string | undefined> {
     return this.accessToken?.();
+  }
+
+  private async buildHandshakeHeaders(
+    accessToken: string | undefined,
+  ): Promise<Record<string, string>> {
+    const headers: Record<string, string> = {};
+    if (accessToken) {
+      headers.Authorization = `Bearer ${accessToken}`;
+    }
+
+    const accountSession = await this.accountSession?.();
+    headers[AGENT_ACCOUNT_SESSION_CAPABILITY_HEADER] =
+      AGENT_ACCOUNT_SESSION_CAPABILITY;
+    headers[AGENT_ACCOUNT_SESSION_DEVICE_HEADER] =
+      accountSession?.deviceId ?? this.deviceId;
+    if (accountSession?.token) {
+      headers[AGENT_ACCOUNT_SESSION_HEADER] = accountSession.token;
+    }
+
+    return headers;
+  }
+
+  private async refreshAccountSessionForReconnect(): Promise<void> {
+    if (!this.accountSession?.refresh) {
+      return;
+    }
+
+    try {
+      await this.accountSession.refresh();
+    } catch (error) {
+      this.logger.warn(
+        'runtime',
+        error instanceof Error
+          ? `Agent account session refresh failed: ${error.message}`
+          : 'Agent account session refresh failed',
+      );
+    }
   }
 
   private reconnectWithFreshToken(): void {
@@ -368,14 +415,25 @@ export class AgentBackendRealtimeClient {
 
     clearTimeout(pending.timer);
     this.pendingSearchRuns.delete(error.requestId);
-    pending.reject(new AgentRealtimeSearchError(error.message, error.code));
+    pending.reject(
+      new AgentRealtimeSearchError(error.message, error.code, {
+        retryable: error.retryable,
+        details: {
+          nextAction: error.nextAction,
+          retryAfterMs: error.retryAfterMs,
+          quota: error.quota,
+        },
+      }),
+    );
   }
 
   private rejectPendingSearchRuns(message: string): void {
     for (const pending of this.pendingSearchRuns.values()) {
       clearTimeout(pending.timer);
       pending.reject(
-        new AgentRealtimeSearchError(message, 'CONNECTION_CLOSED'),
+        new AgentRealtimeSearchError(message, 'CONNECTION_CLOSED', {
+          retryable: true,
+        }),
       );
     }
     this.pendingSearchRuns.clear();

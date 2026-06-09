@@ -35,12 +35,16 @@ export async function agentStatusTool(): Promise<{
       auth: {
         loggedIn: auth.loggedIn,
         credentialStatus: auth.credentialStatus,
+        accountSessionStatus: auth.accountSessionStatus,
         needsLogin: auth.needsLogin,
         host: auth.host,
         apiBaseUrl: auth.apiBaseUrl,
         accountEmail: auth.accountEmail,
         expiresAt: auth.expiresAt,
         expired: auth.expired,
+        selectedAccountId: auth.selectedAccountId,
+        selectedAccountName: auth.selectedAccountName,
+        accountSessionExpiresAt: auth.accountSessionExpiresAt,
       },
       runtime: {
         running: true,
@@ -70,12 +74,16 @@ export async function agentStatusTool(): Promise<{
           auth: {
             loggedIn: auth.loggedIn,
             credentialStatus: auth.credentialStatus,
+            accountSessionStatus: auth.accountSessionStatus,
             needsLogin: auth.needsLogin,
             host: auth.host,
             apiBaseUrl: auth.apiBaseUrl,
             accountEmail: auth.accountEmail,
             expiresAt: auth.expiresAt,
             expired: auth.expired,
+            selectedAccountId: auth.selectedAccountId,
+            selectedAccountName: auth.selectedAccountName,
+            accountSessionExpiresAt: auth.accountSessionExpiresAt,
           },
           runtime: {
             running: false,

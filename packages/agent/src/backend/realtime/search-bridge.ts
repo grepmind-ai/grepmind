@@ -10,11 +10,19 @@ import type {
 
 export class AgentRealtimeSearchError extends Error {
   readonly code: string;
+  readonly retryable: boolean;
+  readonly details?: unknown;
 
-  constructor(message: string, code = 'SEARCH_FAILED') {
+  constructor(
+    message: string,
+    code = 'SEARCH_FAILED',
+    options: { retryable?: boolean; details?: unknown } = {},
+  ) {
     super(message);
     this.name = 'AgentRealtimeSearchError';
     this.code = code;
+    this.retryable = options.retryable ?? false;
+    this.details = options.details;
   }
 }
 
@@ -189,8 +197,13 @@ export function normalizeSearchErrorPayload(
     typeof data?.requestId === 'string' ? data.requestId.trim() : '';
   const code = typeof data?.code === 'string' ? data.code.trim() : '';
   const message = typeof data?.message === 'string' ? data.message.trim() : '';
+  const retryable =
+    typeof data?.retryable === 'boolean' ? data.retryable : null;
   if (!requestId || !code || !message) {
     return { ok: false, error: 'requestId, code, and message are required' };
+  }
+  if (retryable == null) {
+    return { ok: false, error: 'retryable is required' };
   }
 
   return {
@@ -199,8 +212,24 @@ export function normalizeSearchErrorPayload(
       requestId,
       code,
       message,
+      retryable,
+      nextAction: normalizeNextAction(data?.nextAction),
+      retryAfterMs: normalizeRetryAfterMs(data?.retryAfterMs),
+      quota: data?.quota,
     },
   };
+}
+
+function normalizeNextAction(value: unknown): string | null | undefined {
+  return typeof value === 'string' || value === null ? value : undefined;
+}
+
+function normalizeRetryAfterMs(value: unknown): number | null | undefined {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? value
+    : value === null
+      ? null
+      : undefined;
 }
 
 function normalizeSearchQuery(

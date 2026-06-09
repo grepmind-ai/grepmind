@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: grepmind-app
+  labels:
+    app.kubernetes.io/name: grepmind
+    app.kubernetes.io/component: app
+    grepmind.zaytra.dev/process-role: app
+    grepmind.zaytra.dev/deployment-context: beta
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: grepmind
+    app.kubernetes.io/component: app
+  ports:
+    - name: http
+      port: 3847
+      targetPort: http

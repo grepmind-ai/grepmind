@@ -1,4 +1,5 @@
 import { AgentBackendClientError } from '../../backend/agent-backend-client.js';
+import { AgentRealtimeSearchError } from '../../backend/agent-backend-realtime-client.js';
 import { AgentCommandExecutor } from '../../commands/agent-command-executor.js';
 import { SearchHeadService } from '../../services/search-head-service.js';
 import {
@@ -357,6 +358,14 @@ export function toRpcError(error: unknown): AgentRpcError {
         status: error.status,
         details: error.details,
       },
+    };
+  }
+  if (error instanceof AgentRealtimeSearchError) {
+    return {
+      code: error.code,
+      message: error.message,
+      retryable: error.retryable,
+      details: error.details,
     };
   }
   if (error instanceof Error) {

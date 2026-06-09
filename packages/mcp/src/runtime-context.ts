@@ -1,20 +1,18 @@
-import { execFile } from 'node:child_process';
-import { createHash } from 'node:crypto';
-import { access, readFile, realpath, stat } from 'node:fs/promises';
+import { access, readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import process from 'node:process';
-import { promisify } from 'node:util';
 import {
   AgentRuntimeClient,
+  AgentRuntimeClientError,
   ensureAgentReady,
+  ensureWorkspaceRegistered,
   getAgentAuthStatus,
   resolveAgentDataDir,
   type AgentControlCommand,
   type LocalProjectRecord,
 } from '@grepmind/agent-rpc';
 
-const execFileAsync = promisify(execFile);
 const DEFAULT_MCP_STARTUP_TIMEOUT_MS = 120_000;
 
 export interface McpWorkspaceContext {
@@ -67,12 +65,11 @@ export async function prepareMcpRuntime(options: {
   }
 
   const client = new AgentRuntimeClient(dataDir);
-  const project = await resolveOrRegisterWorkspaceProject({
+  const project = await ensureWorkspaceRegistered({
     client,
     workspacePath,
-    dataDir,
-    agentEntrypointPath: agentCommand.entrypointPath,
-    startupTimeoutMs,
+    idempotencyPrefix: 'mcp-register',
+    timeoutMs: startupTimeoutMs,
   });
 
   cachedRuntimeClient = client;
@@ -164,273 +161,6 @@ export function resolveMcpStartupTimeoutMs(): number {
   return value;
 }
 
-async function resolveOrRegisterWorkspaceProject(input: {
-  client: AgentRuntimeClient;
-  workspacePath: string;
-  dataDir: string;
-  agentEntrypointPath: string;
-  startupTimeoutMs: number;
-}): Promise<LocalProjectRecord> {
-  const workspaceFingerprint = await computeWorkspaceFingerprint(
-    input.workspacePath,
-  );
-  const matchingProject = await findUniqueRegisteredProject({
-    client: input.client,
-    workspacePath: input.workspacePath,
-    workspaceFingerprint,
-    dataDir: input.dataDir,
-    agentEntrypointPath: input.agentEntrypointPath,
-  });
-
-  if (matchingProject) {
-    return matchingProject;
-  }
-
-  const metadata = await collectWorkspaceRegistrationMetadata({
-    workspacePath: input.workspacePath,
-    workspaceFingerprint,
-    dataDir: input.dataDir,
-    agentEntrypointPath: input.agentEntrypointPath,
-  });
-  const idempotencyMaterial = `${workspaceFingerprint}\0${metadata.remoteUrl}`;
-  const idempotencyKey = `mcp-register:${sha256(idempotencyMaterial)}`;
-
-  try {
-    const result = await input.client.registerProject(
-      {
-        ...metadata,
-        idempotencyKey,
-      },
-      { timeoutMs: input.startupTimeoutMs },
-    );
-    return result.snapshot.project;
-  } catch (error) {
-    throw new Error(
-      `Grepmind MCP could not register workspace ${input.workspacePath}: ${formatError(error)}`,
-    );
-  }
-}
-
-async function findUniqueRegisteredProject(input: {
-  client: AgentRuntimeClient;
-  workspacePath: string;
-  workspaceFingerprint: string;
-  dataDir: string;
-  agentEntrypointPath: string;
-}): Promise<LocalProjectRecord | null> {
-  const startupRealpath = await realpath(input.workspacePath);
-  const projects = await input.client.listProjects();
-  const matches = new Map<number, LocalProjectRecord>();
-
-  for (const project of projects.items) {
-    if (
-      await matchesRegisteredWorkspace(project, {
-        workspacePath: input.workspacePath,
-        workspaceRealpath: startupRealpath,
-        workspaceFingerprint: input.workspaceFingerprint,
-      })
-    ) {
-      matches.set(project.bindingId, project);
-    }
-  }
-
-  const uniqueMatches = [...matches.values()];
-  if (uniqueMatches.length === 0) {
-    return null;
-  }
-  if (uniqueMatches.length === 1) {
-    return uniqueMatches[0]!;
-  }
-
-  throw new Error(
-    `Grepmind MCP found multiple local project bindings for ${input.workspacePath}: ${uniqueMatches.map((project) => `#${project.bindingId}`).join(', ')}. MCP cannot choose between duplicate bindings; clean them manually and retry.`,
-  );
-}
-
-async function matchesRegisteredWorkspace(
-  project: LocalProjectRecord,
-  workspace: {
-    workspacePath: string;
-    workspaceRealpath: string;
-    workspaceFingerprint: string;
-  },
-): Promise<boolean> {
-  if (path.resolve(project.workspacePath) === workspace.workspacePath) {
-    return true;
-  }
-
-  if (project.workspaceFingerprint === workspace.workspaceFingerprint) {
-    return true;
-  }
-
-  try {
-    return (
-      (await realpath(project.workspacePath)) === workspace.workspaceRealpath
-    );
-  } catch {
-    return false;
-  }
-}
-
-async function collectWorkspaceRegistrationMetadata(input: {
-  workspacePath: string;
-  workspaceFingerprint: string;
-  dataDir: string;
-  agentEntrypointPath: string;
-}): Promise<{
-  remoteUrl: string;
-  repoFullName?: string;
-  defaultBranch?: string;
-  displayName: string;
-  workspacePath: string;
-  workspaceFingerprint: string;
-  preferredActiveBranch?: string;
-}> {
-  let remoteUrl: string;
-  try {
-    remoteUrl = await resolveWorkspaceRemoteUrl(input.workspacePath);
-  } catch (error) {
-    throw new Error(
-      `Workspace ${input.workspacePath} is not registered and does not have a readable origin remote, so Grepmind MCP cannot auto-register it. Configure origin, then retry MCP startup or register this workspace manually. ${formatError(error)}`,
-    );
-  }
-
-  return {
-    remoteUrl,
-    repoFullName: deriveRepoFullNameFromRemoteUrl(remoteUrl),
-    defaultBranch: await resolveWorkspaceDefaultBranch(input.workspacePath),
-    displayName: path.basename(input.workspacePath),
-    workspacePath: input.workspacePath,
-    workspaceFingerprint: input.workspaceFingerprint,
-    preferredActiveBranch: await resolveCurrentBranch(input.workspacePath),
-  };
-}
-
-async function computeWorkspaceFingerprint(
-  workspacePath: string,
-): Promise<string> {
-  const resolved = await realpath(workspacePath);
-  const info = await stat(resolved);
-  const hash = createHash('sha256');
-  hash.update(resolved);
-  hash.update(':');
-  hash.update(String(info.dev));
-  hash.update(':');
-  hash.update(String(info.ino));
-  return hash.digest('hex');
-}
-
-async function resolveWorkspaceRemoteUrl(
-  workspacePath: string,
-): Promise<string> {
-  const remote = await runGit(workspacePath, ['remote', 'get-url', 'origin']);
-  if (!remote) {
-    throw new Error('git remote get-url origin returned empty output');
-  }
-  return remote;
-}
-
-async function resolveWorkspaceDefaultBranch(
-  workspacePath: string,
-): Promise<string | undefined> {
-  try {
-    const remoteHead = await runGit(workspacePath, [
-      'symbolic-ref',
-      '--short',
-      'refs/remotes/origin/HEAD',
-    ]);
-    const branch = remoteHead.startsWith('origin/')
-      ? remoteHead.slice('origin/'.length)
-      : remoteHead;
-    return branch || undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-async function resolveCurrentBranch(
-  workspacePath: string,
-): Promise<string | undefined> {
-  try {
-    const branch = await runGit(workspacePath, ['branch', '--show-current']);
-    return branch || undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-async function runGit(workspacePath: string, args: string[]): Promise<string> {
-  const { stdout } = await execFileAsync(
-    'git',
-    ['-C', workspacePath, ...args],
-    {
-      encoding: 'utf8',
-      env: {
-        ...process.env,
-        GIT_TERMINAL_PROMPT: '0',
-      },
-    },
-  );
-
-  return stdout.trim();
-}
-
-function deriveRepoFullNameFromRemoteUrl(
-  remoteUrl: string,
-): string | undefined {
-  const parsed = parseRemoteUrlPath(remoteUrl);
-  if (!parsed || parsed.pathSegments.length !== 2) {
-    return undefined;
-  }
-
-  return parsed.pathSegments.join('/');
-}
-
-function parseRemoteUrlPath(
-  remoteUrl: string,
-): { pathSegments: string[] } | null {
-  const raw = remoteUrl.trim();
-  const scp = /^(?:[A-Za-z0-9._-]+)@(?<host>[^:/\s]+):(?<path>[^?#\s]+)$/.exec(
-    raw,
-  );
-  if (scp?.groups?.path && !/^\d+\//.test(scp.groups.path)) {
-    return normalizeRemotePath(scp.groups.path);
-  }
-
-  if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(raw)) {
-    return null;
-  }
-
-  try {
-    const url = new URL(raw);
-    if (url.search || url.hash || url.password) {
-      return null;
-    }
-    if (url.protocol === 'https:' && url.username) {
-      return null;
-    }
-    if (url.protocol !== 'https:' && url.protocol !== 'ssh:') {
-      return null;
-    }
-    return normalizeRemotePath(url.pathname);
-  } catch {
-    return null;
-  }
-}
-
-function normalizeRemotePath(
-  pathname: string,
-): { pathSegments: string[] } | null {
-  const trimmed = pathname.trim().replace(/^\/+/, '').replace(/\/+$/, '');
-  const withoutGit = trimmed.replace(/\.git$/i, '');
-  const pathSegments = withoutGit
-    .split('/')
-    .map((segment) => segment.trim().toLowerCase())
-    .filter(Boolean);
-
-  return pathSegments.length >= 2 ? { pathSegments } : null;
-}
-
 function normalizeStartupPreparationError(
   error: unknown,
   context: {
@@ -441,6 +171,13 @@ function normalizeStartupPreparationError(
     hostname?: string;
   },
 ): Error {
+  if (error instanceof AgentRuntimeClientError) {
+    const stableError = normalizeStableStartupError(error, context);
+    if (stableError) {
+      return stableError;
+    }
+  }
+
   const message = formatError(error);
   if (/timed out|timeout|RUNTIME_START_TIMEOUT/i.test(message)) {
     return new Error(
@@ -448,15 +185,62 @@ function normalizeStartupPreparationError(
     );
   }
 
-  if (/not authenticated|credentials/i.test(message)) {
+  if (
+    /not authenticated|credentials|account session|AGENT_ACCOUNT_SESSION/i.test(
+      message,
+    )
+  ) {
     return new Error(
-      `Grepmind agent authentication is required before MCP can connect. Set GREPMIND_AGENT_HOSTNAME so startup can open OAuth, or pre-login with "${formatAgentLoginCommand(context.agentEntrypointPath, context.dataDir, context.hostname ?? '<host>')}". Original error: ${message}`,
+      `Grepmind agent authentication and account selection are required before MCP can connect. Set GREPMIND_AGENT_HOSTNAME so startup can open OAuth/account selection, or pre-login with "${formatAgentLoginCommand(context.agentEntrypointPath, context.dataDir, context.hostname ?? '<host>')}". Original error: ${message}`,
     );
   }
 
   return new Error(
     `Grepmind MCP could not prepare the bundled agent runtime for ${context.workspacePath}: ${message}`,
   );
+}
+
+function normalizeStableStartupError(
+  error: AgentRuntimeClientError,
+  context: {
+    workspacePath: string;
+    dataDir: string;
+    startupTimeoutMs: number;
+    agentEntrypointPath: string;
+    hostname?: string;
+  },
+): Error | null {
+  switch (error.code) {
+    case 'AUTH_AGENT_CREDENTIAL_REQUIRED':
+    case 'AUTH_OAUTH_TOKEN_REQUIRED':
+    case 'AUTH_USER_SUBJECT_REQUIRED':
+    case 'AGENT_ACCOUNT_SESSION_REQUIRED':
+    case 'AGENT_ACCOUNT_SESSION_EXPIRED':
+    case 'AGENT_ACCOUNT_SESSION_REVOKED':
+    case 'AGENT_UPGRADE_REQUIRED':
+      return new Error(
+        `Grepmind agent authentication and account selection are required before MCP can connect. Set GREPMIND_AGENT_HOSTNAME so startup can open OAuth/account selection, or pre-login with "${formatAgentLoginCommand(context.agentEntrypointPath, context.dataDir, context.hostname ?? '<host>')}".`,
+      );
+    case 'ACCOUNT_SUSPENDED':
+      return new Error(
+        'The selected Grepmind account is not active. Contact support or select another account before starting MCP.',
+      );
+    case 'PLAN_REQUIRED':
+      return new Error(
+        'The selected Grepmind account needs an active plan before MCP can use search. Open the Grepmind app, select a plan, then restart MCP.',
+      );
+    case 'PLAN_INACTIVE':
+      return new Error(
+        'The selected Grepmind account plan is not active. Renew the plan or contact support, then restart MCP.',
+      );
+    case 'RUNTIME_BACKPRESSURE':
+    case 'RETRYABLE_BACKEND_ERROR':
+      return new Error(
+        `Grepmind backend is temporarily unavailable while preparing MCP for ${context.workspacePath}. Retry shortly.`,
+      );
+    default:
+      return null;
+  }
 }
 
 function formatAgentLoginCommand(
@@ -482,10 +266,6 @@ function formatCommand(args: string[]): string {
 
 function quoteShellArg(value: string): string {
   return /^[A-Za-z0-9_@%+=:,./-]+$/.test(value) ? value : JSON.stringify(value);
-}
-
-function sha256(value: string): string {
-  return createHash('sha256').update(value).digest('hex');
 }
 
 function formatError(error: unknown): string {

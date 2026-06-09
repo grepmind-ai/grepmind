@@ -201,13 +201,133 @@ function normalizeAgentSearchError(
     );
   }
 
-  if (isSearchIndexNotReadyError(error)) {
+  if (error instanceof AgentRuntimeClientError) {
+    const stableError = normalizeStableAgentRuntimeSearchError(
+      error,
+      workspaceContext,
+      resolvedWorkspacePath,
+    );
+    if (stableError) {
+      return stableError;
+    }
+  }
+
+  if (
+    !(error instanceof AgentRuntimeClientError) &&
+    isSearchIndexNotReadyError(error)
+  ) {
     return new Error(
       `Search index is not ready yet for workspace ${resolvedWorkspacePath} (binding #${workspaceContext.bindingId}). Wait for Grepmind background sync to finish, then retry. Original error: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
 
   return error instanceof Error ? error : new Error(String(error));
+}
+
+function normalizeStableAgentRuntimeSearchError(
+  error: AgentRuntimeClientError,
+  workspaceContext: {
+    workspacePath: string;
+    bindingId: number;
+    dataDir: string;
+  },
+  resolvedWorkspacePath: string,
+): Error | null {
+  switch (error.code) {
+    case 'REVISION_INCOMPLETE':
+      return new Error(
+        `Search index is not ready yet for workspace ${resolvedWorkspacePath} (binding #${workspaceContext.bindingId}). Wait for Grepmind background sync to finish, then retry.`,
+      );
+    case 'PLAN_REQUIRED':
+      return new Error(
+        'Grepmind search requires an active account plan. Open the Grepmind app, select this account, choose a plan, then retry the MCP search.',
+      );
+    case 'PLAN_INACTIVE':
+      return new Error(
+        'The selected Grepmind account plan is not active. Renew the plan or contact support, then retry the MCP search.',
+      );
+    case 'QUOTA_EXCEEDED':
+      return new Error(formatQuotaExceededMessage(error));
+    case 'AGENT_ACCOUNT_SESSION_REQUIRED':
+    case 'AGENT_ACCOUNT_SESSION_EXPIRED':
+    case 'AGENT_ACCOUNT_SESSION_REVOKED':
+    case 'AGENT_UPGRADE_REQUIRED':
+      return new Error(
+        'Grepmind agent account selection is required. Re-run agent login/account selection for this workspace, then restart the MCP server.',
+      );
+    case 'RUNTIME_BACKPRESSURE':
+      return new Error(formatBackpressureMessage(error));
+    case 'RUNTIME_PROVIDER_CONFIG_DEGRADED':
+      return new Error(
+        'Grepmind runtime provider configuration needs support before search can continue.',
+      );
+    case 'PROJECT_NOT_FOUND':
+      return new Error(
+        `Grepmind MCP prepared binding #${workspaceContext.bindingId} for ${resolvedWorkspacePath}, but the backend no longer exposes that project. Restart this MCP server to re-run workspace registration.`,
+      );
+    case 'SEARCH_UNAVAILABLE':
+      return new Error('Grepmind search is not available on this server.');
+    case 'SEARCH_FAILED':
+    case 'RETRYABLE_BACKEND_ERROR':
+      return new Error('Grepmind search failed. Try again shortly.');
+    case 'QUOTA_CONFIG_INVALID':
+      return new Error(
+        'Grepmind quota configuration needs support before search can continue.',
+      );
+    default:
+      return null;
+  }
+}
+
+function formatQuotaExceededMessage(error: AgentRuntimeClientError): string {
+  const nextAction = findDetailValue(error.details, 'nextAction');
+  if (nextAction === 'wait_for_reset') {
+    const resetAt = findDetailValue(error.details, 'resetAt');
+    return typeof resetAt === 'string' && resetAt
+      ? `Grepmind search quota is exhausted. Retry after the quota resets at ${resetAt}.`
+      : 'Grepmind search quota is exhausted. Retry after the quota resets.';
+  }
+  if (nextAction === 'reduce_usage') {
+    return 'Grepmind search quota is exhausted. Reduce usage or try a smaller search later.';
+  }
+  return 'Grepmind search quota is exhausted. Contact support to continue.';
+}
+
+function formatBackpressureMessage(error: AgentRuntimeClientError): string {
+  const retryAfterMs = findDetailValue(error.details, 'retryAfterMs');
+  if (
+    typeof retryAfterMs === 'number' &&
+    Number.isFinite(retryAfterMs) &&
+    retryAfterMs > 0
+  ) {
+    return `Grepmind runtime is busy. Retry in ${Math.ceil(retryAfterMs / 1000)}s.`;
+  }
+  return 'Grepmind runtime is busy. Retry shortly.';
+}
+
+function findDetailValue(details: unknown, key: string, depth = 0): unknown {
+  if (
+    !details ||
+    typeof details !== 'object' ||
+    Array.isArray(details) ||
+    depth > 4
+  ) {
+    return undefined;
+  }
+  const record = details as Record<string, unknown>;
+  if (key in record) {
+    return record[key];
+  }
+  if ('quota' in record) {
+    const fromQuota = findDetailValue(record.quota, key, depth + 1);
+    if (fromQuota !== undefined) {
+      return fromQuota;
+    }
+  }
+  if ('details' in record) {
+    return findDetailValue(record.details, key, depth + 1);
+  }
+  return undefined;
 }
 
 function isSearchIndexNotReadyError(error: unknown): boolean {

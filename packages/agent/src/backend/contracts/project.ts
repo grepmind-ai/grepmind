@@ -45,7 +45,7 @@ export interface BranchDescriptor {
 export interface ProjectBindingDto {
   bindingId: number;
   repoId: number;
-  userRepoId?: number | null;
+  accountRepoId?: number | null;
   repoFullName: string;
   displayName: string;
   defaultBranch: string;
@@ -56,7 +56,7 @@ export interface ProjectBindingDto {
 }
 
 export interface RegisterProjectRequest {
-  userRepoId?: number;
+  accountRepoId?: number;
   remoteUrl: string;
   repoFullName?: string;
   defaultBranch?: string;

@@ -67,6 +67,7 @@ export class AgentRunner {
       this.realtimeClient = new AgentBackendRealtimeClient({
         baseUrl: this.config.apiBaseUrl,
         accessToken: backendOptions.accessToken,
+        accountSession: backendOptions.accountSession,
         deviceId: this.config.deviceId,
         deviceName: this.config.name,
         heartbeatMs: this.bootstrap.defaultWebSocketHeartbeatMs,

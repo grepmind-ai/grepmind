@@ -1,4 +1,5 @@
 import type { AgentLogger } from '../../logging/agent-logger.js';
+import type { AgentBackendAccountSessionProvider } from '../account-session.js';
 import type { AgentBackendAccessTokenProvider } from '../agent-backend-client.js';
 import type {
   SearchChunkPointer,
@@ -17,6 +18,7 @@ export interface AgentBackendRealtimeBinding {
 export interface AgentBackendRealtimeClientOptions {
   baseUrl: string;
   accessToken?: AgentBackendAccessTokenProvider;
+  accountSession?: AgentBackendAccountSessionProvider;
   deviceId: string;
   deviceName: string;
   protocolVersion?: string;

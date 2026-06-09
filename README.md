@@ -39,6 +39,28 @@ npm install -g @grepmind/mcp
 
 ## Quick Start
 
+Configure Grepmind MCP search from inside a Git workspace:
+
+```sh
+grepmind init --codex
+grepmind init --cursor --yes
+grepmind init --all-detected
+grepmind init --codex --dry-run
+```
+
+`grepmind init` writes commit-safe `.grepmind.json`, updates selected
+project-local MCP client config, starts or reuses the local agent runtime, and
+registers or reuses the current Git workspace binding. It does not write OAuth
+tokens, refresh tokens, account session tokens, binding ids, secure-storage keys,
+or an absolute workspace path into project files by default.
+
+`--yes` skips terminal prompts but can still open the OAuth browser flow.
+`--yes --no-open` is fully non-interactive and fails clearly when login or
+account selection is required.
+
+Initial MCP client support covers Codex, Claude Code, and Cursor. OpenCode and
+Gemini CLI are phase 2 clients.
+
 ```sh
 grepmind auth login \
   --hostname your-grepmind-server.example \
@@ -100,7 +122,7 @@ npm run agent:dev -- help
 packages/
   agent/      Local runtime and lower-level CLI
   agent-rpc/  Runtime socket client and protocol types
-  deployment/ Docker Compose and AWS Terraform deployment templates
+  deployment/ Docker Compose, AWS Terraform and Kubernetes beta deployment templates
   grepmind/   Public CLI wrapper
   mcp/        MCP stdio server
 tools/        Shared build and release scripts

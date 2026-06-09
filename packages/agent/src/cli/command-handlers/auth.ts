@@ -1,5 +1,4 @@
-import { createHash, randomBytes, randomUUID } from 'node:crypto';
-import http from 'node:http';
+import { randomBytes, randomUUID } from 'node:crypto';
 import process from 'node:process';
 import { spawn } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -8,10 +7,13 @@ import {
   AgentBackendClient,
   AgentBackendClientError,
 } from '../../backend/agent-backend-client.js';
-import type {
-  AgentAuthMetadataResponse,
-  OAuthTokenResponse,
-} from '../../backend/contracts/index.js';
+import {
+  AGENT_ACCOUNT_SESSION_CAPABILITY,
+  AGENT_ACCOUNT_SESSION_CAPABILITY_HEADER,
+  AGENT_ACCOUNT_SESSION_DEVICE_HEADER,
+  AGENT_ACCOUNT_SESSION_HEADER,
+} from '../../backend/account-session.js';
+import type { OAuthTokenResponse } from '../../backend/contracts/index.js';
 import {
   DEFAULT_AGENT_NAME,
   DEFAULT_HEAD_POLL_INTERVAL_MS,
@@ -37,23 +39,15 @@ import {
 } from '../flags.js';
 import { loadOptionalConfig } from '../command-support.js';
 import type { ParsedArgs } from '../parse-args.js';
+import { issueAgentAccountSessionWithBrowser } from './account-session-browser.js';
+import {
+  buildAuthorizationUrl,
+  buildCodeChallenge,
+  startCallbackServer,
+} from './oauth-browser.js';
 
 const DEFAULT_SCOPES = ['profile', 'email'] as const;
 const CALLBACK_TIMEOUT_MS = 10 * 60 * 1000;
-
-interface CallbackResult {
-  code?: string;
-  state?: string;
-  error?: string;
-  errorDescription?: string;
-}
-
-interface CallbackServer {
-  port: number;
-  redirectUri: string;
-  waitForCallback(): Promise<CallbackResult>;
-  close(): Promise<void>;
-}
 
 export async function authCommand(args: ParsedArgs): Promise<void> {
   const subcommand = args.positionals[0] ?? 'status';
@@ -103,9 +97,7 @@ async function authLoginCommand(args: ParsedArgs): Promise<void> {
     ? randomBase64Url(32)
     : undefined;
   const codeVerifier = randomBase64Url(64);
-  const codeChallenge = createHash('sha256')
-    .update(codeVerifier)
-    .digest('base64url');
+  const codeChallenge = buildCodeChallenge(codeVerifier);
   const authorizationUrl = buildAuthorizationUrl({
     metadata,
     redirectUri: callbackServer.redirectUri,
@@ -198,48 +190,39 @@ async function authLoginCommand(args: ParsedArgs): Promise<void> {
       accountSubject,
       accountEmail,
     };
-    const config: AgentCliConfig = {
-      apiBaseUrl,
-      name:
-        getStringFlag(args, 'name') ??
-        process.env.GREPMIND_AGENT_NAME ??
-        existingConfig?.name ??
-        DEFAULT_AGENT_NAME,
-      pollIntervalMs:
-        getIntegerFlag(args, 'poll-interval-ms') ??
-        toInteger(process.env.GREPMIND_AGENT_POLL_INTERVAL_MS) ??
-        existingConfig?.pollIntervalMs ??
-        DEFAULT_POLL_INTERVAL_MS,
-      headPollIntervalMs:
-        getIntegerFlag(args, 'head-poll-interval-ms') ??
-        toInteger(process.env.GREPMIND_AGENT_HEAD_POLL_INTERVAL_MS) ??
-        existingConfig?.headPollIntervalMs ??
-        DEFAULT_HEAD_POLL_INTERVAL_MS,
-      deviceId:
-        nonEmptyString(
-          getStringFlag(args, 'device-id') ??
-            process.env.GREPMIND_AGENT_DEVICE_ID,
-        ) ??
-        existingConfig?.deviceId ??
-        randomUUID(),
+    const config = buildAuthenticatedConfig({
+      args,
+      existingConfig,
       dataDir,
-      auth: {
-        credentialType: 'oauth_token',
-        host: hostname,
-        accountSubject,
-        accountEmail,
-        expiresAt,
-        credentialStoreKey,
-        credentialStoreKind: store.kind(),
-        oauthClientId: metadata.clientId,
-      },
-    };
+      hostname,
+      apiBaseUrl,
+      accountSubject,
+      accountEmail,
+      expiresAt,
+      credentialStoreKey,
+      credentialStoreKind: store.kind(),
+      oauthClientId: metadata.clientId,
+    });
+    const accountSession = await issueAgentAccountSessionWithBrowser({
+      apiBaseUrl,
+      deviceId: config.deviceId,
+      noOpen: hasBooleanFlag(args, 'no-open'),
+      agentConsole,
+      openBrowser,
+      withTimeout,
+    });
+    credential.accountSession = accountSession;
+
     const bootstrapAccessToken = tokenResponse.access_token!;
     const bootstrapClient = new AgentBackendClient({
       baseUrl: apiBaseUrl,
       accessToken: () => bootstrapAccessToken,
       defaultHeaders: {
         'X-Grepmind-Agent-Name': config.name,
+        [AGENT_ACCOUNT_SESSION_CAPABILITY_HEADER]:
+          AGENT_ACCOUNT_SESSION_CAPABILITY,
+        [AGENT_ACCOUNT_SESSION_DEVICE_HEADER]: config.deviceId,
+        [AGENT_ACCOUNT_SESSION_HEADER]: accountSession.token,
       },
       logger: agentConsole,
     });
@@ -260,7 +243,7 @@ async function authLoginCommand(args: ParsedArgs): Promise<void> {
 
     agentConsole.success(
       'config',
-      `Authenticated ${accountEmail ?? accountSubject ?? 'account'} for ${hostname}`,
+      `Authenticated ${accountEmail ?? accountSubject ?? 'account'} for ${hostname} (${accountSession.account.displayName})`,
     );
     agentConsole.info(
       'config',
@@ -293,6 +276,57 @@ function validateAuthLoginArgs(args: ParsedArgs): void {
   }
 }
 
+function buildAuthenticatedConfig(input: {
+  args: ParsedArgs;
+  existingConfig: AgentCliConfig | null;
+  dataDir: string;
+  hostname: string;
+  apiBaseUrl: string;
+  accountSubject: string | null;
+  accountEmail: string | null;
+  expiresAt: string;
+  credentialStoreKey: string;
+  credentialStoreKind: string;
+  oauthClientId: string;
+}): AgentCliConfig {
+  return {
+    apiBaseUrl: input.apiBaseUrl,
+    name:
+      getStringFlag(input.args, 'name') ??
+      process.env.GREPMIND_AGENT_NAME ??
+      input.existingConfig?.name ??
+      DEFAULT_AGENT_NAME,
+    pollIntervalMs:
+      getIntegerFlag(input.args, 'poll-interval-ms') ??
+      toInteger(process.env.GREPMIND_AGENT_POLL_INTERVAL_MS) ??
+      input.existingConfig?.pollIntervalMs ??
+      DEFAULT_POLL_INTERVAL_MS,
+    headPollIntervalMs:
+      getIntegerFlag(input.args, 'head-poll-interval-ms') ??
+      toInteger(process.env.GREPMIND_AGENT_HEAD_POLL_INTERVAL_MS) ??
+      input.existingConfig?.headPollIntervalMs ??
+      DEFAULT_HEAD_POLL_INTERVAL_MS,
+    deviceId:
+      nonEmptyString(
+        getStringFlag(input.args, 'device-id') ??
+          process.env.GREPMIND_AGENT_DEVICE_ID,
+      ) ??
+      input.existingConfig?.deviceId ??
+      randomUUID(),
+    dataDir: input.dataDir,
+    auth: {
+      credentialType: 'oauth_token',
+      host: input.hostname,
+      accountSubject: input.accountSubject,
+      accountEmail: input.accountEmail,
+      expiresAt: input.expiresAt,
+      credentialStoreKey: input.credentialStoreKey,
+      credentialStoreKind: input.credentialStoreKind,
+      oauthClientId: input.oauthClientId,
+    },
+  };
+}
+
 async function authStatusCommand(args: ParsedArgs): Promise<void> {
   rejectUnexpectedPositionals(args, 1);
   rejectUnknownFlags(args, ['data-dir', 'trace']);
@@ -307,13 +341,24 @@ async function authStatusCommand(args: ParsedArgs): Promise<void> {
   }
 
   let storeStatus = 'unknown';
+  let accountSessionStatus = 'unknown';
+  let accountSessionLabel: string | null = null;
+  let accountSessionExpiresAt: string | null = null;
   try {
     const store = createCredentialStore();
-    storeStatus = (await store.get(config.auth.credentialStoreKey))
-      ? 'available'
+    const credential = await store.get(config.auth.credentialStoreKey);
+    storeStatus = credential ? 'available' : 'missing';
+    accountSessionStatus = credential?.accountSession
+      ? isExpired(credential.accountSession.expiresAt)
+        ? 'expired'
+        : 'available'
       : 'missing';
+    accountSessionLabel =
+      credential?.accountSession?.account.displayName ?? null;
+    accountSessionExpiresAt = credential?.accountSession?.expiresAt ?? null;
   } catch {
     storeStatus = 'unavailable';
+    accountSessionStatus = 'unavailable';
   }
 
   agentConsole.info('config', `Backend: ${config.apiBaseUrl}`);
@@ -324,6 +369,16 @@ async function authStatusCommand(args: ParsedArgs): Promise<void> {
   );
   agentConsole.info('config', `Expires: ${config.auth.expiresAt}`);
   agentConsole.info('config', `Refresh: ${storeStatus}`);
+  agentConsole.info('config', `Account session: ${accountSessionStatus}`);
+  if (accountSessionLabel) {
+    agentConsole.info('config', `Selected account: ${accountSessionLabel}`);
+  }
+  if (accountSessionExpiresAt) {
+    agentConsole.info(
+      'config',
+      `Account session expires: ${accountSessionExpiresAt}`,
+    );
+  }
   agentConsole.info('config', `Storage: ${config.auth.credentialStoreKind}`);
 }
 
@@ -344,11 +399,51 @@ async function authLogoutCommand(args: ParsedArgs): Promise<void> {
   }
 
   const store = createCredentialStore();
+  const credential = await store
+    .get(config.auth.credentialStoreKey)
+    .catch(() => null);
+  if (credential?.accountSession) {
+    await revokePresentedAccountSession(credential).catch((error) => {
+      agentConsole.warn(
+        'config',
+        `AGENT_ACCOUNT_SESSION_REVOKE_FAILED: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    });
+  }
   await store.delete(config.auth.credentialStoreKey);
   const nextConfig: AgentCliConfig = { ...config };
   delete nextConfig.auth;
   await saveAgentCliConfig(nextConfig);
   agentConsole.info('config', 'Removed local Grepmind CLI OAuth credential');
+}
+
+async function revokePresentedAccountSession(
+  credential: StoredOAuthCredential,
+): Promise<void> {
+  const session = credential.accountSession;
+  if (!session) {
+    return;
+  }
+
+  const response = await fetch(
+    `${credential.apiBaseUrl.replace(/\/+$/, '')}/api/agent/account-sessions/revoke`,
+    {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${credential.accessToken}`,
+        [AGENT_ACCOUNT_SESSION_CAPABILITY_HEADER]:
+          AGENT_ACCOUNT_SESSION_CAPABILITY,
+        [AGENT_ACCOUNT_SESSION_DEVICE_HEADER]: session.deviceId,
+        [AGENT_ACCOUNT_SESSION_HEADER]: session.token,
+      },
+      body: '{}',
+    },
+  );
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`);
+  }
 }
 
 function requireHostname(args: ParsedArgs): string {
@@ -393,112 +488,6 @@ function parseScopes(value: string | undefined): string[] {
   return scopes;
 }
 
-async function startCallbackServer(
-  metadata: AgentAuthMetadataResponse,
-  requestedPort: number | undefined,
-): Promise<CallbackServer> {
-  const candidatePorts =
-    requestedPort == null ? metadata.callbackPorts : [requestedPort];
-  if (
-    requestedPort != null &&
-    !metadata.callbackPorts.includes(requestedPort)
-  ) {
-    throw new Error(
-      'AUTH_CALLBACK_PORT_UNAVAILABLE: --callback-port must be listed in auth metadata',
-    );
-  }
-
-  const errors: string[] = [];
-  for (const port of candidatePorts) {
-    try {
-      return await bindCallbackServer(metadata, port);
-    } catch (error) {
-      errors.push(error instanceof Error ? error.message : String(error));
-    }
-  }
-
-  throw new Error(`AUTH_CALLBACK_PORT_UNAVAILABLE: ${errors.join('; ')}`);
-}
-
-function bindCallbackServer(
-  metadata: AgentAuthMetadataResponse,
-  port: number,
-): Promise<CallbackServer> {
-  let settled = false;
-  let resolveCallback: (value: CallbackResult) => void = () => {};
-  const callbackPromise = new Promise<CallbackResult>((resolve) => {
-    resolveCallback = resolve;
-  });
-  const server = http.createServer((request, response) => {
-    const url = new URL(request.url ?? '/', `http://127.0.0.1:${port}`);
-    if (url.pathname !== metadata.callbackPath) {
-      response.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
-      response.end('Not found');
-      return;
-    }
-    if (settled) {
-      response.writeHead(409, { 'Content-Type': 'text/plain; charset=utf-8' });
-      response.end('Authorization callback already received.');
-      return;
-    }
-    settled = true;
-    resolveCallback({
-      code: url.searchParams.get('code') ?? undefined,
-      state: url.searchParams.get('state') ?? undefined,
-      error: url.searchParams.get('error') ?? undefined,
-      errorDescription: url.searchParams.get('error_description') ?? undefined,
-    });
-    response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    response.end(
-      '<!doctype html><title>Grepmind CLI</title><p>Grepmind CLI authorization complete. You can close this tab.</p>',
-    );
-  });
-
-  return new Promise<CallbackServer>((resolve, reject) => {
-    const onError = (error: Error) => {
-      server.off('listening', onListening);
-      reject(error);
-    };
-    const onListening = () => {
-      server.off('error', onError);
-      resolve({
-        port,
-        redirectUri: `http://127.0.0.1:${port}${metadata.callbackPath}`,
-        waitForCallback: () => callbackPromise,
-        close: () =>
-          new Promise<void>((closeResolve) => {
-            server.close(() => closeResolve());
-          }),
-      });
-    };
-    server.once('error', onError);
-    server.once('listening', onListening);
-    server.listen(port, '127.0.0.1');
-  });
-}
-
-function buildAuthorizationUrl(input: {
-  metadata: AgentAuthMetadataResponse;
-  redirectUri: string;
-  scopes: string[];
-  state: string;
-  nonce?: string;
-  codeChallenge: string;
-}): string {
-  const url = new URL(input.metadata.authorizationEndpoint);
-  url.searchParams.set('response_type', 'code');
-  url.searchParams.set('client_id', input.metadata.clientId);
-  url.searchParams.set('redirect_uri', input.redirectUri);
-  url.searchParams.set('scope', input.scopes.join(' '));
-  url.searchParams.set('state', input.state);
-  if (input.nonce) {
-    url.searchParams.set('nonce', input.nonce);
-  }
-  url.searchParams.set('code_challenge', input.codeChallenge);
-  url.searchParams.set('code_challenge_method', 'S256');
-  return url.toString();
-}
-
 function validateTokenResponse(response: OAuthTokenResponse): void {
   if (!response.access_token) {
     throw new Error(
@@ -518,6 +507,11 @@ function validateTokenResponse(response: OAuthTokenResponse): void {
       'AUTH_REFRESH_TOKEN_REQUIRED: token response did not include a refresh token',
     );
   }
+}
+
+function isExpired(value: string): boolean {
+  const expiresAt = Date.parse(value);
+  return Number.isFinite(expiresAt) && expiresAt <= Date.now();
 }
 
 function randomBase64Url(bytes: number): string {

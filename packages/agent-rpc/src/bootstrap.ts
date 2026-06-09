@@ -8,6 +8,10 @@ import {
   AgentRuntimeClientError,
   isRuntimeUnavailableError,
 } from './client.js';
+import {
+  inspectCredentialPayload,
+  type AgentCredentialInspection,
+} from './credential-inspection.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -60,6 +64,15 @@ export type AgentCredentialStatus =
   | 'unsupported'
   | 'not_configured';
 
+export type AgentAccountSessionStatus =
+  | 'available'
+  | 'missing'
+  | 'expired'
+  | 'invalid'
+  | 'unavailable'
+  | 'unsupported'
+  | 'not_configured';
+
 export interface AgentAuthStatus {
   dataDir: string;
   configPath: string;
@@ -72,6 +85,10 @@ export interface AgentAuthStatus {
   accountEmail: string | null;
   expiresAt: string | null;
   expired: boolean;
+  accountSessionStatus: AgentAccountSessionStatus;
+  accountSessionExpiresAt: string | null;
+  selectedAccountId: number | null;
+  selectedAccountName: string | null;
   credentialStoreKind: string | null;
   config: AgentCliConfigSnapshot | null;
   errorMessage?: string;
@@ -187,27 +204,39 @@ export async function getAgentAuthStatus(
       accountEmail: null,
       expiresAt: null,
       expired: false,
+      accountSessionStatus: 'not_configured',
+      accountSessionExpiresAt: null,
+      selectedAccountId: null,
+      selectedAccountName: null,
       credentialStoreKind: null,
       config,
     };
   }
 
-  const credentialStatus = await getCredentialStatus(config.auth);
+  const credential = await inspectCredential(config.auth);
+  const credentialStatus = credential.status;
   const expiresAtMs = Date.parse(config.auth.expiresAt);
   const expired = Number.isFinite(expiresAtMs) && expiresAtMs <= Date.now();
+  const accountSessionStatus = credential.accountSessionStatus;
 
   return {
     dataDir,
     configPath,
-    loggedIn: credentialStatus === 'available',
+    loggedIn:
+      credentialStatus === 'available' && accountSessionStatus === 'available',
     credentialStatus,
-    needsLogin: credentialStatus !== 'available',
+    needsLogin:
+      credentialStatus !== 'available' || accountSessionStatus !== 'available',
     host: config.auth.host,
     apiBaseUrl: config.apiBaseUrl,
     accountSubject: config.auth.accountSubject,
     accountEmail: config.auth.accountEmail,
     expiresAt: config.auth.expiresAt,
     expired,
+    accountSessionStatus,
+    accountSessionExpiresAt: credential.accountSessionExpiresAt,
+    selectedAccountId: credential.selectedAccountId,
+    selectedAccountName: credential.selectedAccountName,
     credentialStoreKind: config.auth.credentialStoreKind,
     config,
   };
@@ -451,13 +480,21 @@ function normalizeCommand(command?: AgentControlCommand): {
   };
 }
 
-async function getCredentialStatus(
+async function inspectCredential(
   auth: AgentCliAuthConfig,
-): Promise<AgentCredentialStatus> {
+): Promise<AgentCredentialInspection> {
   if (process.platform !== 'darwin') {
-    return auth.credentialStoreKind === 'unsupported'
-      ? 'unsupported'
-      : 'unavailable';
+    const status =
+      auth.credentialStoreKind === 'unsupported'
+        ? 'unsupported'
+        : 'unavailable';
+    return {
+      status,
+      accountSessionStatus: status,
+      accountSessionExpiresAt: null,
+      selectedAccountId: null,
+      selectedAccountName: null,
+    };
   }
 
   try {
@@ -476,12 +513,24 @@ async function getCredentialStatus(
         maxBuffer: 1024 * 1024,
       },
     );
-    return isValidCredentialPayload(stdout) ? 'available' : 'invalid';
+    return inspectCredentialPayload(stdout);
   } catch (error) {
     if (isSecurityItemNotFound(error)) {
-      return 'missing';
+      return {
+        status: 'missing',
+        accountSessionStatus: 'missing',
+        accountSessionExpiresAt: null,
+        selectedAccountId: null,
+        selectedAccountName: null,
+      };
     }
-    return 'unavailable';
+    return {
+      status: 'unavailable',
+      accountSessionStatus: 'unavailable',
+      accountSessionExpiresAt: null,
+      selectedAccountId: null,
+      selectedAccountName: null,
+    };
   }
 }
 
@@ -514,24 +563,6 @@ function normalizeAuthConfig(value: unknown): AgentCliAuthConfig | undefined {
     credentialStoreKind: record.credentialStoreKind,
     oauthClientId: record.oauthClientId,
   };
-}
-
-function isValidCredentialPayload(raw: string): boolean {
-  try {
-    const parsed = JSON.parse(raw.trim()) as Record<string, unknown>;
-    return (
-      parsed.credentialType === 'oauth_token' &&
-      typeof parsed.host === 'string' &&
-      typeof parsed.apiBaseUrl === 'string' &&
-      typeof parsed.accessToken === 'string' &&
-      typeof parsed.refreshToken === 'string' &&
-      typeof parsed.tokenEndpoint === 'string' &&
-      typeof parsed.oauthClientId === 'string' &&
-      typeof parsed.expiresAt === 'string'
-    );
-  } catch {
-    return false;
-  }
 }
 
 function isRuntimeReadyWaitError(error: unknown): boolean {

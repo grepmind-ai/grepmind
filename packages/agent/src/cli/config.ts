@@ -12,7 +12,10 @@ import os from 'node:os';
 import path from 'node:path';
 import type { AgentBackendClientOptions } from '../backend/agent-backend-client.js';
 import type { AgentLogger } from '../logging/agent-logger.js';
-import { createAuthAccessTokenProvider } from './auth-token-provider.js';
+import {
+  createAccountSessionProvider,
+  createAuthAccessTokenProvider,
+} from './auth-token-provider.js';
 
 export interface AgentCliAuthConfig {
   credentialType: 'oauth_token';
@@ -127,9 +130,11 @@ export function toBackendOptions(
   config: AgentCliConfig,
   logger?: AgentLogger,
 ): AgentBackendClientOptions {
+  const accessToken = createAuthAccessTokenProvider(config, logger);
   return {
     baseUrl: stripTrailingSlash(config.apiBaseUrl),
-    accessToken: createAuthAccessTokenProvider(config, logger),
+    accessToken,
+    accountSession: createAccountSessionProvider(config, accessToken, logger),
     logger,
     defaultHeaders: {
       'X-Grepmind-Agent-Name': config.name,

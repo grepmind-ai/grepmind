@@ -1,4 +1,12 @@
 import process from 'node:process';
+import {
+  AGENT_ACCOUNT_SESSION_CAPABILITY,
+  AGENT_ACCOUNT_SESSION_CAPABILITY_HEADER,
+  AGENT_ACCOUNT_SESSION_DEVICE_HEADER,
+  AGENT_ACCOUNT_SESSION_HEADER,
+  isAgentAccountSessionErrorCode,
+  type AgentBackendAccountSessionProvider,
+} from './account-session.js';
 import { noopAgentLogger, type AgentLogger } from '../logging/agent-logger.js';
 import type {
   AttachAgentSourceRequest,
@@ -30,6 +38,7 @@ export type AgentBackendAccessTokenProvider = (() =>
 export interface AgentBackendClientOptions {
   baseUrl: AgentBackendBaseUrl;
   accessToken?: AgentBackendAccessTokenProvider;
+  accountSession?: AgentBackendAccountSessionProvider;
   defaultHeaders?: Record<string, string>;
   fetchImpl?: typeof fetch;
   logger?: AgentLogger;
@@ -45,6 +54,10 @@ interface AgentErrorPayload {
     code?: string;
     message?: string;
     retryable?: boolean;
+    nextAction?: string | null;
+    accountStatus?: string;
+    quota?: unknown;
+    retryAfterMs?: number | null;
     details?: unknown;
   };
 }
@@ -76,6 +89,7 @@ export class AgentBackendClientError extends Error {
 export class AgentBackendClient {
   private readonly baseUrl: string;
   private readonly accessToken?: AgentBackendClientOptions['accessToken'];
+  private readonly accountSession?: AgentBackendAccountSessionProvider;
   private readonly defaultHeaders: Record<string, string>;
   private readonly fetchImpl: typeof fetch;
   private readonly traceHttp: boolean;
@@ -84,6 +98,7 @@ export class AgentBackendClient {
   constructor(options: AgentBackendClientOptions) {
     this.baseUrl = String(options.baseUrl).replace(/\/$/, '');
     this.accessToken = options.accessToken;
+    this.accountSession = options.accountSession;
     this.defaultHeaders = options.defaultHeaders ?? {};
     this.fetchImpl = options.fetchImpl ?? fetch;
     this.logger = options.logger ?? noopAgentLogger;
@@ -220,22 +235,46 @@ export class AgentBackendClient {
       headers,
       body,
     });
-    if (response.status === 401 && (await this.forceRefreshAccessToken())) {
-      response = await this.fetchImpl(`${this.baseUrl}${path}`, {
-        method,
-        headers: await this.buildHeaders(options.body !== undefined),
-        body,
-      });
-    }
-
     if (!response.ok) {
+      let error = await this.toError(response);
+      if (
+        error.status === 401 &&
+        !isAgentAccountSessionErrorCode(error.code) &&
+        (await this.forceRefreshAccessToken())
+      ) {
+        response = await this.fetchImpl(`${this.baseUrl}${path}`, {
+          method,
+          headers: await this.buildHeaders(options.body !== undefined),
+          body,
+        });
+        if (response.ok) {
+          return this.readResponse<T>(response);
+        }
+        error = await this.toError(response);
+      }
+
+      if (
+        error.code === 'AGENT_ACCOUNT_SESSION_EXPIRED' &&
+        (await this.forceRefreshAccountSession())
+      ) {
+        response = await this.fetchImpl(`${this.baseUrl}${path}`, {
+          method,
+          headers: await this.buildHeaders(options.body !== undefined),
+          body,
+        });
+        if (response.ok) {
+          return this.readResponse<T>(response);
+        }
+        error = await this.toError(response);
+      }
+
       if (this.traceHttp) {
         this.logger.trace(
           'http',
           `response ${method} ${path} status=${response.status} durationMs=${Date.now() - startedAt}`,
         );
       }
-      throw await this.toError(response);
+      throw error;
     }
 
     if (this.traceHttp) {
@@ -245,11 +284,7 @@ export class AgentBackendClient {
       );
     }
 
-    if (response.status === 204) {
-      return undefined as T;
-    }
-
-    return (await response.json()) as T;
+    return this.readResponse<T>(response);
   }
 
   private async buildHeaders(
@@ -269,11 +304,25 @@ export class AgentBackendClient {
       headers.Authorization = `Bearer ${token}`;
     }
 
+    const accountSession = await this.resolveAccountSession();
+    if (accountSession) {
+      headers[AGENT_ACCOUNT_SESSION_CAPABILITY_HEADER] =
+        AGENT_ACCOUNT_SESSION_CAPABILITY;
+      headers[AGENT_ACCOUNT_SESSION_DEVICE_HEADER] = accountSession.deviceId;
+      if (accountSession.token) {
+        headers[AGENT_ACCOUNT_SESSION_HEADER] = accountSession.token;
+      }
+    }
+
     return headers;
   }
 
   private async resolveAccessToken(): Promise<string | undefined> {
     return this.accessToken?.();
+  }
+
+  private async resolveAccountSession() {
+    return this.accountSession?.();
   }
 
   private async forceRefreshAccessToken(): Promise<boolean> {
@@ -295,6 +344,33 @@ export class AgentBackendClient {
     }
   }
 
+  private async forceRefreshAccountSession(): Promise<boolean> {
+    if (!this.accountSession?.refresh) {
+      return false;
+    }
+
+    try {
+      const credential = await this.accountSession.refresh();
+      return Boolean(credential?.token);
+    } catch (error) {
+      this.logger.warn(
+        'http',
+        error instanceof Error
+          ? `Agent account session refresh failed: ${error.message}`
+          : 'Agent account session refresh failed',
+      );
+      return false;
+    }
+  }
+
+  private async readResponse<T>(response: Response): Promise<T> {
+    if (response.status === 204) {
+      return undefined as T;
+    }
+
+    return (await response.json()) as T;
+  }
+
   private async toError(response: Response): Promise<AgentBackendClientError> {
     let payload: AgentErrorPayload | undefined;
     let fallbackBody: string | undefined;
@@ -313,8 +389,41 @@ export class AgentBackendClient {
         status: response.status,
         code: payload?.error?.code ?? 'RETRYABLE_BACKEND_ERROR',
         retryable: payload?.error?.retryable,
-        details: payload?.error?.details,
+        details: normalizeBackendErrorDetails(payload?.error),
       },
     );
   }
+}
+
+function normalizeBackendErrorDetails(
+  error: AgentErrorPayload['error'] | undefined,
+): unknown {
+  if (!error) {
+    return undefined;
+  }
+
+  const details: Record<string, unknown> = isRecord(error.details)
+    ? { ...error.details }
+    : error.details == null
+      ? {}
+      : { value: error.details };
+
+  if (error.nextAction !== undefined) {
+    details.nextAction = error.nextAction;
+  }
+  if (error.accountStatus) {
+    details.accountStatus = error.accountStatus;
+  }
+  if (error.quota !== undefined) {
+    details.quota = error.quota;
+  }
+  if (error.retryAfterMs !== undefined) {
+    details.retryAfterMs = error.retryAfterMs;
+  }
+
+  return Object.keys(details).length > 0 ? details : undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

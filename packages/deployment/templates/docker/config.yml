@@ -11,6 +11,9 @@ agentAuth:
 clerk:
   publishableKey: ''
 
+deployment:
+  edition: self_hosted
+
 database:
   host: postgres
   port: 5432

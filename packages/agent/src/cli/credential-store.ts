@@ -18,6 +18,19 @@ export interface StoredOAuthCredential {
   expiresAt: string;
   accountSubject: string | null;
   accountEmail: string | null;
+  accountSession?: StoredAgentAccountSession;
+}
+
+export interface StoredAgentAccountSession {
+  token: string;
+  deviceId: string;
+  expiresAt: string;
+  refreshAfter: string;
+  account: {
+    accountId: number;
+    displayName: string;
+    clerkOrgSlug: string | null;
+  };
 }
 
 export interface CredentialStore {
@@ -148,6 +161,10 @@ function parseCredential(raw: string): StoredOAuthCredential {
     );
   }
 
+  const accountSession = normalizeStoredAgentAccountSession(
+    parsed.accountSession,
+  );
+
   return {
     credentialType: 'oauth_token',
     host: parsed.host,
@@ -167,6 +184,47 @@ function parseCredential(raw: string): StoredOAuthCredential {
       typeof parsed.accountSubject === 'string' ? parsed.accountSubject : null,
     accountEmail:
       typeof parsed.accountEmail === 'string' ? parsed.accountEmail : null,
+    ...(accountSession ? { accountSession } : {}),
+  };
+}
+
+function normalizeStoredAgentAccountSession(
+  value: unknown,
+): StoredAgentAccountSession | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+
+  const record = value as Partial<StoredAgentAccountSession>;
+  const account =
+    record.account &&
+    typeof record.account === 'object' &&
+    !Array.isArray(record.account)
+      ? (record.account as StoredAgentAccountSession['account'])
+      : null;
+  if (
+    typeof record.token !== 'string' ||
+    typeof record.deviceId !== 'string' ||
+    typeof record.expiresAt !== 'string' ||
+    typeof record.refreshAfter !== 'string' ||
+    !account ||
+    typeof account.accountId !== 'number' ||
+    typeof account.displayName !== 'string'
+  ) {
+    return null;
+  }
+
+  return {
+    token: record.token,
+    deviceId: record.deviceId,
+    expiresAt: record.expiresAt,
+    refreshAfter: record.refreshAfter,
+    account: {
+      accountId: account.accountId,
+      displayName: account.displayName,
+      clerkOrgSlug:
+        typeof account.clerkOrgSlug === 'string' ? account.clerkOrgSlug : null,
+    },
   };
 }
 

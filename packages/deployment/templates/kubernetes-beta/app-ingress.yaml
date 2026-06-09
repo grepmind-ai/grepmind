@@ -1,0 +1,23 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: grepmind-app
+  labels:
+    app.kubernetes.io/name: grepmind
+    app.kubernetes.io/component: app
+    grepmind.zaytra.dev/process-role: app
+    grepmind.zaytra.dev/deployment-context: beta
+  annotations:
+    kubernetes.io/ingress.class: <ingress-class>
+spec:
+  rules:
+    - host: <beta-host>
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: grepmind-app
+                port:
+                  name: http

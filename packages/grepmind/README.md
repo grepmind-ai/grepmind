@@ -1,12 +1,12 @@
 # grepmind
 
-Public command-line utility for running a local Grepmind agent and initializing
-self-hosted Grepmind deployments.
+Public command-line utility for running a local Grepmind agent, initializing
+project-local MCP client config, and initializing Grepmind deployment templates.
 
 `grepmind` is the operator-friendly entrypoint into the Grepmind workflow. It
-wraps `@grepmind/agent` for local agent commands and consumes
-`@grepmind/deployment` for Docker Compose and AWS Terraform deployment
-templates.
+wraps `@grepmind/agent` for local agent commands, configures project-local MCP
+clients, and consumes `@grepmind/deployment` for Docker Compose, AWS Terraform
+and Kubernetes beta deployment templates.
 
 ## Requirements
 
@@ -22,6 +22,19 @@ npm install -g grepmind
 
 ## Quick Start
 
+Use `init` from inside a Git workspace to configure local MCP search:
+
+```sh
+grepmind init --codex
+grepmind init --cursor --yes
+grepmind init --all-detected
+grepmind init --codex --dry-run
+```
+
+`grepmind init` uses browser-based OAuth when login is required, starts or reuses
+the local agent runtime, registers or reuses the current Git workspace binding,
+writes `.grepmind.json`, and updates selected project-local MCP client config.
+
 `register`, `projects`, and `clean` talk to the local runtime. Start the runtime before using them.
 
 ```sh
@@ -35,6 +48,45 @@ grepmind agent projects
 ```
 
 Agent authentication is browser-based OAuth Authorization Code + PKCE. The previous manual token/API key agent configuration flow has been removed.
+
+## Project MCP Setup
+
+```sh
+grepmind init [--codex|--claude|--cursor] [--yes]
+```
+
+Generated files are project-local:
+
+- `.grepmind.json`
+- `.codex/config.toml` for Codex
+- `.mcp.json` for Claude Code
+- `.cursor/mcp.json` for Cursor
+
+`.grepmind.json` is commit-safe. It stores the backend hostname and pinned MCP
+package, but it does not store OAuth tokens, refresh tokens, account session
+tokens, binding ids, secure-storage keys, or an absolute workspace path by
+default. `GREPMIND_AGENT_DATA_DIR` is written to MCP client config only when
+`--data-dir` is explicitly passed.
+
+`--yes` skips terminal prompts but still allows the OAuth browser flow. Fully
+non-interactive mode is `--yes --no-open`; if auth or account selection is
+missing, it fails with a command to run first.
+
+Supported initial clients are Codex, Claude Code, and Cursor. OpenCode and
+Gemini CLI are detected only as unsupported phase 2 clients.
+
+Client notes:
+
+- Codex reads project MCP config only for trusted projects.
+- Claude Code may ask to approve the project-scoped `.mcp.json` server before first use.
+- Cursor may need the workspace reloaded after MCP config changes.
+
+The default MCP command is `npx -y @grepmind/mcp@0.1.1`. To update the pinned
+package, rerun:
+
+```sh
+grepmind init --codex --force --mcp-package @grepmind/mcp@latest
+```
 
 ## Deployment Setup
 
@@ -54,6 +106,12 @@ Copy an AWS Terraform deployment template without prompting:
 
 ```sh
 npx grepmind deploy init aws-terraform --dir grepmind-aws-terraform
+```
+
+Copy the controlled Kubernetes beta template without prompting:
+
+```sh
+npx grepmind deploy init kubernetes-beta --dir grepmind-kubernetes-beta
 ```
 
 List shipped deployment targets:
@@ -77,9 +135,11 @@ Commands:
   grepmind agent projects
   grepmind agent clean --workspace <path>
   grepmind agent clean --all
+  grepmind init [--codex|--claude|--cursor] [--yes]
   grepmind deploy init
   grepmind deploy init docker
   grepmind deploy init aws-terraform
+  grepmind deploy init kubernetes-beta
   grepmind deploy list
 ```
 
@@ -176,7 +236,7 @@ By default, local state is stored in `~/.grepmind-agent`.
 - Public npm package: `grepmind`.
 - Runtime implementation: delegated to `@grepmind/agent`.
 - Deployment templates: delegated to `@grepmind/deployment`.
-- Supported public command namespace: `grepmind auth`, `grepmind agent auth`, `grepmind agent run`, `register`, `projects`, `list`, `clean`, and `deploy`.
+- Supported public command namespace: `grepmind auth`, `grepmind agent auth`, `grepmind agent run`, `register`, `projects`, `list`, `clean`, `init`, and `deploy`.
 
 Use `grepmind` for the stable public CLI. Use `@grepmind/agent` directly when you need lower-level runtime commands such as `stop`, `sync`, `status`, `search-head`, `remove`, `reset`, or `bootstrap`.
 
@@ -187,6 +247,7 @@ From the repository root:
 ```sh
 npm run build:grepmind
 npm run grepmind -- agent help
+npm run grepmind -- init --codex --dry-run
 npm run grepmind -- deploy list
 ```
 

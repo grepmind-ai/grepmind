@@ -2,6 +2,7 @@
 import process from 'node:process';
 
 import { runDeployCommand } from './deploy.js';
+import { runInitCommand } from './init/command.js';
 
 const PUBLIC_AGENT_COMMANDS = new Set([
   'auth',
@@ -27,6 +28,9 @@ async function main() {
       return;
     case 'deploy':
       await runDeployCommand(rest);
+      return;
+    case 'init':
+      await runInitCommand(rest);
       return;
     case 'help':
     case '--help':
@@ -69,6 +73,7 @@ function printHelp() {
       '  grepmind agent projects',
       '  grepmind agent clean --workspace <path>',
       '  grepmind agent clean --all',
+      '  grepmind init [--codex|--claude|--cursor] [--yes]',
       '  grepmind deploy init docker',
       '  grepmind deploy init aws-terraform',
       '  grepmind deploy list',

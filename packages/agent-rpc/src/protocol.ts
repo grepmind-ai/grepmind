@@ -1,5 +1,15 @@
 export const AGENT_RUNTIME_PROTOCOL_VERSION = 1;
 
+export const AGENT_ACCOUNT_SESSION_ERROR_CODES = [
+  'AGENT_ACCOUNT_SESSION_REQUIRED',
+  'AGENT_ACCOUNT_SESSION_EXPIRED',
+  'AGENT_ACCOUNT_SESSION_REVOKED',
+  'AGENT_UPGRADE_REQUIRED',
+] as const;
+
+export type AgentAccountSessionErrorCode =
+  (typeof AGENT_ACCOUNT_SESSION_ERROR_CODES)[number];
+
 export type AgentCommandMode = 'runtime-only';
 export type SearchTarget = 'code' | 'docs';
 
@@ -65,7 +75,8 @@ export interface BranchDescriptor {
 export interface LocalProjectRecord {
   bindingId: number;
   repoId: number;
-  userRepoId: number | null;
+  accountRepoId: number | null;
+  userRepoId?: number | null;
   repoFullName: string;
   displayName: string;
   workspacePath: string;
@@ -325,5 +336,13 @@ export function isMutatingRpcMethod(method: AgentRpcMethod): boolean {
     method === 'unbindProject' ||
     method === 'cleanProject' ||
     method === 'shutdown'
+  );
+}
+
+export function isAgentAccountSessionErrorCode(
+  code: string,
+): code is AgentAccountSessionErrorCode {
+  return (AGENT_ACCOUNT_SESSION_ERROR_CODES as readonly string[]).includes(
+    code,
   );
 }
