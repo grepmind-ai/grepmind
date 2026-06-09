@@ -1,6 +1,6 @@
 {
   "name": "@grepmind/agent",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Local branch-aware agent runtime backed by PGlite",
   "type": "module",
   "main": "dist/index.js",
@@ -48,7 +48,7 @@
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.3.8",
-    "@grepmind/agent-rpc": "0.1.1",
+    "@grepmind/agent-rpc": "0.2.0",
     "drizzle-orm": "^0.38.0",
     "picocolors": "^1.1.1"
   },

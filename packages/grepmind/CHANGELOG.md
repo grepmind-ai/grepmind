@@ -1,5 +1,15 @@
 # grepmind
 
+## 0.3.0
+
+### Minor Changes
+
+- 28bf574: Add grepmind init project MCP onboarding
+
+### Patch Changes
+
+- @grepmind/agent@0.1.3
+
 ## 0.2.0
 
 ### Minor Changes
