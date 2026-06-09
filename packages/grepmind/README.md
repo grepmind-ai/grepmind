@@ -1,5 +1,7 @@
 # grepmind
 
+<!-- release: patch refresh -->
+
 Public command-line utility for running a local Grepmind agent, initializing
 project-local MCP client config, and initializing Grepmind deployment templates.
 

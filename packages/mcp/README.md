@@ -1,5 +1,7 @@
 # @grepmind/mcp
 
+<!-- release: patch refresh -->
+
 Project-local MCP server for Grepmind-backed code and docs search.
 
 `@grepmind/mcp` runs over stdio. One MCP server process is bound to one Git workspace, and the workspace is fixed during startup from the project-local launch directory.

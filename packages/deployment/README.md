@@ -1,5 +1,7 @@
 # @grepmind/deployment
 
+<!-- release: patch refresh -->
+
 Deployment templates consumed by the `grepmind deploy` CLI.
 
 Templates are shipped as package files:

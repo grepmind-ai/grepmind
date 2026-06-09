@@ -1,6 +1,6 @@
 {
   "name": "@grepmind/deployment",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Grepmind deployment templates",
   "type": "module",
   "main": "dist/index.js",

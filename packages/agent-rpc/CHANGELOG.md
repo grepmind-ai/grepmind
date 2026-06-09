@@ -1,5 +1,11 @@
 # @grepmind/agent-rpc
 
+## 0.2.1
+
+### Patch Changes
+
+- Patch refresh packages
+
 ## 0.2.0
 
 ### Minor Changes
