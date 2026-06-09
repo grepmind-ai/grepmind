@@ -263,13 +263,13 @@ Detection checks project-local files/directories under the resolved Git root.
 
 Signals:
 
-| Agent | Detection |
-| --- | --- |
-| Codex | `.codex/` or `.codex/config.toml` |
-| Claude | `.mcp.json` or `.claude/` |
-| Cursor | `.cursor/` or `.cursor/mcp.json` |
-| OpenCode | `opencode.json`, `opencode.jsonc`, `.opencode.json`, `.opencode.jsonc` |
-| Gemini CLI | `.gemini/` or `.gemini/settings.json` |
+| Agent      | Detection                                                              |
+| ---------- | ---------------------------------------------------------------------- |
+| Codex      | `.codex/` or `.codex/config.toml`                                      |
+| Claude     | `.mcp.json` or `.claude/`                                              |
+| Cursor     | `.cursor/` or `.cursor/mcp.json`                                       |
+| OpenCode   | `opencode.json`, `opencode.jsonc`, `.opencode.json`, `.opencode.jsonc` |
+| Gemini CLI | `.gemini/` or `.gemini/settings.json`                                  |
 
 Selection rules:
 
@@ -310,7 +310,7 @@ await ensureAgentReady({
   hostname,
   noOpen,
   timeoutMs,
-  command: bundledAgentCommand
+  command: bundledAgentCommand,
 });
 ```
 
@@ -475,13 +475,13 @@ Sources:
 
 Client-specific setup facts:
 
-| Client | Project config | Entry container | Stdio fields to generate | Notes |
-| --- | --- | --- | --- | --- |
-| Codex | `.codex/config.toml` | `[mcp_servers.grepmind]` | `command`, `args`, `cwd`, `startup_timeout_sec`, `tool_timeout_sec`, nested `env` table | Project config loads only for trusted projects. CLI and IDE extension share the same config. |
-| Claude Code | `.mcp.json` | `mcpServers.grepmind` | `command`, `args`, `env` | Project-scoped servers are version-control friendly but Claude prompts for approval before first use. Env expansion supports `${VAR}` and `${VAR:-default}` in `command`, `args`, `env`, `url`, and `headers`. |
-| Cursor | `.cursor/mcp.json` | `mcpServers.grepmind` | `type: "stdio"`, `command`, `args`, `env` | Project config is `.cursor/mcp.json`; global config is `~/.cursor/mcp.json`. Cursor resolves variables in `command`, `args`, `env`, `url`, and `headers`. |
-| OpenCode | `opencode.json` or JSONC variants | `mcp.grepmind` | `type: "local"`, `command`, `enabled`, `timeout`, `environment` | Phase 2. New files include `$schema: "https://opencode.ai/config.json"`. Local `command` is an array containing executable and args. |
-| Gemini CLI | `.gemini/settings.json` | `mcpServers.grepmind` | `command`, `args`, `env`, `cwd`, `timeout` | Phase 2. `gemini mcp add` defaults to project scope. `timeout` is in milliseconds. Do not set `trust` by default. |
+| Client      | Project config                    | Entry container          | Stdio fields to generate                                                                | Notes                                                                                                                                                                                                          |
+| ----------- | --------------------------------- | ------------------------ | --------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Codex       | `.codex/config.toml`              | `[mcp_servers.grepmind]` | `command`, `args`, `cwd`, `startup_timeout_sec`, `tool_timeout_sec`, nested `env` table | Project config loads only for trusted projects. CLI and IDE extension share the same config.                                                                                                                   |
+| Claude Code | `.mcp.json`                       | `mcpServers.grepmind`    | `command`, `args`, `env`                                                                | Project-scoped servers are version-control friendly but Claude prompts for approval before first use. Env expansion supports `${VAR}` and `${VAR:-default}` in `command`, `args`, `env`, `url`, and `headers`. |
+| Cursor      | `.cursor/mcp.json`                | `mcpServers.grepmind`    | `type: "stdio"`, `command`, `args`, `env`                                               | Project config is `.cursor/mcp.json`; global config is `~/.cursor/mcp.json`. Cursor resolves variables in `command`, `args`, `env`, `url`, and `headers`.                                                      |
+| OpenCode    | `opencode.json` or JSONC variants | `mcp.grepmind`           | `type: "local"`, `command`, `enabled`, `timeout`, `environment`                         | Phase 2. New files include `$schema: "https://opencode.ai/config.json"`. Local `command` is an array containing executable and args.                                                                           |
+| Gemini CLI  | `.gemini/settings.json`           | `mcpServers.grepmind`    | `command`, `args`, `env`, `cwd`, `timeout`                                              | Phase 2. `gemini mcp add` defaults to project scope. `timeout` is in milliseconds. Do not set `trust` by default.                                                                                              |
 
 Generated configs intentionally target stdio/local MCP only. Do not generate remote HTTP/SSE/WebSocket entries for `grepmind init`.
 

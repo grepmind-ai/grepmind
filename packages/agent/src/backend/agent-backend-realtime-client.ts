@@ -181,11 +181,7 @@ export class AgentBackendRealtimeClient {
   }
 
   private async connect(): Promise<void> {
-    if (
-      this.stopping ||
-      !this.started ||
-      this.connecting
-    ) {
+    if (this.stopping || !this.started || this.connecting) {
       return;
     }
 
@@ -197,7 +193,10 @@ export class AgentBackendRealtimeClient {
       }
       const headers = await this.buildHandshakeHeaders(accessToken);
 
-      const ws = createRealtimeWebSocket(buildRealtimeUrl(this.baseUrl), headers);
+      const ws = createRealtimeWebSocket(
+        buildRealtimeUrl(this.baseUrl),
+        headers,
+      );
       this.ws = ws;
 
       ws.onopen = () => {
@@ -416,14 +415,16 @@ export class AgentBackendRealtimeClient {
 
     clearTimeout(pending.timer);
     this.pendingSearchRuns.delete(error.requestId);
-    pending.reject(new AgentRealtimeSearchError(error.message, error.code, {
-      retryable: error.retryable,
-      details: {
-        nextAction: error.nextAction,
-        retryAfterMs: error.retryAfterMs,
-        quota: error.quota,
-      },
-    }));
+    pending.reject(
+      new AgentRealtimeSearchError(error.message, error.code, {
+        retryable: error.retryable,
+        details: {
+          nextAction: error.nextAction,
+          retryAfterMs: error.retryAfterMs,
+          quota: error.quota,
+        },
+      }),
+    );
   }
 
   private rejectPendingSearchRuns(message: string): void {

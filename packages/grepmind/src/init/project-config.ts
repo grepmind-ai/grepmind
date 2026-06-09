@@ -1,7 +1,11 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
-import { assertAllowedProjectWrite, isNotFound, writeTextFileAtomic } from './file.js';
+import {
+  assertAllowedProjectWrite,
+  isNotFound,
+  writeTextFileAtomic,
+} from './file.js';
 import { normalizeHostname } from './hostname.js';
 
 export const GREPMIND_PROJECT_CONFIG_FILENAME = '.grepmind.json';
@@ -123,7 +127,10 @@ export function buildProjectConfig(input: {
   };
 }
 
-function parseJsonObject(raw: string, configPath: string): Record<string, unknown> {
+function parseJsonObject(
+  raw: string,
+  configPath: string,
+): Record<string, unknown> {
   try {
     const parsed = JSON.parse(raw) as unknown;
     if (!isRecord(parsed)) {

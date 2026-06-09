@@ -212,7 +212,10 @@ function normalizeAgentSearchError(
     }
   }
 
-  if (!(error instanceof AgentRuntimeClientError) && isSearchIndexNotReadyError(error)) {
+  if (
+    !(error instanceof AgentRuntimeClientError) &&
+    isSearchIndexNotReadyError(error)
+  ) {
     return new Error(
       `Search index is not ready yet for workspace ${resolvedWorkspacePath} (binding #${workspaceContext.bindingId}). Wait for Grepmind background sync to finish, then retry. Original error: ${error instanceof Error ? error.message : String(error)}`,
     );
@@ -292,14 +295,23 @@ function formatQuotaExceededMessage(error: AgentRuntimeClientError): string {
 
 function formatBackpressureMessage(error: AgentRuntimeClientError): string {
   const retryAfterMs = findDetailValue(error.details, 'retryAfterMs');
-  if (typeof retryAfterMs === 'number' && Number.isFinite(retryAfterMs) && retryAfterMs > 0) {
+  if (
+    typeof retryAfterMs === 'number' &&
+    Number.isFinite(retryAfterMs) &&
+    retryAfterMs > 0
+  ) {
     return `Grepmind runtime is busy. Retry in ${Math.ceil(retryAfterMs / 1000)}s.`;
   }
   return 'Grepmind runtime is busy. Retry shortly.';
 }
 
 function findDetailValue(details: unknown, key: string, depth = 0): unknown {
-  if (!details || typeof details !== 'object' || Array.isArray(details) || depth > 4) {
+  if (
+    !details ||
+    typeof details !== 'object' ||
+    Array.isArray(details) ||
+    depth > 4
+  ) {
     return undefined;
   }
   const record = details as Record<string, unknown>;

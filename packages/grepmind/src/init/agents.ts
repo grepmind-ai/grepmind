@@ -13,11 +13,7 @@ export const unsupportedDetectedAgents: readonly Exclude<
 >[] = ['opencode', 'gemini'];
 
 export function isInitAgentName(value: string): value is InitAgentName {
-  return (
-    value === 'codex' ||
-    value === 'claude' ||
-    value === 'cursor'
-  );
+  return value === 'codex' || value === 'claude' || value === 'cursor';
 }
 
 export function formatAgentName(agent: DetectedAgentName): string {

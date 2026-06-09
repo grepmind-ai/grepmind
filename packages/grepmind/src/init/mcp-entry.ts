@@ -133,17 +133,20 @@ export function isRecognizedGrepmindCommand(
   return false;
 }
 
-export function readJsonCommandParts(entry: unknown): ExistingCommandParts | undefined {
+export function readJsonCommandParts(
+  entry: unknown,
+): ExistingCommandParts | undefined {
   if (!isRecord(entry)) {
     return undefined;
   }
-  const command =
-    typeof entry.command === 'string' ? entry.command : undefined;
+  const command = typeof entry.command === 'string' ? entry.command : undefined;
   const args = Array.isArray(entry.args)
     ? entry.args.filter((value): value is string => typeof value === 'string')
     : undefined;
   const commandArray = Array.isArray(entry.command)
-    ? entry.command.filter((value): value is string => typeof value === 'string')
+    ? entry.command.filter(
+        (value): value is string => typeof value === 'string',
+      )
     : undefined;
 
   if (command == null && commandArray == null) {

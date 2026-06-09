@@ -1,9 +1,7 @@
-export const AGENT_ACCOUNT_SESSION_HEADER =
-  'x-grepmind-agent-account-session';
+export const AGENT_ACCOUNT_SESSION_HEADER = 'x-grepmind-agent-account-session';
 export const AGENT_ACCOUNT_SESSION_CAPABILITY_HEADER =
   'x-grepmind-agent-capability';
-export const AGENT_ACCOUNT_SESSION_DEVICE_HEADER =
-  'x-grepmind-agent-device-id';
+export const AGENT_ACCOUNT_SESSION_DEVICE_HEADER = 'x-grepmind-agent-device-id';
 export const AGENT_ACCOUNT_SESSION_CAPABILITY = 'account-session/v1';
 
 export const AGENT_ACCOUNT_SESSION_ERROR_CODES = [

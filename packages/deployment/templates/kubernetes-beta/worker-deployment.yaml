@@ -45,7 +45,7 @@ spec:
             - --host
             - 0.0.0.0
             - --port
-            - "3848"
+            - '3848'
           ports:
             - name: http
               containerPort: 3848
@@ -57,21 +57,21 @@ spec:
             # budget in every pod. Keep the app maximum in sync with the app
             # Deployment when changing this value.
             - name: GREPMIND_APP_DB_POOL_MAX
-              value: "5"
+              value: '5'
             - name: GREPMIND_WORKER_DB_POOL_MAX
-              value: "5"
+              value: '5'
             - name: GREPMIND_DBOS_DB_POOL_MAX
-              value: "5"
+              value: '5'
             - name: GREPMIND_APP_REPLICA_BUDGET
-              value: "2"
+              value: '2'
             - name: GREPMIND_WORKER_REPLICA_BUDGET
-              value: "1"
+              value: '1'
             - name: GREPMIND_NEON_CONNECTION_CAP
-              value: "<neon-connection-cap>"
+              value: '<neon-connection-cap>'
             - name: GREPMIND_DB_CONNECTION_RESERVED
-              value: "5"
+              value: '5'
             - name: GREPMIND_DB_CONNECTION_HEADROOM_PERCENT
-              value: "20"
+              value: '20'
             - name: GREPMIND_DEPLOYMENT_CONTEXT
               value: beta
             - name: GREPMIND_PRIVATE_SYNC_MODE
@@ -109,7 +109,7 @@ spec:
               cpu: 500m
               memory: 1Gi
             limits:
-              cpu: "2"
+              cpu: '2'
               memory: 4Gi
           volumeMounts:
             - name: config
@@ -121,7 +121,7 @@ spec:
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
-              drop: ["ALL"]
+              drop: ['ALL']
       volumes:
         - name: config
           configMap:

@@ -1,5 +1,4 @@
 import { readFile } from 'node:fs/promises';
-import path from 'node:path';
 
 import { isNotFound, writeTextFileAtomic } from '../file.js';
 import {
@@ -36,7 +35,11 @@ export async function writeJsonMcpEntry(
   const mcpServers =
     existing.config.mcpServers == null
       ? {}
-      : assertRecord(existing.config.mcpServers, input.configPath, 'mcpServers');
+      : assertRecord(
+          existing.config.mcpServers,
+          input.configPath,
+          'mcpServers',
+        );
   const existingEntry = mcpServers.grepmind;
   const decision = await resolveWriteDecision({
     agentLabel: input.agentLabel,
@@ -78,7 +81,11 @@ export async function writeJsonMcpEntry(
     return { agent: input.agent, path: input.configPath, status: 'unchanged' };
   }
   if (input.dryRun) {
-    return { agent: input.agent, path: input.configPath, status: 'would-change' };
+    return {
+      agent: input.agent,
+      path: input.configPath,
+      status: 'would-change',
+    };
   }
 
   await writeTextFileAtomic({
@@ -91,7 +98,9 @@ export async function writeJsonMcpEntry(
     agent: input.agent,
     path: input.configPath,
     status: existing.exists ? 'updated' : 'created',
-    message: decision.preservedCommand ? 'preserved existing command and args' : undefined,
+    message: decision.preservedCommand
+      ? 'preserved existing command and args'
+      : undefined,
   };
 }
 
@@ -127,7 +136,10 @@ async function readJsonConfig(configPath: string): Promise<{
   }
 }
 
-function parseJsonObject(raw: string, configPath: string): Record<string, unknown> {
+function parseJsonObject(
+  raw: string,
+  configPath: string,
+): Record<string, unknown> {
   try {
     const parsed = JSON.parse(raw) as unknown;
     return assertRecord(parsed, configPath, 'top-level value');

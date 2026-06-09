@@ -1,4 +1,7 @@
-export type DeploymentTemplateId = 'docker' | 'aws-terraform' | 'kubernetes-beta';
+export type DeploymentTemplateId =
+  | 'docker'
+  | 'aws-terraform'
+  | 'kubernetes-beta';
 
 export interface DeploymentTemplateManifest {
   id: DeploymentTemplateId;
@@ -44,7 +47,8 @@ export const deploymentTemplates: Record<
   'kubernetes-beta': {
     id: 'kubernetes-beta',
     title: 'Kubernetes beta',
-    description: 'Run the controlled Grepmind SaaS beta app/worker split on Kubernetes.',
+    description:
+      'Run the controlled Grepmind SaaS beta app/worker split on Kubernetes.',
     sourceDirectory: 'templates/kubernetes-beta',
     defaultTargetDirectory: 'grepmind-kubernetes-beta',
     nextSteps: [

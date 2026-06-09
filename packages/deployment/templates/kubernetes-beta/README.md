@@ -35,10 +35,10 @@ placeholders in `migration-job.yaml`, `app-deployment.yaml` and
 - `secret.example.yaml` documents required secret keys only.
 - `migration-job.yaml` runs `npm run db:migrate`.
 - `worker-deployment.yaml` runs `node packages/app/dist/index.js --config
-  /etc/grepmind/config.yml --host 0.0.0.0 --port 3848` for the internal
+/etc/grepmind/config.yml --host 0.0.0.0 --port 3848` for the internal
   worker role.
 - `app-deployment.yaml` runs `node packages/app/dist/index.js --config
-  /etc/grepmind/config.yml --host 0.0.0.0 --port 3847` for two public app
+/etc/grepmind/config.yml --host 0.0.0.0 --port 3847` for two public app
   replicas.
 - `app-service.yaml` and `app-ingress.yaml` expose only app traffic.
 - `pdb.yaml` keeps at least one app pod available during voluntary disruption.

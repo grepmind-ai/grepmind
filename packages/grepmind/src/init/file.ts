@@ -92,7 +92,9 @@ async function assertNoSymlinkParents(
     try {
       const parentStat = await lstat(parent);
       if (parentStat.isSymbolicLink()) {
-        throw new Error(`Refusing to write through symlink directory: ${parent}`);
+        throw new Error(
+          `Refusing to write through symlink directory: ${parent}`,
+        );
       }
     } catch (error) {
       if (!isNotFound(error)) {

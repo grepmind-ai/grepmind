@@ -52,7 +52,11 @@ export async function writeGrepmindTomlBlock(
     return { agent: input.agent, path: input.configPath, status: 'unchanged' };
   }
   if (input.dryRun) {
-    return { agent: input.agent, path: input.configPath, status: 'would-change' };
+    return {
+      agent: input.agent,
+      path: input.configPath,
+      status: 'would-change',
+    };
   }
 
   await writeTextFileAtomic({

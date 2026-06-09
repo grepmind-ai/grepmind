@@ -49,7 +49,7 @@ spec:
             - --host
             - 0.0.0.0
             - --port
-            - "3847"
+            - '3847'
           ports:
             - name: http
               containerPort: 3847
@@ -57,25 +57,25 @@ spec:
             - name: GREPMIND_PROCESS_ROLE
               value: app
             - name: GREPMIND_APP_DB_POOL_MAX
-              value: "5"
+              value: '5'
             # The app role only uses GREPMIND_APP_DB_POOL_MAX for its own
             # PostgreSQL pool, but beta startup validates the whole cluster DB
             # budget in every pod. Keep worker/dbos maxima in sync with the
             # worker Deployment when changing these values.
             - name: GREPMIND_WORKER_DB_POOL_MAX
-              value: "5"
+              value: '5'
             - name: GREPMIND_DBOS_DB_POOL_MAX
-              value: "5"
+              value: '5'
             - name: GREPMIND_APP_REPLICA_BUDGET
-              value: "2"
+              value: '2'
             - name: GREPMIND_WORKER_REPLICA_BUDGET
-              value: "1"
+              value: '1'
             - name: GREPMIND_NEON_CONNECTION_CAP
-              value: "<neon-connection-cap>"
+              value: '<neon-connection-cap>'
             - name: GREPMIND_DB_CONNECTION_RESERVED
-              value: "5"
+              value: '5'
             - name: GREPMIND_DB_CONNECTION_HEADROOM_PERCENT
-              value: "20"
+              value: '20'
             - name: GREPMIND_DEPLOYMENT_CONTEXT
               value: beta
             - name: GREPMIND_SERVER_INSTANCE_ID
@@ -111,7 +111,7 @@ spec:
               cpu: 250m
               memory: 512Mi
             limits:
-              cpu: "1"
+              cpu: '1'
               memory: 1Gi
           volumeMounts:
             - name: config
@@ -123,7 +123,7 @@ spec:
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
-              drop: ["ALL"]
+              drop: ['ALL']
       volumes:
         - name: config
           configMap:

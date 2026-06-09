@@ -197,7 +197,8 @@ export function normalizeSearchErrorPayload(
     typeof data?.requestId === 'string' ? data.requestId.trim() : '';
   const code = typeof data?.code === 'string' ? data.code.trim() : '';
   const message = typeof data?.message === 'string' ? data.message.trim() : '';
-  const retryable = typeof data?.retryable === 'boolean' ? data.retryable : null;
+  const retryable =
+    typeof data?.retryable === 'boolean' ? data.retryable : null;
   if (!requestId || !code || !message) {
     return { ok: false, error: 'requestId, code, and message are required' };
   }

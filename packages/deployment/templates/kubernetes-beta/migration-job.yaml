@@ -29,7 +29,7 @@ spec:
         - name: migrate
           image: ghcr.io/zaytra-labs/grepmind-app:<phase-09-image-tag>
           imagePullPolicy: IfNotPresent
-          command: ["npm", "run", "db:migrate"]
+          command: ['npm', 'run', 'db:migrate']
           envFrom:
             - secretRef:
                 name: grepmind-runtime-secrets
@@ -43,7 +43,7 @@ spec:
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
-              drop: ["ALL"]
+              drop: ['ALL']
       volumes:
         - name: config
           configMap:

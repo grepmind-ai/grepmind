@@ -1,5 +1,4 @@
-import { createHash, randomBytes, randomUUID } from 'node:crypto';
-import http from 'node:http';
+import { randomBytes, randomUUID } from 'node:crypto';
 import process from 'node:process';
 import { spawn } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -14,10 +13,7 @@ import {
   AGENT_ACCOUNT_SESSION_DEVICE_HEADER,
   AGENT_ACCOUNT_SESSION_HEADER,
 } from '../../backend/account-session.js';
-import type {
-  AgentAuthMetadataResponse,
-  OAuthTokenResponse,
-} from '../../backend/contracts/index.js';
+import type { OAuthTokenResponse } from '../../backend/contracts/index.js';
 import {
   DEFAULT_AGENT_NAME,
   DEFAULT_HEAD_POLL_INTERVAL_MS,
@@ -30,7 +26,6 @@ import {
 import {
   buildCredentialStoreKey,
   createCredentialStore,
-  type StoredAgentAccountSession,
   type StoredOAuthCredential,
 } from '../credential-store.js';
 import { createAgentConsole } from '../cli-context.js';
@@ -44,43 +39,15 @@ import {
 } from '../flags.js';
 import { loadOptionalConfig } from '../command-support.js';
 import type { ParsedArgs } from '../parse-args.js';
+import { issueAgentAccountSessionWithBrowser } from './account-session-browser.js';
+import {
+  buildAuthorizationUrl,
+  buildCodeChallenge,
+  startCallbackServer,
+} from './oauth-browser.js';
 
 const DEFAULT_SCOPES = ['profile', 'email'] as const;
 const CALLBACK_TIMEOUT_MS = 10 * 60 * 1000;
-const ACCOUNT_SESSION_CALLBACK_TIMEOUT_MS = 5 * 60 * 1000;
-
-interface CallbackResult {
-  code?: string;
-  state?: string;
-  error?: string;
-  errorDescription?: string;
-}
-
-interface CallbackServer {
-  port: number;
-  redirectUri: string;
-  waitForCallback(): Promise<CallbackResult>;
-  close(): Promise<void>;
-}
-
-interface AccountSessionCallbackResult {
-  accountSessionToken?: string;
-  expiresAt?: string;
-  refreshAfter?: string;
-  account?: {
-    accountId?: unknown;
-    displayName?: unknown;
-    clerkOrgSlug?: unknown;
-  };
-  handoffNonce?: string;
-}
-
-interface AccountSessionCallbackServer {
-  port: number;
-  origin: string;
-  waitForCallback(): Promise<AccountSessionCallbackResult>;
-  close(): Promise<void>;
-}
 
 export async function authCommand(args: ParsedArgs): Promise<void> {
   const subcommand = args.positionals[0] ?? 'status';
@@ -130,9 +97,7 @@ async function authLoginCommand(args: ParsedArgs): Promise<void> {
     ? randomBase64Url(32)
     : undefined;
   const codeVerifier = randomBase64Url(64);
-  const codeChallenge = createHash('sha256')
-    .update(codeVerifier)
-    .digest('base64url');
+  const codeChallenge = buildCodeChallenge(codeVerifier);
   const authorizationUrl = buildAuthorizationUrl({
     metadata,
     redirectUri: callbackServer.redirectUri,
@@ -225,47 +190,26 @@ async function authLoginCommand(args: ParsedArgs): Promise<void> {
       accountSubject,
       accountEmail,
     };
-    const config: AgentCliConfig = {
-      apiBaseUrl,
-      name:
-        getStringFlag(args, 'name') ??
-        process.env.GREPMIND_AGENT_NAME ??
-        existingConfig?.name ??
-        DEFAULT_AGENT_NAME,
-      pollIntervalMs:
-        getIntegerFlag(args, 'poll-interval-ms') ??
-        toInteger(process.env.GREPMIND_AGENT_POLL_INTERVAL_MS) ??
-        existingConfig?.pollIntervalMs ??
-        DEFAULT_POLL_INTERVAL_MS,
-      headPollIntervalMs:
-        getIntegerFlag(args, 'head-poll-interval-ms') ??
-        toInteger(process.env.GREPMIND_AGENT_HEAD_POLL_INTERVAL_MS) ??
-        existingConfig?.headPollIntervalMs ??
-        DEFAULT_HEAD_POLL_INTERVAL_MS,
-      deviceId:
-        nonEmptyString(
-          getStringFlag(args, 'device-id') ??
-            process.env.GREPMIND_AGENT_DEVICE_ID,
-        ) ??
-        existingConfig?.deviceId ??
-        randomUUID(),
+    const config = buildAuthenticatedConfig({
+      args,
+      existingConfig,
       dataDir,
-      auth: {
-        credentialType: 'oauth_token',
-        host: hostname,
-        accountSubject,
-        accountEmail,
-        expiresAt,
-        credentialStoreKey,
-        credentialStoreKind: store.kind(),
-        oauthClientId: metadata.clientId,
-      },
-    };
+      hostname,
+      apiBaseUrl,
+      accountSubject,
+      accountEmail,
+      expiresAt,
+      credentialStoreKey,
+      credentialStoreKind: store.kind(),
+      oauthClientId: metadata.clientId,
+    });
     const accountSession = await issueAgentAccountSessionWithBrowser({
       apiBaseUrl,
       deviceId: config.deviceId,
       noOpen: hasBooleanFlag(args, 'no-open'),
       agentConsole,
+      openBrowser,
+      withTimeout,
     });
     credential.accountSession = accountSession;
 
@@ -310,60 +254,6 @@ async function authLoginCommand(args: ParsedArgs): Promise<void> {
   }
 }
 
-async function issueAgentAccountSessionWithBrowser(input: {
-  apiBaseUrl: string;
-  deviceId: string;
-  noOpen: boolean;
-  agentConsole: ReturnType<typeof createAgentConsole>;
-}): Promise<StoredAgentAccountSession> {
-  const handoffNonce = randomBase64Url(32);
-  const callbackServer = await startAccountSessionCallbackServer({
-    handoffNonce,
-  });
-  const handoffUrl = buildAccountSessionHandoffUrl({
-    apiBaseUrl: input.apiBaseUrl,
-    deviceId: input.deviceId,
-    handoffNonce,
-    localCallbackOrigin: callbackServer.origin,
-  });
-
-  if (input.noOpen) {
-    input.agentConsole.info(
-      'config',
-      `Open this URL to select a Grepmind account: ${handoffUrl}`,
-    );
-  } else {
-    input.agentConsole.info(
-      'config',
-      `Opening browser to select a Grepmind account: ${redactAccountSessionHandoffUrl(handoffUrl)}`,
-    );
-  }
-  if (!input.noOpen) {
-    try {
-      await openBrowser(handoffUrl);
-    } catch (error) {
-      input.agentConsole.warn(
-        'config',
-        `AUTH_BROWSER_OPEN_FAILED: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
-  }
-
-  try {
-    const callback = await withTimeout(
-      callbackServer.waitForCallback(),
-      ACCOUNT_SESSION_CALLBACK_TIMEOUT_MS,
-      'AGENT_ACCOUNT_SESSION_TIMEOUT: timed out waiting for account selection callback',
-    );
-    if (callback.handoffNonce !== handoffNonce) {
-      throw new Error('AGENT_ACCOUNT_SESSION_NONCE_MISMATCH: account session callback nonce did not match');
-    }
-    return normalizeAccountSessionCallback(callback, input.deviceId);
-  } finally {
-    await callbackServer.close();
-  }
-}
-
 function validateAuthLoginArgs(args: ParsedArgs): void {
   rejectUnexpectedPositionals(args, 1);
   rejectUnknownFlags(args, [
@@ -384,6 +274,57 @@ function validateAuthLoginArgs(args: ParsedArgs): void {
       'AUTH_DEVICE_FLOW_UNSUPPORTED: device flow is not supported; use browser login on this machine',
     );
   }
+}
+
+function buildAuthenticatedConfig(input: {
+  args: ParsedArgs;
+  existingConfig: AgentCliConfig | null;
+  dataDir: string;
+  hostname: string;
+  apiBaseUrl: string;
+  accountSubject: string | null;
+  accountEmail: string | null;
+  expiresAt: string;
+  credentialStoreKey: string;
+  credentialStoreKind: string;
+  oauthClientId: string;
+}): AgentCliConfig {
+  return {
+    apiBaseUrl: input.apiBaseUrl,
+    name:
+      getStringFlag(input.args, 'name') ??
+      process.env.GREPMIND_AGENT_NAME ??
+      input.existingConfig?.name ??
+      DEFAULT_AGENT_NAME,
+    pollIntervalMs:
+      getIntegerFlag(input.args, 'poll-interval-ms') ??
+      toInteger(process.env.GREPMIND_AGENT_POLL_INTERVAL_MS) ??
+      input.existingConfig?.pollIntervalMs ??
+      DEFAULT_POLL_INTERVAL_MS,
+    headPollIntervalMs:
+      getIntegerFlag(input.args, 'head-poll-interval-ms') ??
+      toInteger(process.env.GREPMIND_AGENT_HEAD_POLL_INTERVAL_MS) ??
+      input.existingConfig?.headPollIntervalMs ??
+      DEFAULT_HEAD_POLL_INTERVAL_MS,
+    deviceId:
+      nonEmptyString(
+        getStringFlag(input.args, 'device-id') ??
+          process.env.GREPMIND_AGENT_DEVICE_ID,
+      ) ??
+      input.existingConfig?.deviceId ??
+      randomUUID(),
+    dataDir: input.dataDir,
+    auth: {
+      credentialType: 'oauth_token',
+      host: input.hostname,
+      accountSubject: input.accountSubject,
+      accountEmail: input.accountEmail,
+      expiresAt: input.expiresAt,
+      credentialStoreKey: input.credentialStoreKey,
+      credentialStoreKind: input.credentialStoreKind,
+      oauthClientId: input.oauthClientId,
+    },
+  };
 }
 
 async function authStatusCommand(args: ParsedArgs): Promise<void> {
@@ -412,7 +353,8 @@ async function authStatusCommand(args: ParsedArgs): Promise<void> {
         ? 'expired'
         : 'available'
       : 'missing';
-    accountSessionLabel = credential?.accountSession?.account.displayName ?? null;
+    accountSessionLabel =
+      credential?.accountSession?.account.displayName ?? null;
     accountSessionExpiresAt = credential?.accountSession?.expiresAt ?? null;
   } catch {
     storeStatus = 'unavailable';
@@ -432,7 +374,10 @@ async function authStatusCommand(args: ParsedArgs): Promise<void> {
     agentConsole.info('config', `Selected account: ${accountSessionLabel}`);
   }
   if (accountSessionExpiresAt) {
-    agentConsole.info('config', `Account session expires: ${accountSessionExpiresAt}`);
+    agentConsole.info(
+      'config',
+      `Account session expires: ${accountSessionExpiresAt}`,
+    );
   }
   agentConsole.info('config', `Storage: ${config.auth.credentialStoreKind}`);
 }
@@ -454,7 +399,9 @@ async function authLogoutCommand(args: ParsedArgs): Promise<void> {
   }
 
   const store = createCredentialStore();
-  const credential = await store.get(config.auth.credentialStoreKey).catch(() => null);
+  const credential = await store
+    .get(config.auth.credentialStoreKey)
+    .catch(() => null);
   if (credential?.accountSession) {
     await revokePresentedAccountSession(credential).catch((error) => {
       agentConsole.warn(
@@ -539,269 +486,6 @@ function parseScopes(value: string | undefined): string[] {
     throw new Error('--scopes must include at least one scope');
   }
   return scopes;
-}
-
-async function startCallbackServer(
-  metadata: AgentAuthMetadataResponse,
-  requestedPort: number | undefined,
-): Promise<CallbackServer> {
-  const candidatePorts =
-    requestedPort == null ? metadata.callbackPorts : [requestedPort];
-  if (
-    requestedPort != null &&
-    !metadata.callbackPorts.includes(requestedPort)
-  ) {
-    throw new Error(
-      'AUTH_CALLBACK_PORT_UNAVAILABLE: --callback-port must be listed in auth metadata',
-    );
-  }
-
-  const errors: string[] = [];
-  for (const port of candidatePorts) {
-    try {
-      return await bindCallbackServer(metadata, port);
-    } catch (error) {
-      errors.push(error instanceof Error ? error.message : String(error));
-    }
-  }
-
-  throw new Error(`AUTH_CALLBACK_PORT_UNAVAILABLE: ${errors.join('; ')}`);
-}
-
-function bindCallbackServer(
-  metadata: AgentAuthMetadataResponse,
-  port: number,
-): Promise<CallbackServer> {
-  let settled = false;
-  let resolveCallback: (value: CallbackResult) => void = () => {};
-  const callbackPromise = new Promise<CallbackResult>((resolve) => {
-    resolveCallback = resolve;
-  });
-  const server = http.createServer((request, response) => {
-    const url = new URL(request.url ?? '/', `http://127.0.0.1:${port}`);
-    if (url.pathname !== metadata.callbackPath) {
-      response.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
-      response.end('Not found');
-      return;
-    }
-    if (settled) {
-      response.writeHead(409, { 'Content-Type': 'text/plain; charset=utf-8' });
-      response.end('Authorization callback already received.');
-      return;
-    }
-    settled = true;
-    resolveCallback({
-      code: url.searchParams.get('code') ?? undefined,
-      state: url.searchParams.get('state') ?? undefined,
-      error: url.searchParams.get('error') ?? undefined,
-      errorDescription: url.searchParams.get('error_description') ?? undefined,
-    });
-    response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    response.end(
-      '<!doctype html><title>Grepmind CLI</title><p>Grepmind CLI authorization complete. You can close this tab.</p>',
-    );
-  });
-
-  return new Promise<CallbackServer>((resolve, reject) => {
-    const onError = (error: Error) => {
-      server.off('listening', onListening);
-      reject(error);
-    };
-    const onListening = () => {
-      server.off('error', onError);
-      resolve({
-        port,
-        redirectUri: `http://127.0.0.1:${port}${metadata.callbackPath}`,
-        waitForCallback: () => callbackPromise,
-        close: () =>
-          new Promise<void>((closeResolve) => {
-            server.close(() => closeResolve());
-          }),
-      });
-    };
-    server.once('error', onError);
-    server.once('listening', onListening);
-    server.listen(port, '127.0.0.1');
-  });
-}
-
-function startAccountSessionCallbackServer(input: {
-  handoffNonce: string;
-}): Promise<AccountSessionCallbackServer> {
-  let settled = false;
-  let resolveCallback: (value: AccountSessionCallbackResult) => void = () => {};
-  const callbackPromise = new Promise<AccountSessionCallbackResult>((resolve) => {
-    resolveCallback = resolve;
-  });
-  const server = http.createServer((request, response) => {
-    const origin = request.headers.origin;
-    const corsOrigin = typeof origin === 'string' ? origin : '*';
-    response.setHeader('Access-Control-Allow-Origin', corsOrigin);
-    response.setHeader('Vary', 'Origin');
-    response.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-    response.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
-    if (request.method === 'OPTIONS') {
-      response.writeHead(204);
-      response.end();
-      return;
-    }
-
-    const url = new URL(request.url ?? '/', 'http://127.0.0.1');
-    if (request.method !== 'POST' || url.pathname !== '/account-session/callback') {
-      response.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
-      response.end('Not found');
-      return;
-    }
-    if (settled) {
-      response.writeHead(409, { 'Content-Type': 'text/plain; charset=utf-8' });
-      response.end('Account session callback already received.');
-      return;
-    }
-
-    let body = '';
-    request.setEncoding('utf8');
-    request.on('data', (chunk) => {
-      body += chunk;
-      if (body.length > 32 * 1024) {
-        request.destroy(new Error('Account session callback body is too large'));
-      }
-    });
-    request.on('end', () => {
-      try {
-        const callback = JSON.parse(body) as AccountSessionCallbackResult;
-        if (!callback || typeof callback !== 'object' || Array.isArray(callback)) {
-          throw new Error('Invalid JSON');
-        }
-        if (callback.handoffNonce !== input.handoffNonce) {
-          response.writeHead(403, { 'Content-Type': 'application/json' });
-          response.end(JSON.stringify({ error: 'Invalid handoff nonce' }));
-          return;
-        }
-        settled = true;
-        resolveCallback(callback);
-        response.writeHead(200, { 'Content-Type': 'application/json' });
-        response.end(JSON.stringify({ ok: true }));
-      } catch {
-        response.writeHead(400, { 'Content-Type': 'application/json' });
-        response.end(JSON.stringify({ error: 'Invalid JSON' }));
-      }
-    });
-  });
-
-  return new Promise<AccountSessionCallbackServer>((resolve, reject) => {
-    const onError = (error: Error) => {
-      server.off('listening', onListening);
-      reject(error);
-    };
-    const onListening = () => {
-      server.off('error', onError);
-      const address = server.address();
-      const port =
-        address && typeof address === 'object' ? address.port : null;
-      if (!port) {
-        reject(new Error('Failed to resolve account session callback port'));
-        return;
-      }
-      resolve({
-        port,
-        origin: `http://127.0.0.1:${port}`,
-        waitForCallback: () => callbackPromise,
-        close: () =>
-          new Promise<void>((closeResolve) => {
-            server.close(() => closeResolve());
-          }),
-      });
-    };
-    server.once('error', onError);
-    server.once('listening', onListening);
-    server.listen(0, '127.0.0.1');
-  });
-}
-
-function buildAccountSessionHandoffUrl(input: {
-  apiBaseUrl: string;
-  deviceId: string;
-  handoffNonce: string;
-  localCallbackOrigin: string;
-}): string {
-  const url = new URL('/agent/account-session', input.apiBaseUrl);
-  url.searchParams.set('deviceId', input.deviceId);
-  url.searchParams.set('localCallbackOrigin', input.localCallbackOrigin);
-  const fragment = new URLSearchParams();
-  fragment.set('handoffNonce', input.handoffNonce);
-  url.hash = fragment.toString();
-  return url.toString();
-}
-
-function redactAccountSessionHandoffUrl(value: string): string {
-  try {
-    const url = new URL(value);
-    if (url.searchParams.has('handoffNonce')) {
-      url.searchParams.set('handoffNonce', 'redacted');
-    }
-    const fragment = new URLSearchParams(url.hash.replace(/^#/, ''));
-    if (fragment.has('handoffNonce')) {
-      fragment.set('handoffNonce', 'redacted');
-      url.hash = fragment.toString();
-    }
-    return url.toString();
-  } catch {
-    return value.replace(/([?#&]handoffNonce=)[^&]+/g, '$1redacted');
-  }
-}
-
-function normalizeAccountSessionCallback(
-  callback: AccountSessionCallbackResult,
-  deviceId: string,
-): StoredAgentAccountSession {
-  if (
-    typeof callback.accountSessionToken !== 'string' ||
-    typeof callback.expiresAt !== 'string' ||
-    typeof callback.refreshAfter !== 'string' ||
-    !callback.account ||
-    typeof callback.account.accountId !== 'number' ||
-    typeof callback.account.displayName !== 'string'
-  ) {
-    throw new Error('AGENT_ACCOUNT_SESSION_INVALID: account session callback payload is invalid');
-  }
-
-  return {
-    token: callback.accountSessionToken,
-    deviceId,
-    expiresAt: callback.expiresAt,
-    refreshAfter: callback.refreshAfter,
-    account: {
-      accountId: callback.account.accountId,
-      displayName: callback.account.displayName,
-      clerkOrgSlug:
-        typeof callback.account.clerkOrgSlug === 'string'
-          ? callback.account.clerkOrgSlug
-          : null,
-    },
-  };
-}
-
-function buildAuthorizationUrl(input: {
-  metadata: AgentAuthMetadataResponse;
-  redirectUri: string;
-  scopes: string[];
-  state: string;
-  nonce?: string;
-  codeChallenge: string;
-}): string {
-  const url = new URL(input.metadata.authorizationEndpoint);
-  url.searchParams.set('response_type', 'code');
-  url.searchParams.set('client_id', input.metadata.clientId);
-  url.searchParams.set('redirect_uri', input.redirectUri);
-  url.searchParams.set('scope', input.scopes.join(' '));
-  url.searchParams.set('state', input.state);
-  if (input.nonce) {
-    url.searchParams.set('nonce', input.nonce);
-  }
-  url.searchParams.set('code_challenge', input.codeChallenge);
-  url.searchParams.set('code_challenge_method', 'S256');
-  return url.toString();
 }
 
 function validateTokenResponse(response: OAuthTokenResponse): void {

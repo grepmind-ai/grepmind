@@ -5,7 +5,9 @@ import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
 
-export async function resolveGitWorkspaceRoot(cwd = process.cwd()): Promise<string> {
+export async function resolveGitWorkspaceRoot(
+  cwd = process.cwd(),
+): Promise<string> {
   const candidate = path.resolve(cwd);
 
   try {

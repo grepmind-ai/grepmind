@@ -211,7 +211,9 @@ export class ProjectRegistryService {
   }
 
   async listProjects(): Promise<LocalProjectRecord[]> {
-    return (await this.repositories.projects.listAll()).map(toLocalProjectRecord);
+    return (await this.repositories.projects.listAll()).map(
+      toLocalProjectRecord,
+    );
   }
 
   async getProject(bindingId: number): Promise<LocalProjectRecord | null> {

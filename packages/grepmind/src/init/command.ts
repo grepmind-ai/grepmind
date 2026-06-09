@@ -16,12 +16,19 @@ import {
 } from '@grepmind/agent-rpc';
 
 import { resolveBundledAgentCommand } from './agent-command.js';
-import { formatAgentName, supportedInitAgents, type InitAgentName } from './agents.js';
+import {
+  formatAgentName,
+  supportedInitAgents,
+  type InitAgentName,
+} from './agents.js';
 import { parseInitArgs, type InitArgs } from './args.js';
 import { detectInitAgents, type DetectionResult } from './detect.js';
 import { resolveGitWorkspaceRoot } from './git.js';
 import { hostnamesEqual, resolveInitHostname } from './hostname.js';
-import { createGeneratedMcpEntry, type GeneratedMcpEntry } from './mcp-entry.js';
+import {
+  createGeneratedMcpEntry,
+  type GeneratedMcpEntry,
+} from './mcp-entry.js';
 import { resolveMcpPackageSpec } from './mcp-package.js';
 import {
   readProjectConfig,
@@ -213,7 +220,8 @@ async function prepareRuntimeAndRegisterWorkspace(input: {
   const agentCommand = await resolveBundledAgentCommand();
   const initialAuth = await getAgentAuthStatus(dataDir);
   const hostMismatch =
-    initialAuth.host != null && !hostnamesEqual(initialAuth.host, input.hostname);
+    initialAuth.host != null &&
+    !hostnamesEqual(initialAuth.host, input.hostname);
 
   if (input.yes && input.noOpen && (initialAuth.needsLogin || hostMismatch)) {
     const currentHost = initialAuth.host ?? 'not logged in';
@@ -230,7 +238,9 @@ async function prepareRuntimeAndRegisterWorkspace(input: {
         true,
       );
       if (!confirmed) {
-        throw new Error('OAuth login for the selected hostname was not confirmed');
+        throw new Error(
+          'OAuth login for the selected hostname was not confirmed',
+        );
       }
     }
     await loginAgent({
@@ -323,7 +333,9 @@ function printSummary(input: {
   }
 
   lines.push('', input.dryRun ? 'Planned files:' : 'Files:');
-  lines.push(`  ${relative(input.workspaceRoot, input.projectResult.path)}: ${input.projectResult.status}`);
+  lines.push(
+    `  ${relative(input.workspaceRoot, input.projectResult.path)}: ${input.projectResult.status}`,
+  );
   for (const result of input.writerResults) {
     const message = result.message == null ? '' : ` (${result.message})`;
     lines.push(
@@ -347,10 +359,14 @@ function printSummary(input: {
     lines.push('  Codex: trust this project before using project MCP config.');
   }
   if (input.selectedAgents.includes('claude')) {
-    lines.push('  Claude Code may ask to approve the project-scoped MCP server.');
+    lines.push(
+      '  Claude Code may ask to approve the project-scoped MCP server.',
+    );
   }
   if (input.selectedAgents.includes('cursor')) {
-    lines.push('  Cursor: reload the workspace if the MCP server is already running.');
+    lines.push(
+      '  Cursor: reload the workspace if the MCP server is already running.',
+    );
   }
   lines.push('  Restart or reload selected MCP clients after config changes.');
 
@@ -393,7 +409,10 @@ async function promptAgentSelection(
   return uniqueSelected;
 }
 
-async function promptText(label: string, defaultValue?: string): Promise<string> {
+async function promptText(
+  label: string,
+  defaultValue?: string,
+): Promise<string> {
   if (!process.stdin.isTTY) {
     throw new Error(`${label} requires an interactive TTY`);
   }
@@ -403,7 +422,10 @@ async function promptText(label: string, defaultValue?: string): Promise<string>
     output: process.stdout,
   });
   try {
-    const suffix = defaultValue == null || defaultValue === '' ? ': ' : ` [${defaultValue}]: `;
+    const suffix =
+      defaultValue == null || defaultValue === ''
+        ? ': '
+        : ` [${defaultValue}]: `;
     const answer = await rl.question(`${label}${suffix}`);
     return answer === '' && defaultValue != null ? defaultValue : answer;
   } finally {
@@ -466,13 +488,18 @@ function normalizeRuntimeError(
       `Grepmind agent runtime timed out after ${context.startupTimeoutMs}ms while preparing ${context.workspaceRoot}. Original error: ${message}`,
     );
   }
-  if (context.noOpen && /AUTH_CALLBACK_TIMEOUT|account session|not authenticated/i.test(message)) {
+  if (
+    context.noOpen &&
+    /AUTH_CALLBACK_TIMEOUT|account session|not authenticated/i.test(message)
+  ) {
     return new Error(
       `Grepmind agent auth is required for ${context.hostname}, but --no-open did not complete OAuth/account selection. Run "grepmind auth login --hostname ${context.hostname}" first, then retry.`,
     );
   }
 
-  return new Error(`Grepmind init could not prepare the agent runtime: ${message}`);
+  return new Error(
+    `Grepmind init could not prepare the agent runtime: ${message}`,
+  );
 }
 
 function formatAgentList(agents: InitAgentName[]): string {

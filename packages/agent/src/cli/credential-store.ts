@@ -223,9 +223,7 @@ function normalizeStoredAgentAccountSession(
       accountId: account.accountId,
       displayName: account.displayName,
       clerkOrgSlug:
-        typeof account.clerkOrgSlug === 'string'
-          ? account.clerkOrgSlug
-          : null,
+        typeof account.clerkOrgSlug === 'string' ? account.clerkOrgSlug : null,
     },
   };
 }

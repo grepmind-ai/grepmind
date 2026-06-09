@@ -248,7 +248,10 @@ async function refreshAccountSession(
   }
 
   const payload = (await response.json()) as AgentAccountSessionResponse;
-  const nextSession = normalizeAccountSessionResponse(payload, current.deviceId);
+  const nextSession = normalizeAccountSessionResponse(
+    payload,
+    current.deviceId,
+  );
   const nextCredential: StoredOAuthCredential = {
     ...credential,
     accountSession: {

@@ -1453,7 +1453,11 @@ function isNotFound(error: unknown) {
 }
 
 function isDeploymentTemplateId(value: string): value is DeploymentTemplateId {
-  return value === 'docker' || value === 'aws-terraform' || value === 'kubernetes-beta';
+  return (
+    value === 'docker' ||
+    value === 'aws-terraform' ||
+    value === 'kubernetes-beta'
+  );
 }
 
 async function promptRequired(label: string, defaultValue?: string) {

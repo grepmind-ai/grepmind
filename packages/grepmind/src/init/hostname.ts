@@ -6,7 +6,7 @@ export function resolveInitHostname(input: {
 }): string {
   return normalizeHostname(
     input.flagHostname ?? input.existingHostname ?? DEFAULT_HOSTNAME,
-    input.flagHostname != null ? '--hostname' : '.grepmind.json hostname',
+    input.flagHostname == null ? '.grepmind.json hostname' : '--hostname',
   );
 }
 
@@ -35,7 +35,11 @@ export function normalizeHostname(value: string, source = 'hostname'): string {
       throw new Error(`${source} must be a host with optional numeric port`);
     }
     const portNumber = Number(port);
-    if (!Number.isInteger(portNumber) || portNumber < 1 || portNumber > 65_535) {
+    if (
+      !Number.isInteger(portNumber) ||
+      portNumber < 1 ||
+      portNumber > 65_535
+    ) {
       throw new Error(`${source} port must be between 1 and 65535`);
     }
   }

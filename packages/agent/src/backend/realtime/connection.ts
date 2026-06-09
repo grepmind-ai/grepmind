@@ -13,9 +13,7 @@ const SOCKET_CLOSING_STATE = 2;
 const SOCKET_CLOSED_STATE = 3;
 const WEBSOCKET_GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
 
-export function buildRealtimeUrl(
-  baseUrl: string,
-): string {
+export function buildRealtimeUrl(baseUrl: string): string {
   const url = new URL('/api/agent/v1/events', `${baseUrl}/`);
   url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
   return url.toString();
@@ -107,10 +105,7 @@ class NodeHeaderWebSocket {
 
     request.once('upgrade', (response, socket) => {
       const accept = response.headers['sec-websocket-accept'];
-      if (
-        typeof accept !== 'string' ||
-        accept !== createAcceptHeader(key)
-      ) {
+      if (typeof accept !== 'string' || accept !== createAcceptHeader(key)) {
         socket.destroy();
         this.fail(new Error('Realtime websocket handshake was rejected'));
         return;
@@ -194,19 +189,12 @@ class NodeHeaderWebSocket {
 }
 
 function createAcceptHeader(key: string): string {
-  return createHash('sha1')
-    .update(`${key}${WEBSOCKET_GUID}`)
-    .digest('base64');
+  return createHash('sha1').update(`${key}${WEBSOCKET_GUID}`).digest('base64');
 }
 
 function encodeFrame(payload: Buffer, opcode: number): Buffer {
   const payloadLength = payload.length;
-  const lengthBytes =
-    payloadLength < 126
-      ? 0
-      : payloadLength <= 0xffff
-        ? 2
-        : 8;
+  const lengthBytes = payloadLength < 126 ? 0 : payloadLength <= 0xffff ? 2 : 8;
   const header = Buffer.alloc(2 + lengthBytes + 4);
   header[0] = 0x80 | opcode;
   if (payloadLength < 126) {
