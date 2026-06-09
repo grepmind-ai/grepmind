@@ -8,90 +8,87 @@ Add a public command:
 grepmind init
 ```
 
-The command should be the Grepmind MCP equivalent of `ctx7 setup`, adapted to the current Grepmind MCP architecture:
+The command is the Grepmind MCP onboarding flow for local search. It configures the current Git workspace for a selected MCP client without storing secrets in project files.
 
-- project scope only;
-- OAuth through the existing Grepmind agent login flow;
-- project-local Grepmind config without secrets;
-- project-local MCP config for the selected AI agent;
-- interactive mode when required inputs are missing;
-- non-interactive behavior through flags;
-- idempotent reruns without destroying unrelated MCP server entries.
+The implementation must:
 
-`grepmind init` should be the main onboarding flow for local search:
+- work only in project scope;
+- reuse the existing Grepmind agent OAuth flow;
+- start or reuse the local Grepmind agent runtime when not in dry-run mode;
+- register or reuse the current Git workspace binding when not in dry-run mode;
+- write the canonical project config `.grepmind.json`;
+- write or update the selected project-local MCP client config;
+- be idempotent on rerun;
+- preserve unrelated MCP server entries and unrelated config keys.
 
-1. choose the Grepmind backend hostname;
-2. log in through OAuth and select an account;
-3. start or reuse the local agent runtime;
-4. register the current Git workspace;
-5. write the project config;
-6. write the `grepmind` MCP server entry into the selected agent config.
+Code anchors:
+
+- public CLI entrypoint: `packages/grepmind/src/index.ts`;
+- deploy command argument and prompt style: `packages/grepmind/src/deploy.ts`;
+- current MCP workspace root resolver: `packages/mcp/src/workspace.ts`;
+- current MCP auth/runtime/register flow: `packages/mcp/src/runtime-context.ts`;
+- agent runtime bootstrap exports: `packages/agent-rpc/src/bootstrap.ts`;
+- agent-rpc public exports: `packages/agent-rpc/src/index.ts`.
+
+Readiness criteria:
+
+- The command contract is specific enough to implement without new product decisions.
+- The implementation reuses existing code paths where current code already has the behavior.
+- No part of the plan requires editing `AGENTS.md`, rules, skills, or `.changeset/*.md` by hand.
 
 ## Non-goals
 
 - Do not support global setup.
-- Do not bring back API key setup. Grepmind agent auth has moved to OAuth.
+- Do not bring back API key setup. Grepmind agent auth uses OAuth.
 - Do not edit `AGENTS.md`, rules, or skills.
 - Do not add hosted HTTP MCP. The current `@grepmind/mcp` runs over stdio.
 - Do not support multiple workspaces in one MCP server instance.
-- Do not store OAuth tokens, account session tokens, or other secrets in the project.
+- Do not store OAuth tokens, refresh tokens, account session tokens, selected account tokens, or machine-specific secure storage keys in the project.
 
-## Current state
+Readiness criteria:
 
-The public CLI:
+- `--global` fails with `grepmind init only supports project scope`.
+- `--project` is accepted as a no-op compatibility flag.
+- All writes are under the resolved Git workspace root.
 
-```text
-packages/grepmind/src/index.ts
+## Current State In Code
+
+`packages/grepmind/src/index.ts` currently supports:
+
+- `grepmind auth ...`, proxied to `@grepmind/agent`;
+- `grepmind agent ...`, proxied to `@grepmind/agent`;
+- `grepmind deploy ...`, handled locally.
+
+There is no `grepmind init` command.
+
+`packages/mcp/src/workspace.ts` resolves the workspace with:
+
+```sh
+git -C <cwd> rev-parse --show-toplevel
 ```
 
-currently proxies:
+So `grepmind init` must be runnable from any directory inside a Git workspace, then write project files at the resolved Git root.
 
-- `grepmind auth ...` to `@grepmind/agent`;
-- `grepmind agent ...` to `@grepmind/agent`;
-- `grepmind deploy ...` to the local deploy command.
+`packages/mcp/src/runtime-context.ts` already contains most of the runtime setup algorithm:
 
-There is no separate `grepmind init` command.
+- resolves the bundled `@grepmind/agent` command;
+- calls `getAgentAuthStatus(...)`;
+- calls `ensureAgentReady(...)`;
+- creates `AgentRuntimeClient`;
+- computes a workspace fingerprint;
+- finds an existing local binding by path, realpath, or fingerprint;
+- registers the workspace if no binding exists.
 
-OAuth and account selection are already implemented here:
+`packages/agent-rpc/src/index.ts` does not currently export workspace registration helpers. It exports `AgentRuntimeClient`, `ensureAgentReady`, `getAgentAuthStatus`, and related bootstrap types.
 
-```text
-packages/agent/src/cli/command-handlers/auth.ts
-```
+Readiness criteria:
 
-Agent bootstrap primitives are already exported from `@grepmind/agent-rpc`:
-
-```text
-packages/agent-rpc/src/bootstrap.ts
-```
-
-Key functions:
-
-- `getAgentAuthStatus(...)`
-- `ensureAgentAuth(...)`
-- `ensureAgentRuntime(...)`
-- `ensureAgentReady(...)`
-- `resolveAgentDataDir(...)`
-- `AgentRuntimeClient`
-
-MCP startup already knows how to:
-
-- resolve the Git workspace root;
-- find the bundled `@grepmind/agent`;
-- ensure auth/runtime readiness;
-- auto-register the workspace;
-- obtain the runtime project record for the selected workspace.
-
-Key file:
-
-```text
-packages/mcp/src/runtime-context.ts
-```
-
-`grepmind init` should reuse the same model, but make setup explicit before the MCP client starts.
+- Implementation begins by extracting shared workspace registration helpers into `@grepmind/agent-rpc`.
+- `@grepmind/mcp` is updated to consume the shared helper so `init` and MCP startup use one algorithm.
 
 ## Command UX
 
-### Basic interactive run
+### Interactive run
 
 ```sh
 grepmind init
@@ -99,17 +96,16 @@ grepmind init
 
 Behavior:
 
-1. Check that cwd is inside a Git workspace.
-2. Resolve the Git root.
-3. Find agent configs in the project.
-4. Choose hostname: use `--hostname` if provided, otherwise `app.grepmind.ai`.
-5. If no agent was selected by flag and multiple options were found, show a selection prompt.
-6. If the user is not logged in for the selected data dir, start OAuth login.
-7. Start the agent runtime.
-8. Register the workspace or reuse an existing local binding.
-9. Write `.grepmind.json`.
-10. Write the MCP config for the selected agent.
-11. Print a summary and next steps.
+1. Resolve the Git root from cwd using the same model as `packages/mcp/src/workspace.ts`.
+2. Load existing `.grepmind.json` from the Git root if present.
+3. Resolve hostname.
+4. Detect project-local MCP client configs.
+5. Select target clients.
+6. If not in dry-run mode, ensure agent auth and runtime readiness.
+7. If not in dry-run mode, register or reuse the workspace binding.
+8. Write `.grepmind.json`.
+9. Write selected MCP client configs.
+10. Print a concise summary with written paths and next steps.
 
 ### Non-interactive run
 
@@ -117,62 +113,121 @@ Behavior:
 grepmind init --codex --yes
 ```
 
-`--yes` disables terminal prompts and confirmations, but does not by itself forbid the OAuth browser flow. If the user is not logged in or has not selected an account, the command may open a browser unless `--no-open` is provided.
+`--yes` disables terminal prompts and confirmations. It does not forbid the OAuth browser flow.
 
-Fully non-interactive mode is expressed by this combination:
+Fully non-interactive mode is:
 
 ```sh
 grepmind init --codex --yes --no-open
 ```
 
-In fully non-interactive mode, the command must not ask questions, open a browser, or wait for account selection. If required data/auth/account state is missing, it fails with a clear error.
+In fully non-interactive mode, the command must not ask questions, open a browser, or wait for account selection. If required auth/account state is missing, it fails with a clear error.
 
-### Recommended flags
+### Dry run
+
+```sh
+grepmind init --codex --dry-run
+```
+
+`--dry-run` has no side effects:
+
+- no file writes;
+- no OAuth login;
+- no browser open;
+- no agent runtime start;
+- no workspace registration;
+- no changeset generation.
+
+It may read the Git root, existing `.grepmind.json`, and existing MCP client config files. It prints the planned files and the normalized entries that would be written.
+
+### Flags
 
 ```text
 --hostname <host>                 Grepmind backend hostname, default app.grepmind.ai, without scheme/path
 --codex                           configure Codex project config
 --claude                          configure Claude project config
 --cursor                          configure Cursor project config
---opencode                        configure OpenCode project config
---gemini                          configure Gemini CLI project config
---all-detected                    configure all autodetected agents
--y, --yes                         do not ask terminal confirmation/prompt questions
+--all-detected                    configure all autodetected supported agents
+-y, --yes                         do not ask terminal prompt/confirmation questions
 --no-open                         do not automatically open the browser during OAuth
 --data-dir <dir>                  Grepmind agent data dir
---agent-name <name>               local agent display name for OAuth config
 --mcp-package <pkg>               override MCP package spec, default @grepmind/mcp@<current>
 --mcp-startup-timeout-ms <ms>     env GREPMIND_MCP_STARTUP_TIMEOUT_MS for the MCP entry
---force                           overwrite existing grepmind MCP entry without confirmation
---dry-run                         show planned writes without writing files
+--force                           replace the existing grepmind MCP entry command/args without confirmation
+--dry-run                         show planned writes without side effects
+--project                         no-op compatibility flag
+--global                          unsupported, fail
 ```
 
-Flags `--project` and `--global` are not needed. If they are added for compatibility with user expectations:
+Flag conflict rules:
 
-- `--project` should be a no-op;
-- `--global` should fail with `grepmind init only supports project scope`.
+- Multiple explicit client flags are allowed and configure all selected clients.
+- `--all-detected` must not be combined with explicit client flags.
+- In the initial delivery, `--opencode` and `--gemini` are not supported flags and must fail before side effects with a message that support is planned for phase 2.
+- `--global` fails even if combined with `--project`.
+- `--no-open` is valid with or without `--yes`, but it only matters when OAuth/account selection is required.
+- Unknown flags fail before any side effects.
 
-## Project config
+Readiness criteria:
 
-There is exactly one supported Grepmind project config file in the Git root:
+- `grepmind init --help` documents all supported flags and conflict rules.
+- In `--yes` mode, every missing required value must either have a deterministic default or produce a clear error.
+- In `--dry-run` mode, command output is enough to inspect intended writes without mutating files or runtime state.
+
+## Hostname Resolution
+
+Resolve hostname strictly in this order:
+
+1. `--hostname`;
+2. existing `.grepmind.json.hostname`;
+3. `app.grepmind.ai`.
+
+Validation rules:
+
+- input must be a host with optional port;
+- trim surrounding whitespace;
+- reject values containing a URL scheme, path, query, or hash;
+- preserve the provided casing in the file, but compare hostnames case-insensitively for confirmation/mismatch checks;
+- allow localhost-style values such as `127.0.0.1:5173` and `localhost:5173`.
+
+Existing agent auth config must not affect hostname resolution for a new project. If a self-hosted backend is needed, the user must pass `--hostname <host>` or have it in `.grepmind.json`.
+
+Auth host mismatch rule:
+
+- If the selected agent data dir is already logged in for the resolved hostname, continue.
+- If the selected agent data dir is logged in for a different hostname:
+  - interactive mode asks whether to run OAuth login for the resolved hostname;
+  - `--yes` runs OAuth login for the resolved hostname unless `--no-open` is also set;
+  - `--yes --no-open` fails with a clear message explaining the current host and required host.
+
+Readiness criteria:
+
+- Hostname normalization and validation are implemented in one helper.
+- Existing `.grepmind.json.hostname` is never silently reset to default.
+- Host mismatch behavior is tested manually through dry-run output and non-interactive error paths.
+
+## Project Config
+
+There is exactly one supported Grepmind project config file:
 
 ```text
 .grepmind.json
 ```
 
-`grepmind init` must not search for, read, or write alternative Grepmind project config files. This is the only canonical project config path.
+It lives at the resolved Git root.
 
-Reason: the config is small, non-secret, easy to inspect, and does not require a separate directory. If cache/artifacts/policies are needed later, `.grepmind/` can be added without migrating this file.
-
-The file must not contain:
+The file is intended to be commit-safe. It must not contain:
 
 - OAuth access token;
 - refresh token;
 - account session token;
+- account session metadata;
 - absolute workspace path by default;
+- `GREPMIND_AGENT_DATA_DIR` by default;
+- binding id;
 - machine-specific secure storage key.
 
-Proposed schema v1:
+Schema v1:
 
 ```json
 {
@@ -187,26 +242,26 @@ Proposed schema v1:
 }
 ```
 
-Notes:
-
-- `hostname` is stored without `https://` and without a path.
-- `mcp.package` should default to the pinned current compatible `@grepmind/mcp` version.
-- `startupTimeoutMs` is needed because first MCP startup may include auth/runtime/register work.
-- `.grepmind.json` contains only project-level Grepmind settings and does not store runtime registration state.
-
 Rerun behavior:
 
-- if `.grepmind.json` exists, preserve unknown keys;
-- update only known keys: `version`, `hostname`, `mcp`;
-- if hostname changes, ask for confirmation in interactive mode;
-- resolve hostname strictly in this order: `--hostname`, then existing `.grepmind.json.hostname`, then `app.grepmind.ai`;
-- in `--yes` mode, use the resolved hostname without prompting, but do not reset existing `.grepmind.json.hostname` to the default.
+- preserve unknown top-level keys;
+- update only known keys: `$schema`, `version`, `hostname`, `mcp`;
+- preserve unknown nested keys under `mcp` only if they are not in the known v1 fields;
+- if hostname changes, interactive mode asks for confirmation;
+- in `--yes` mode, use the resolved hostname without prompting;
+- do not write `.grepmind.json` in `--dry-run`.
 
-## Agent detection
+Readiness criteria:
 
-`grepmind init` works only from the Git root of the project. Detection checks project-local files/directories.
+- Invalid JSON fails with a clear path-specific error.
+- The writer pretty-prints JSON with 2 spaces.
+- A second run with the same inputs produces no semantic changes.
 
-Suggested signals:
+## Agent Detection And Selection
+
+Detection checks project-local files/directories under the resolved Git root.
+
+Signals:
 
 | Agent | Detection |
 | --- | --- |
@@ -216,26 +271,38 @@ Suggested signals:
 | OpenCode | `opencode.json`, `opencode.jsonc`, `.opencode.json`, `.opencode.jsonc` |
 | Gemini CLI | `.gemini/` or `.gemini/settings.json` |
 
-Algorithm:
+Selection rules:
 
-1. If an agent flag is provided, use only explicitly selected agents.
-2. If `--all-detected` is provided, use all detected agents.
-3. If exactly one agent is detected and `--yes` is set, use it.
-4. If multiple agents are detected and TTY is available, show a checkbox/list prompt.
-5. If nothing is detected and TTY is available, show the full list of supported agents.
-6. If nothing is detected and TTY is not available, fail and ask for an agent flag.
+1. If explicit client flags are provided, use all explicit clients.
+2. If `--all-detected` is provided, use all detected supported clients.
+3. If `--yes` is set and no explicit client flags are provided, use all detected supported clients.
+4. If `--yes` is set and no supported clients are detected, fail and ask for explicit client flags.
+5. If `--yes` is not set and detected clients exist with TTY available, show a prompt preselecting all detected supported clients.
+6. If `--yes` is not set and nothing is detected with TTY available, show the full supported client list.
+7. If no client can be selected without a prompt and TTY is unavailable, fail and ask for explicit client flags.
 
-Use `node:readline/promises` for prompts, as in `packages/grepmind/src/deploy.ts`, without adding new prompt dependencies.
+For the initial delivery, supported clients are Codex, Claude, and Cursor. OpenCode and Gemini detection is phase 2 and must not be selected automatically by `--yes` or `--all-detected` until their writers are implemented. Passing `--opencode` or `--gemini` in the initial delivery fails before side effects.
 
-## OAuth and agent readiness
+Prompt implementation must use `node:readline/promises`, matching the existing dependency-free style in `packages/grepmind/src/deploy.ts`.
 
-`grepmind init` must reuse the existing OAuth flow instead of implementing a second one.
+Readiness criteria:
 
-Planned path:
+- Selection is deterministic in non-interactive mode.
+- `grepmind init --yes` configures every detected supported client.
+- `grepmind init --yes` fails clearly when no supported clients are detected.
+- Detection never scans outside the Git root.
+- Detection alone does not create directories.
 
-1. Add a dependency from `grepmind` to `@grepmind/agent-rpc`.
-2. Add a helper that resolves the bundled `@grepmind/agent` entrypoint from the `@grepmind/agent` dependency, analogous to `resolveBundledAgentCommand()` in `packages/mcp/src/runtime-context.ts`.
-3. Call:
+## OAuth And Agent Readiness
+
+`grepmind init` must reuse the existing OAuth and runtime bootstrap flow instead of implementing a second OAuth flow.
+
+Implementation path:
+
+1. Add a direct dependency from `grepmind` to `@grepmind/agent-rpc`.
+2. Add a bundled agent command resolver in `packages/grepmind/src/init/agent-command.ts`, analogous to `resolveBundledAgentCommand()` in `packages/mcp/src/runtime-context.ts`.
+3. Call `getAgentAuthStatus(dataDir)` before `ensureAgentReady(...)` to enforce hostname mismatch rules.
+4. In non-dry-run mode, call:
 
 ```ts
 await ensureAgentReady({
@@ -250,28 +317,24 @@ await ensureAgentReady({
 This provides:
 
 - OAuth Authorization Code + PKCE when needed;
-- browser account selection;
+- browser account selection when allowed;
 - secure credential storage;
 - non-secret `~/.grepmind-agent/agent-config.json`;
 - started/reused local runtime.
 
-`hostname` should be resolved from:
+`grepmind init` does not expose an agent name override. The existing agent auth flow keeps its default local agent display name, which is the machine hostname unless the agent config already has a name.
 
-1. `--hostname`;
-2. existing `.grepmind.json.hostname`;
-3. default `app.grepmind.ai`.
+Readiness criteria:
 
-Only canonical `.grepmind.json` may affect project hostname resolution. Existing agent config auth host must not affect the default hostname. If a self-hosted backend is needed for a new project without `.grepmind.json`, the user must explicitly pass `--hostname <host>`.
+- `--dry-run` never calls `ensureAgentReady`.
+- `--yes --no-open` fails instead of waiting when login/account selection is required.
+- Runtime timeout and auth errors are normalized into user-facing messages.
 
-Only hostname is written to project `.grepmind.json`, not tokens.
+## Workspace Registration
 
-`--yes` does not forbid OAuth login/account selection browser flow. If `--no-open` is provided and auth/account selection is required, `grepmind init` must fail with a clear error instead of waiting for interactive action.
+Move the registration algorithm from `packages/mcp/src/runtime-context.ts` into `@grepmind/agent-rpc`, then make both MCP startup and `grepmind init` call the shared helper.
 
-## Workspace registration
-
-Registration logic is currently partially duplicated between the agent CLI and MCP startup. For `init`, it is better to extract a shared helper into `@grepmind/agent-rpc` so that `@grepmind/mcp` and `grepmind init` use the same algorithm.
-
-Proposed new export:
+New export from `@grepmind/agent-rpc`:
 
 ```ts
 export async function ensureWorkspaceRegistered(options: {
@@ -286,31 +349,74 @@ export async function ensureWorkspaceRegistered(options: {
 
 Helper algorithm:
 
-1. Compute `workspaceFingerprint` using `realpath`, `stat.dev`, `stat.ino`, `sha256`.
-2. Call `client.listProjects()`.
-3. Find existing records by:
+1. Resolve `workspacePath`.
+2. Compute `workspaceFingerprint` using `realpath`, `stat.dev`, `stat.ino`, and `sha256`.
+3. Call `client.listProjects()`.
+4. Find existing records by:
    - exact normalized `workspacePath`;
    - matching `realpath`;
    - matching `workspaceFingerprint`.
-4. If exactly one binding is found, return it.
-5. If multiple bindings are found, throw an error asking the user to clean/unbind manually.
-6. If no binding is found:
+5. If exactly one binding is found, return it.
+6. If multiple bindings are found, throw an error asking the user to clean/unbind manually.
+7. If no binding is found:
    - read `git remote get-url origin`;
    - derive `repoFullName` from remote URL when possible;
-   - read default branch;
-   - read current branch;
+   - read default branch from `refs/remotes/origin/HEAD`;
+   - read current branch from `git branch --show-current`;
    - call `client.registerProject(...)`.
-7. Use a deterministic idempotency key:
+
+Idempotency key:
 
 ```text
-init-register:<sha256(workspaceFingerprint + "\0" + remoteUrl)>
+<idempotencyPrefix>:<sha256(workspaceFingerprint + "\0" + remoteUrl)>
 ```
 
-After this, `grepmind init` must not write runtime registration state to `.grepmind.json`.
+Defaults:
 
-## MCP launch command
+- MCP startup uses `mcp-register`;
+- `grepmind init` uses `init-register`;
+- callers may pass a prefix only to identify the initiating flow, not to change workspace identity.
 
-Default command for project MCP config:
+`grepmind init` must not write runtime registration state to `.grepmind.json`.
+
+Readiness criteria:
+
+- `packages/mcp/src/runtime-context.ts` no longer owns duplicated workspace registration logic.
+- Shared helper preserves current MCP matching semantics.
+- Missing `origin` fails clearly only when registration is actually needed.
+- `--dry-run` does not call `client.listProjects()` or `registerProject(...)`.
+
+## MCP Package Version
+
+Default MCP package spec:
+
+```text
+@grepmind/mcp@<current-compatible-version>
+```
+
+For the current repository state, the version is `@grepmind/mcp@0.1.1`, from `packages/mcp/package.json`.
+
+Implementation decision:
+
+- Use a build-time constant generated or imported by the `grepmind` package build from workspace package metadata.
+- Do not add `@grepmind/mcp` as a runtime dependency of `grepmind` just to read its version.
+
+Override:
+
+```sh
+grepmind init --codex --mcp-package @grepmind/mcp@latest
+grepmind init --codex --mcp-package file:../mcp
+```
+
+Readiness criteria:
+
+- Default generated config pins the compatible MCP package version.
+- `--mcp-package` is copied verbatim into MCP command args after basic non-empty validation.
+- Docs explain that rerunning `grepmind init --force` can update the MCP command package.
+
+## MCP Launch Command
+
+Default project MCP command:
 
 ```json
 {
@@ -319,62 +425,92 @@ Default command for project MCP config:
 }
 ```
 
-Why not `grepmind-mcp`:
+Reasoning:
 
-- the user may run `npx grepmind init` without a global install;
-- the MCP client starts later and does not have to see the same npm binary;
-- `npx -y @grepmind/mcp@<version>` pulls the package with a bundled compatible `@grepmind/agent`.
+- The user may run `npx grepmind init` without a global install.
+- The MCP client starts later and does not need the same npm binary that ran `init`.
+- `npx -y @grepmind/mcp@<version>` pulls a package that carries a compatible bundled `@grepmind/agent`.
 
-Why pin the version:
+Readiness criteria:
 
-- project config becomes reproducible;
-- `@grepmind/mcp` carries a compatible `@grepmind/agent`;
-- MCP version can be updated by rerunning `grepmind init --force` or by a future `grepmind update`.
+- Default command is `npx`.
+- Default args are `["-y", <mcp package spec>]`.
+- Existing recognized Grepmind local dev commands are preserved unless `--force` is passed.
 
-The `--mcp-package` flag is needed for dev/nightly scenarios:
+## MCP Env
 
-```sh
-grepmind init --codex --mcp-package @grepmind/mcp@latest
-grepmind init --codex --mcp-package file:../mcp
-```
-
-## MCP env
-
-The MCP entry must pass:
+Every generated MCP entry must pass:
 
 ```text
 GREPMIND_AGENT_HOSTNAME=<hostname>
 GREPMIND_MCP_STARTUP_TIMEOUT_MS=<timeout>
 ```
 
-Optionally, only if the user passed `--data-dir`:
+Only if the user passed `--data-dir`, add:
 
 ```text
 GREPMIND_AGENT_DATA_DIR=<dataDir>
 ```
 
-`GREPMIND_AGENT_DATA_DIR` should not be written by default, to avoid pinning a machine-specific absolute path in project config.
+`GREPMIND_AGENT_DATA_DIR` is intentionally omitted by default to avoid writing a machine-specific absolute path into project config.
 
-## MCP config writers
+Readiness criteria:
 
-Add a writer layer in `packages/grepmind/src/init/`.
+- Env values are strings in generated MCP configs.
+- `mcp.startupTimeoutMs` in `.grepmind.json` and `GREPMIND_MCP_STARTUP_TIMEOUT_MS` remain consistent.
+- Codex `startup_timeout_sec` is `Math.ceil(startupTimeoutMs / 1000)`.
 
-Suggested structure:
+## MCP Client Documentation Snapshot
+
+Verified on 2026-06-09. Implement writers from this snapshot; do not re-open client docs during implementation unless a local config format contradicts these rules.
+
+Sources:
+
+- Codex MCP manual: `https://developers.openai.com/codex/mcp`
+- Codex project config manual: `https://developers.openai.com/codex/config-advanced`
+- Claude Code MCP docs: `https://code.claude.com/docs/en/mcp`
+- Cursor MCP docs: `https://docs.cursor.com/context/model-context-protocol`
+- OpenCode MCP docs: `https://opencode.ai/docs/mcp-servers`
+- Gemini CLI MCP docs: `https://github.com/google-gemini/gemini-cli/blob/main/docs/tools/mcp-server.md`
+
+Client-specific setup facts:
+
+| Client | Project config | Entry container | Stdio fields to generate | Notes |
+| --- | --- | --- | --- | --- |
+| Codex | `.codex/config.toml` | `[mcp_servers.grepmind]` | `command`, `args`, `cwd`, `startup_timeout_sec`, `tool_timeout_sec`, nested `env` table | Project config loads only for trusted projects. CLI and IDE extension share the same config. |
+| Claude Code | `.mcp.json` | `mcpServers.grepmind` | `command`, `args`, `env` | Project-scoped servers are version-control friendly but Claude prompts for approval before first use. Env expansion supports `${VAR}` and `${VAR:-default}` in `command`, `args`, `env`, `url`, and `headers`. |
+| Cursor | `.cursor/mcp.json` | `mcpServers.grepmind` | `type: "stdio"`, `command`, `args`, `env` | Project config is `.cursor/mcp.json`; global config is `~/.cursor/mcp.json`. Cursor resolves variables in `command`, `args`, `env`, `url`, and `headers`. |
+| OpenCode | `opencode.json` or JSONC variants | `mcp.grepmind` | `type: "local"`, `command`, `enabled`, `timeout`, `environment` | Phase 2. New files include `$schema: "https://opencode.ai/config.json"`. Local `command` is an array containing executable and args. |
+| Gemini CLI | `.gemini/settings.json` | `mcpServers.grepmind` | `command`, `args`, `env`, `cwd`, `timeout` | Phase 2. `gemini mcp add` defaults to project scope. `timeout` is in milliseconds. Do not set `trust` by default. |
+
+Generated configs intentionally target stdio/local MCP only. Do not generate remote HTTP/SSE/WebSocket entries for `grepmind init`.
+
+## MCP Config Writers
+
+Add a writer layer:
 
 ```text
 packages/grepmind/src/init/
+  agent-command.ts
   agents.ts
+  args.ts
   command.ts
   detect.ts
+  git.ts
+  hostname.ts
   mcp-entry.ts
   project-config.ts
   writers/
     codex.ts
+    claude.ts
+    cursor.ts
     json-config.ts
     toml-config.ts
+    gemini.ts     # phase 2
+    opencode.ts   # phase 2
 ```
 
-### Shared writer contract
+Shared writer contract:
 
 ```ts
 interface InitAgentWriter {
@@ -386,16 +522,35 @@ interface InitAgentWriter {
 }
 ```
 
-`writeEntry` should:
+`writeEntry` must:
 
 - create the parent directory;
 - preserve unrelated config;
-- replace only the `grepmind` server entry;
-- preserve an existing Grepmind command if it already points to Grepmind MCP and `--force` was not passed;
-- update env, cwd, and timeout;
+- replace only the `grepmind` MCP server entry;
+- preserve an existing recognized Grepmind command if `--force` was not passed;
+- update env, cwd, and timeout fields where supported;
 - not touch other MCP servers.
 
-### Codex writer
+Shared TOML replacement strategy:
+
+- parse only enough TOML structure to identify section headers; do not reformat the whole file;
+- a section header is a line whose trimmed content starts with `[name]` or `[[name]]` and contains only whitespace or a TOML comment after the closing bracket;
+- the Grepmind block starts at `[mcp_servers.grepmind]`;
+- the Grepmind block includes `[mcp_servers.grepmind]`, all following lines, and any nested sections whose names start with `mcp_servers.grepmind.`;
+- the Grepmind block ends immediately before the next section header that is not `mcp_servers.grepmind` and does not start with `mcp_servers.grepmind.`;
+- comments and blank lines inside the Grepmind block are treated as owned by the generated entry and may be replaced;
+- comments, blank lines, section ordering, and raw bytes outside the Grepmind block must be preserved byte-for-byte;
+- if `[mcp_servers.grepmind]` is absent, append the generated block to the end of the file with one separating blank line when the file is non-empty;
+- if nested `[mcp_servers.grepmind.*]` sections exist before the root `[mcp_servers.grepmind]`, fail with a path-specific error instead of guessing block ownership;
+- if duplicate `[mcp_servers.grepmind]` sections exist, fail with a path-specific error asking for manual cleanup.
+
+Readiness criteria:
+
+- Each writer returns a structured `WriteResult` describing `created`, `updated`, `unchanged`, or `would-change`.
+- Shared JSON writer handles missing files, invalid JSON, and pretty-printing.
+- Shared TOML writer preserves unrelated raw TOML sections and replaces only the owned Grepmind block.
+
+## Codex Writer
 
 Project config:
 
@@ -418,13 +573,38 @@ GREPMIND_AGENT_HOSTNAME = "app.grepmind.ai"
 GREPMIND_MCP_STARTUP_TIMEOUT_MS = "120000"
 ```
 
-Notes:
+Current repository confirmation:
 
-- the current Codex project config in this repo already uses `cwd`, `startup_timeout_sec`, and `tool_timeout_sec`;
-- the writer should preserve an existing Grepmind local dev entry if command is already `node` and args point to `packages/mcp/dist/index.js`;
-- if the existing entry is not Grepmind or `--force` is set, replace only `[mcp_servers.grepmind]` and nested `[mcp_servers.grepmind.*]` sections as a whole.
+- `.codex/config.toml` already uses this section shape.
+- The existing dev entry uses `command = "node"` and `packages/mcp/dist/index.js`; it must be recognized as a Grepmind local dev entry.
 
-### Claude writer
+Replacement rule:
+
+- If existing `mcp_servers.grepmind` is recognized and `--force` is not passed, preserve `command` and `args`.
+- Always update `cwd`, `startup_timeout_sec`, `tool_timeout_sec`, and env values.
+- If existing entry is unrecognized:
+  - interactive mode asks before replacing;
+  - `--yes` replaces only if `--codex` was explicit;
+  - otherwise fail with a `--force` hint.
+
+Codex TOML block rules:
+
+- the generated Codex block is always emitted as `[mcp_servers.grepmind]` followed by `[mcp_servers.grepmind.env]`;
+- when preserving a recognized local dev command, the writer keeps only the existing `command` and `args` values and regenerates the rest of the Grepmind block;
+- existing comments inside `[mcp_servers.grepmind]` or `[mcp_servers.grepmind.*]` are not preserved, because they belong to the generated Grepmind entry;
+- unrelated Codex settings, other MCP server sections, and comments outside the Grepmind block are preserved byte-for-byte;
+- nested Grepmind sections other than `[mcp_servers.grepmind.env]` are removed on write unless they are part of a future known schema;
+- if `[mcp_servers.grepmind.env]` exists without `[mcp_servers.grepmind]`, fail with a path-specific error instead of creating a split block.
+
+Readiness criteria:
+
+- Only `[mcp_servers.grepmind]` and nested `[mcp_servers.grepmind.*]` sections are replaced.
+- Other TOML sections and comments outside the Grepmind block are preserved byte-for-byte.
+- Comments inside the Grepmind block are allowed to be replaced.
+- Generated `cwd` is the resolved Git root.
+- Summary output mentions that Codex project config is used only when the project is trusted.
+
+## Claude Writer
 
 Project config:
 
@@ -449,9 +629,16 @@ Entry:
 }
 ```
 
-If the Claude config format in the project requires other fields, the writer must be adjusted before implementation. Basic Claude support is limited to `.mcp.json`.
+Readiness criteria:
 
-### Cursor writer
+- Preserve all non-`mcpServers.grepmind` keys.
+- Create `mcpServers` if missing.
+- Invalid JSON fails with path-specific guidance.
+- Existing `.mcp.json` in this repository must preserve the local `node packages/mcp/dist/index.js` dev command unless `--force` is passed.
+- Do not generate a `type` field for stdio Claude entries; the standard project `.mcp.json` shape uses `command`, `args`, and `env`.
+- Summary output mentions that Claude Code may prompt for approval before first use of project-scoped `.mcp.json` servers.
+
+## Cursor Writer
 
 Project config:
 
@@ -459,12 +646,13 @@ Project config:
 .cursor/mcp.json
 ```
 
-Entry shape is the same as `.mcp.json`:
+Entry shape:
 
 ```json
 {
   "mcpServers": {
     "grepmind": {
+      "type": "stdio",
       "command": "npx",
       "args": ["-y", "@grepmind/mcp@0.1.1"],
       "env": {
@@ -476,9 +664,26 @@ Entry shape is the same as `.mcp.json`:
 }
 ```
 
-### OpenCode writer
+Readiness criteria:
 
-Project config candidates:
+- Same preservation behavior as Claude writer.
+- Generated or replaced Cursor entries include `type: "stdio"`.
+- If an existing recognized Grepmind Cursor entry omits `type`, preserve `command` and `args` but add or update `type` to `"stdio"`.
+- Create `.cursor/` only when Cursor is selected for writing.
+- Detection of `.cursor/` alone must not create `.cursor/mcp.json` unless selected.
+
+## OpenCode Writer
+
+Phase 2 only. The initial delivery must not write OpenCode config.
+
+Initial delivery behavior:
+
+- `--opencode` is rejected before side effects with a clear message that OpenCode support is planned for phase 2;
+- OpenCode detection may be reported in dry-run output as detected but unsupported;
+- `--all-detected` and `--yes` do not select OpenCode until this writer is implemented;
+- `grepmind init --help` does not list `--opencode` until this writer is implemented.
+
+Project config candidates, in order:
 
 ```text
 opencode.json
@@ -487,17 +692,19 @@ opencode.jsonc
 .opencode.jsonc
 ```
 
-Use the first existing file, otherwise create `opencode.json`.
+Use the first existing file. If none exists and OpenCode is selected, create `opencode.json`.
 
 Entry:
 
 ```json
 {
+  "$schema": "https://opencode.ai/config.json",
   "mcp": {
     "grepmind": {
       "type": "local",
       "command": ["npx", "-y", "@grepmind/mcp@0.1.1"],
       "enabled": true,
+      "timeout": 120000,
       "environment": {
         "GREPMIND_AGENT_HOSTNAME": "app.grepmind.ai",
         "GREPMIND_MCP_STARTUP_TIMEOUT_MS": "120000"
@@ -507,9 +714,34 @@ Entry:
 }
 ```
 
-Field names must be verified against OpenCode docs before implementation. If uncertain, ship OpenCode support behind explicit `--opencode` only and document the expected config shape.
+JSONC rule for the OpenCode phase 2 implementation:
 
-### Gemini writer
+- JSONC files are supported only with explicit `--opencode`.
+- If the selected file is JSONC, interactive mode warns before writing because comments may be lost.
+- In `--yes` mode, JSONC write is allowed only for explicit `--opencode`.
+
+Phase 1 readiness:
+
+- Phase 1 rejects `--opencode` before auth, runtime startup, registration, or file writes.
+
+Phase 2 readiness:
+
+- New OpenCode files include `$schema`.
+- Generated OpenCode entries set `timeout` to the same value as `.grepmind.json.mcp.startupTimeoutMs`.
+- OpenCode is not auto-created from detection unless selected by prompt, `--all-detected`, or `--opencode`.
+- Preserve non-`mcp.grepmind` keys.
+- Existing command array containing `@grepmind/mcp` or `grepmind-mcp` is recognized.
+
+## Gemini Writer
+
+Phase 2 only. The initial delivery must not write Gemini config.
+
+Initial delivery behavior:
+
+- `--gemini` is rejected before side effects with a clear message that Gemini support is planned for phase 2;
+- Gemini detection may be reported in dry-run output as detected but unsupported;
+- `--all-detected` and `--yes` do not select Gemini until this writer is implemented;
+- `grepmind init --help` does not list `--gemini` until this writer is implemented.
 
 Project config:
 
@@ -517,7 +749,7 @@ Project config:
 .gemini/settings.json
 ```
 
-Expected section:
+Entry:
 
 ```json
 {
@@ -525,6 +757,8 @@ Expected section:
     "grepmind": {
       "command": "npx",
       "args": ["-y", "@grepmind/mcp@0.1.1"],
+      "cwd": "/abs/path/to/workspace",
+      "timeout": 120000,
       "env": {
         "GREPMIND_AGENT_HOSTNAME": "app.grepmind.ai",
         "GREPMIND_MCP_STARTUP_TIMEOUT_MS": "120000"
@@ -534,58 +768,78 @@ Expected section:
 }
 ```
 
-Gemini support can be phase 2 if initial delivery scope should stay narrower.
+Phase 1 readiness:
 
-## Existing entry preservation
+- Phase 1 rejects `--gemini` before auth, runtime startup, registration, or file writes.
 
-The Grepmind writer should recognize an existing Grepmind MCP entry if any of these are true:
+Phase 2 readiness:
+
+- Create `.gemini/` only when Gemini is selected for writing.
+- Generated Gemini entries set `cwd` to the resolved Git root.
+- Generated Gemini entries set `timeout` to the same value as `.grepmind.json.mcp.startupTimeoutMs`.
+- Do not set `trust` by default.
+- Preserve non-`mcpServers.grepmind` keys.
+- Existing Grepmind command recognition follows the shared JSON writer rules.
+
+## Existing Entry Recognition
+
+An existing Grepmind MCP entry is recognized if any of these are true:
 
 - command is `grepmind-mcp`;
-- command is `npx` and args include `@grepmind/mcp`;
+- command is `npx` and args include a token that starts with `@grepmind/mcp`;
 - command is `node` and args include a path ending in `packages/mcp/dist/index.js`;
-- command array includes `@grepmind/mcp` or `grepmind-mcp`.
+- command array includes `@grepmind/mcp`, a token starting with `@grepmind/mcp`, or `grepmind-mcp`.
 
-If the existing entry is recognized and `--force` is not set:
+If recognized and `--force` is not set:
 
-- preserve command/args;
+- preserve command and args;
 - update/add env;
-- update/add cwd when supported;
-- update Codex startup timeout fields.
+- update/add `cwd` when supported;
+- update Codex startup and tool timeout fields.
 
-If the existing entry is not recognized:
+If recognized and `--force` is set:
+
+- replace command and args with the generated default or `--mcp-package` override;
+- update env/cwd/timeout fields.
+
+If not recognized:
 
 - interactive mode asks before replacing;
-- `--yes` replaces only when the agent was explicitly selected;
+- `--yes` replaces only when that client was explicitly selected;
 - otherwise fail with a message explaining `--force`.
 
-## File write safety
+Readiness criteria:
+
+- Recognition is implemented by structured config shape, not by raw substring replacement of the whole file.
+- Local dev entries in this repository are preserved by default.
+
+## File Write Safety
 
 Rules:
 
-- all writes are project-local;
+- all writes are project-local under the resolved Git root;
 - no `AGENTS.md` writes;
-- no `.changeset` writes;
+- no `.changeset` writes by hand;
 - no secret writes into project files;
-- create parent dirs recursively;
+- create parent directories recursively only for selected writers;
 - preserve file mode where possible;
 - pretty-print JSON with 2 spaces;
-- for JSONC configs, strip comments for parsing but warn that comments may be lost unless a JSONC-preserving writer is added.
+- preserve unrelated TOML raw text outside replaced Grepmind sections.
 
-For TOML:
+Atomicity:
 
-- implement minimal section replacement for `[mcp_servers.grepmind]`;
-- preserve all unrelated sections as raw text;
-- replace nested `[mcp_servers.grepmind.*]` subsections with the Grepmind block.
+- Write files through a temporary sibling file and rename into place where practical.
+- If a write fails, report the path and leave already-written earlier files as reported in the summary.
 
-## Public CLI integration
+Readiness criteria:
 
-Update:
+- `--dry-run` prints exactly which files would be created or updated.
+- Writer summaries identify `created`, `updated`, `unchanged`, or `skipped`.
+- No writer scans or mutates outside the Git root.
 
-```text
-packages/grepmind/src/index.ts
-```
+## Public CLI Integration
 
-Add:
+Update `packages/grepmind/src/index.ts`:
 
 ```ts
 case 'init':
@@ -596,10 +850,10 @@ case 'init':
 Update help output:
 
 ```text
-grepmind init [--hostname <host>] [--codex|--claude|--cursor|--opencode|--gemini] [--yes]
+grepmind init [--hostname <host>] [--codex|--claude|--cursor] [--yes]
 ```
 
-Add public docs:
+Add or update public docs:
 
 ```text
 packages/grepmind/README.md
@@ -607,9 +861,15 @@ packages/mcp/README.md
 README.md
 ```
 
-## Package dependencies
+Readiness criteria:
 
-`grepmind` needs a direct dependency on:
+- `grepmind help` lists `init`.
+- `grepmind init --help` gives command-specific help.
+- Unknown `grepmind init` flags fail before side effects.
+
+## Package Dependencies
+
+`packages/grepmind/package.json` needs a direct dependency on:
 
 ```json
 {
@@ -621,21 +881,24 @@ Rationale:
 
 - `init` should call `ensureAgentReady` and `AgentRuntimeClient` directly;
 - shelling out to `grepmind agent register` would require manual runtime orchestration and CLI output parsing;
-- `@grepmind/agent-rpc` is the stable package for local runtime control.
+- `@grepmind/agent-rpc` is already the package used by MCP for local runtime control.
 
-For MCP package version pinning, choose one:
+MCP package version pinning:
 
-1. Add a direct dependency on `@grepmind/mcp` and read its package version at runtime.
-2. Generate a build-time constant from workspace package versions.
-3. Use unpinned `@grepmind/mcp` initially and add pinning later.
+- Do not add `@grepmind/mcp` as a runtime dependency just for version lookup.
+- Use a build-time constant or generated local module for the compatible MCP package spec.
 
-Recommended: option 1 if package size is acceptable; otherwise option 2.
+Readiness criteria:
 
-## Implementation phases
+- No new prompt dependency is added.
+- Dependency changes are limited to packages required by the implementation.
+- If package source changes require a changeset, generate it through `npm run changeset`; do not edit changeset files by hand.
+
+## Implementation Phases
 
 ### Phase 1: Shared workspace registration helper
 
-Move or duplicate carefully from `packages/mcp/src/runtime-context.ts` into `@grepmind/agent-rpc`:
+Move logic from `packages/mcp/src/runtime-context.ts` into `@grepmind/agent-rpc`:
 
 - workspace fingerprint;
 - remote URL resolution;
@@ -645,15 +908,16 @@ Move or duplicate carefully from `packages/mcp/src/runtime-context.ts` into `@gr
 - unique local binding detection;
 - idempotent registration.
 
-Update `@grepmind/mcp` to use the shared helper.
+Then update `@grepmind/mcp` to use the shared helper.
+
+Phase 1 readiness:
+
+- MCP behavior remains equivalent to current runtime-context behavior.
+- `@grepmind/agent-rpc/src/index.ts` exports the helper and types.
 
 ### Phase 2: Init command skeleton
 
-Create:
-
-```text
-packages/grepmind/src/init/command.ts
-```
+Create `packages/grepmind/src/init/command.ts`.
 
 Responsibilities:
 
@@ -666,14 +930,25 @@ Responsibilities:
 - support `--dry-run`;
 - print summary.
 
+Phase 2 readiness:
+
+- `grepmind init --dry-run --codex` works without auth/runtime side effects.
+- All unknown/conflicting flags fail before side effects.
+
 ### Phase 3: OAuth/runtime/register flow
 
 Add:
 
-- bundled agent command resolver in `packages/grepmind/src/init/agent-command.ts`;
+- bundled agent command resolver;
+- auth status host mismatch handling;
 - `ensureAgentReady(...)` call;
-- `AgentRuntimeClient` registration via shared helper;
-- clear error messages for auth, account selection, runtime timeout, and missing Git remote.
+- `AgentRuntimeClient` registration through shared helper;
+- clear errors for auth, account selection, runtime timeout, duplicate bindings, and missing Git remote.
+
+Phase 3 readiness:
+
+- `--yes --no-open` has no interactive/browser path.
+- Missing auth in non-open mode fails clearly.
 
 ### Phase 4: Project config writer
 
@@ -685,17 +960,29 @@ Implement `.grepmind.json` reader/writer:
 - no secrets;
 - no runtime registration state.
 
+Phase 4 readiness:
+
+- Existing unknown keys survive rerun.
+- Same inputs are idempotent.
+
 ### Phase 5: MCP writers
 
-Implement writers in this order:
+Initial delivery scope:
 
 1. Codex TOML writer.
 2. Claude `.mcp.json` writer.
 3. Cursor `.cursor/mcp.json` writer.
-4. OpenCode writer after config shape verification.
-5. Gemini writer after config shape verification.
 
-Initial delivery can ship Codex + Claude + Cursor first if scope needs to stay small.
+Phase 2 support:
+
+4. OpenCode writer.
+5. Gemini writer.
+
+Phase 5 readiness:
+
+- Initial PR can ship Codex + Claude + Cursor.
+- Initial PR rejects OpenCode/Gemini flags before side effects and does not list those flags in `grepmind init --help`.
+- OpenCode/Gemini are implemented in phase 2 with the criteria above.
 
 ### Phase 6: Docs and examples
 
@@ -705,11 +992,23 @@ Add examples:
 grepmind init --codex
 grepmind init --cursor --yes
 grepmind init --all-detected
+grepmind init --codex --dry-run
 ```
 
-Document generated files and the no-secret guarantee.
+Document:
 
-## Verification plan
+- generated files;
+- no-secret guarantee;
+- `--yes` vs `--yes --no-open`;
+- client-specific caveats: Codex project config requires a trusted project; Claude Code may ask to approve project-scoped `.mcp.json`; OpenCode/Gemini are phase 2;
+- how to update the pinned MCP package.
+
+Phase 6 readiness:
+
+- Docs match generated config shape.
+- Docs do not mention API keys.
+
+## Verification Plan
 
 Per project instruction, do not run `test` or `tsc` manually for verification.
 
@@ -722,11 +1021,14 @@ npm run build
 Manual checks for the implementation PR:
 
 1. `grepmind init --codex --dry-run`
-2. `grepmind init --codex --yes`
-3. inspect `.grepmind.json`
-4. inspect `.codex/config.toml`
-5. run the configured MCP client or launch the generated command from the project root
-6. verify `grepmind_agent_status` returns the expected workspace and binding
+2. verify no files changed after dry-run
+3. `grepmind init --codex --yes --no-open` with missing auth must fail clearly
+4. `grepmind init --codex --yes`
+5. inspect `.grepmind.json`
+6. inspect `.codex/config.toml`
+7. rerun `grepmind init --codex --yes` and verify idempotent output
+8. run the configured MCP command from the project root when needed
+9. verify `grepmind_agent_status` returns the expected workspace and binding when MCP is started
 
 Do not edit `.changeset/*.md` by hand. If package source changes require a changeset, generate it through:
 
@@ -734,18 +1036,31 @@ Do not edit `.changeset/*.md` by hand. If package source changes require a chang
 npm run changeset
 ```
 
-## Open questions
+Readiness criteria:
 
-1. Should initial delivery support only Codex first, or Codex + Claude + Cursor?
-2. Should `.grepmind.json` be intended for commit, or should it be treated as local project setup?
-3. Should default MCP package be pinned exactly or use `@grepmind/mcp@latest`?
-4. Should `grepmind init` register workspace eagerly, or only configure MCP and let MCP startup auto-register?
-5. Should existing local dev MCP entries, like `node packages/mcp/dist/index.js`, always be preserved?
+- Build passes when implementation changes code.
+- Dry-run verification proves no side effects.
+- Manual MCP check proves generated config starts Grepmind MCP for the resolved Git root.
 
-Recommended defaults:
+## Resolved Product Decisions
 
-- Support Codex + Claude + Cursor in initial delivery.
-- Treat `.grepmind.json` as commit-safe because it has no secrets and no absolute paths by default.
-- Pin `@grepmind/mcp` to the current compatible version.
-- Register workspace eagerly during `init`.
-- Preserve recognized local dev Grepmind MCP entries unless `--force` is passed.
+Initial delivery supports:
+
+- Codex;
+- Claude;
+- Cursor.
+
+Phase 2 supports:
+
+- OpenCode;
+- Gemini.
+
+Resolved defaults:
+
+- `.grepmind.json` is commit-safe.
+- Default MCP package is pinned to the current compatible `@grepmind/mcp` version.
+- `grepmind init` registers workspace eagerly, except in `--dry-run`.
+- Existing recognized local dev Grepmind MCP entries are preserved unless `--force` is passed.
+- `grepmind init` can run from any directory inside a Git workspace and writes to the resolved Git root.
+
+The plan is ready for implementation when all readiness criteria above are accepted.
