@@ -9,7 +9,7 @@ Internet
   -> ALB :80 redirect to :443
   -> ALB :443 HTTPS listener
   -> ALB target group :3847
-  -> EC2 instance running ghcr.io/zaytra-labs/grepmind-app
+  -> EC2 instance running ghcr.io/grepmind-ai/grepmind-app
   -> RDS PostgreSQL
   -> S3 bucket
   -> AWS Secrets Manager
@@ -23,7 +23,7 @@ It creates a new VPC. Existing VPC, ECS, EKS, CloudFront, remote Terraform backe
 - AWS credentials with permissions to create VPC, EC2, ALB, ACM, Route53, RDS, S3, IAM, and Secrets Manager resources
 - A Route53 hosted zone for `domain_name`
 - A domain name in that zone
-- Pull access to `ghcr.io/zaytra-labs/grepmind-app:latest`
+- Pull access to `ghcr.io/grepmind-ai/grepmind-app:latest`
 - Clerk and Voyage runtime credentials
 
 ## Generated Files

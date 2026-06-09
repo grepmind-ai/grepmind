@@ -39,7 +39,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: app
-          image: ghcr.io/zaytra-labs/grepmind-app:<phase-09-image-tag>
+          image: ghcr.io/grepmind-ai/grepmind-app:<phase-09-image-tag>
           imagePullPolicy: IfNotPresent
           command:
             - node

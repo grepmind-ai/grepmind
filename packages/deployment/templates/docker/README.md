@@ -4,7 +4,7 @@ This directory is the generated Docker Compose deployment template for a single 
 
 The runtime contract is one application service:
 
-- image: `ghcr.io/zaytra-labs/grepmind-app:${GREPMIND_TAG:-latest}`
+- image: `ghcr.io/grepmind-ai/grepmind-app:${GREPMIND_TAG:-latest}`
 - service: `grepmind-app`
 - internal HTTP port: `3847`
 - healthcheck: `/api/health`

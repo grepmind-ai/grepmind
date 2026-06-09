@@ -176,7 +176,7 @@ workflow, then restrict token-based publishing after the first successful run.
 
 ## Support
 
-Report bugs and request features through [GitHub Issues](https://github.com/zaytra-labs/grepmind/issues).
+Report bugs and request features through [GitHub Issues](https://github.com/grepmind-ai/grepmind/issues).
 
 ## License
 

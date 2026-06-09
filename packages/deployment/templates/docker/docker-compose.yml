@@ -1,6 +1,6 @@
 services:
   grepmind-app:
-    image: ${GREPMIND_IMAGE:-ghcr.io/zaytra-labs/grepmind-app}:${GREPMIND_TAG:-latest}
+    image: ${GREPMIND_IMAGE:-ghcr.io/grepmind-ai/grepmind-app}:${GREPMIND_TAG:-latest}
     command:
       - node
       - packages/app/dist/index.js
@@ -22,7 +22,7 @@ services:
       start_period: 30s
 
   grepmind-migrate:
-    image: ${GREPMIND_IMAGE:-ghcr.io/zaytra-labs/grepmind-app}:${GREPMIND_TAG:-latest}
+    image: ${GREPMIND_IMAGE:-ghcr.io/grepmind-ai/grepmind-app}:${GREPMIND_TAG:-latest}
     command:
       - npm
       - run
