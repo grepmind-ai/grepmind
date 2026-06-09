@@ -1,5 +1,14 @@
 # grepmind
 
+## 0.3.1
+
+### Patch Changes
+
+- Patch refresh packages
+- Updated dependencies
+  - @grepmind/deployment@0.2.1
+  - @grepmind/agent@0.1.4
+
 ## 0.3.0
 
 ### Minor Changes

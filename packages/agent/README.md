@@ -1,5 +1,7 @@
 # @grepmind/agent
 
+<!-- release: patch refresh -->
+
 Local branch-aware Grepmind agent runtime backed by PGlite.
 
 `@grepmind/agent` contains the lower-level runtime and CLI used by the public `grepmind` package. It is responsible for storing local state, registering workspaces, syncing project data from the Grepmind backend, tracking local Git HEAD changes, and serving runtime operations over a local socket.
