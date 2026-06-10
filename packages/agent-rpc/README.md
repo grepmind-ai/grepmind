@@ -2,6 +2,8 @@
 
 <!-- release: patch refresh -->
 
+[Website](https://grepmind.ai)
+
 Typed client and local control helpers for the Grepmind agent runtime.
 
 `@grepmind/agent-rpc` lets tools talk to a running `@grepmind/agent` runtime without importing the full runtime implementation. It exposes a small socket client, protocol constants, protocol types, runtime-unavailable error helpers, and bootstrap helpers for tools that need to make sure the local agent is authenticated and running.

@@ -24,9 +24,10 @@
   "author": "Zaytra",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/grepmind-ai/grepmind.git"
+    "url": "git+https://github.com/grepmind-ai/grepmind.git",
+    "directory": "packages/grepmind"
   },
-  "homepage": "https://github.com/grepmind-ai/grepmind#readme",
+  "homepage": "https://grepmind.ai",
   "bugs": {
     "url": "https://github.com/grepmind-ai/grepmind/issues"
   },

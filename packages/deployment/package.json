@@ -22,6 +22,17 @@
     "build": "node ../../tools/build-package.mjs",
     "build:publish": "node ../../tools/build-package.mjs"
   },
+  "license": "Apache-2.0",
+  "author": "Zaytra",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/grepmind-ai/grepmind.git",
+    "directory": "packages/deployment"
+  },
+  "homepage": "https://grepmind.ai",
+  "bugs": {
+    "url": "https://github.com/grepmind-ai/grepmind/issues"
+  },
   "engines": {
     "node": ">=18.0.0"
   },
