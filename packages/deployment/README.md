@@ -2,6 +2,8 @@
 
 <!-- release: patch refresh -->
 
+[Website](https://grepmind.ai)
+
 Deployment templates consumed by the `grepmind deploy` CLI.
 
 Templates are shipped as package files:

@@ -41,7 +41,7 @@
     "type": "git",
     "url": "git+https://github.com/grepmind-ai/grepmind.git"
   },
-  "homepage": "https://github.com/grepmind-ai/grepmind#readme",
+  "homepage": "https://grepmind.ai",
   "bugs": {
     "url": "https://github.com/grepmind-ai/grepmind/issues"
   },
