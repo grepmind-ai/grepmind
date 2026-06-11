@@ -66,11 +66,14 @@ Generated files are project-local:
 - `.mcp.json` for Claude Code
 - `.cursor/mcp.json` for Cursor
 
-`.grepmind.json` is commit-safe. It stores the backend hostname and pinned MCP
-package, but it does not store OAuth tokens, refresh tokens, account session
-tokens, binding ids, secure-storage keys, or an absolute workspace path by
-default. `GREPMIND_AGENT_DATA_DIR` is written to MCP client config only when
-`--data-dir` is explicitly passed.
+`.grepmind.json` is commit-safe. It stores the backend hostname and optional
+code/docs indexing rules. Generated files omit `code` and `docs` until you add
+custom rules. MCP package, startup timeout, command, args, env, and
+client-specific fields live in MCP client config, not `.grepmind.json`. OAuth
+tokens, refresh tokens, account session tokens, binding ids, secure-storage
+keys, and absolute workspace paths are not written to `.grepmind.json`.
+`GREPMIND_AGENT_DATA_DIR` is written to MCP client config only when `--data-dir`
+is explicitly passed.
 
 `--yes` skips terminal prompts but still allows the OAuth browser flow. Fully
 non-interactive mode is `--yes --no-open`; if auth or account selection is
@@ -85,8 +88,8 @@ Client notes:
 - Claude Code may ask to approve the project-scoped `.mcp.json` server before first use.
 - Cursor may need the workspace reloaded after MCP config changes.
 
-The default MCP command is `npx -y @grepmind/mcp@0.1.1`. To update the pinned
-package, rerun:
+The default MCP command is `npx -y @grepmind/mcp@0.1.1`. To update the package
+used by MCP client config, rerun:
 
 ```sh
 grepmind init --codex --force --mcp-package @grepmind/mcp@latest

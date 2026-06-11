@@ -1,4 +1,6 @@
 const DEFAULT_HOSTNAME = 'app.grepmind.ai';
+const HOSTNAME_PATTERN =
+  /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/i;
 
 export function resolveInitHostname(input: {
   flagHostname?: string;
@@ -19,29 +21,18 @@ export function normalizeHostname(value: string, source = 'hostname'): string {
     trimmed.includes('://') ||
     trimmed.includes('/') ||
     trimmed.includes('?') ||
-    trimmed.includes('#')
+    trimmed.includes('#') ||
+    trimmed.includes(':')
   ) {
-    throw new Error(`${source} must be a host with optional port, not a URL`);
+    throw new Error(
+      `${source} must be a hostname without scheme, port, path, query, or fragment`,
+    );
   }
   if (/\s/.test(trimmed)) {
     throw new Error(`${source} must not contain whitespace`);
   }
-
-  const colonIndex = trimmed.lastIndexOf(':');
-  if (colonIndex >= 0) {
-    const host = trimmed.slice(0, colonIndex);
-    const port = trimmed.slice(colonIndex + 1);
-    if (!host || !/^[0-9]+$/.test(port)) {
-      throw new Error(`${source} must be a host with optional numeric port`);
-    }
-    const portNumber = Number(port);
-    if (
-      !Number.isInteger(portNumber) ||
-      portNumber < 1 ||
-      portNumber > 65_535
-    ) {
-      throw new Error(`${source} port must be between 1 and 65535`);
-    }
+  if (trimmed !== 'localhost' && !HOSTNAME_PATTERN.test(trimmed)) {
+    throw new Error(`${source} must be a valid hostname`);
   }
 
   return trimmed;
