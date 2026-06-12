@@ -34,8 +34,12 @@ grepmind init --cursor --dry-run
 
 `grepmind init` writes commit-safe `.grepmind.json` and updates the selected
 project-local MCP client config without writing OAuth secrets or binding ids to
-project files. It starts or reuses the local Grepmind agent runtime and registers
-or reuses the current workspace unless `--dry-run` is passed.
+project files. `.grepmind.json` stores the backend hostname and optional
+code/docs indexing rules only; generated files omit `code` and `docs` until you
+add custom rules. MCP package, startup timeout, command, args, env, and
+client-specific fields belong to the MCP client config. It starts or reuses the
+local Grepmind agent runtime and registers or reuses the current workspace
+unless `--dry-run` is passed.
 
 Manual project-local stdio configuration:
 
@@ -56,7 +60,7 @@ Manual project-local stdio configuration:
 
 Global MCP configuration without a workspace is not supported. For multiple repositories, configure one Grepmind MCP server instance per repository.
 
-To update the package used by project configs, rerun `grepmind init --force
+To update the package used by MCP client config, rerun `grepmind init --force
 --mcp-package @grepmind/mcp@latest`.
 
 ## Startup Behavior

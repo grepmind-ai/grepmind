@@ -93,8 +93,6 @@ export async function runInitCommand(args: string[]): Promise<void> {
     workspaceRoot,
     existing: existingProjectConfig,
     hostname,
-    mcpPackage,
-    startupTimeoutMs: parsed.mcpStartupTimeoutMs,
     dryRun: parsed.dryRun,
   });
   const writerResults = await writeSelectedMcpConfigs({

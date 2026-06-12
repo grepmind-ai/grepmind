@@ -9,8 +9,6 @@ import {
 import { normalizeHostname } from './hostname.js';
 
 export const GREPMIND_PROJECT_CONFIG_FILENAME = '.grepmind.json';
-export const GREPMIND_PROJECT_SCHEMA =
-  'https://grepmind.dev/schemas/grepmind-project-config.v1.json';
 
 export interface ProjectConfigReadResult {
   path: string;
@@ -24,14 +22,17 @@ export interface ProjectConfigWriteInput {
   workspaceRoot: string;
   existing: ProjectConfigReadResult;
   hostname: string;
-  mcpPackage: string;
-  startupTimeoutMs: number;
   dryRun: boolean;
 }
 
 export interface ConfigWriteResult {
   path: string;
   status: 'created' | 'updated' | 'unchanged' | 'would-change';
+}
+
+interface ProjectIndexingRules {
+  include?: string[];
+  exclude?: string[];
 }
 
 export async function readProjectConfig(
@@ -97,32 +98,23 @@ export async function writeProjectConfig(
 export function buildProjectConfig(input: {
   existing: ProjectConfigReadResult;
   hostname: string;
-  mcpPackage: string;
-  startupTimeoutMs: number;
 }): Record<string, unknown> {
   const existingConfig = input.existing.config ?? {};
+  const code = pickIndexingRules(existingConfig.code, 'code');
+  const docs = pickIndexingRules(existingConfig.docs, 'docs');
   const unknownTopLevel = { ...existingConfig };
   delete unknownTopLevel.$schema;
   delete unknownTopLevel.version;
   delete unknownTopLevel.hostname;
   delete unknownTopLevel.mcp;
-
-  const existingMcp = isRecord(existingConfig.mcp) ? existingConfig.mcp : {};
-  const unknownMcp = { ...existingMcp };
-  delete unknownMcp.serverName;
-  delete unknownMcp.package;
-  delete unknownMcp.startupTimeoutMs;
+  delete unknownTopLevel.code;
+  delete unknownTopLevel.docs;
 
   return {
-    $schema: GREPMIND_PROJECT_SCHEMA,
     version: 1,
     hostname: input.hostname,
-    mcp: {
-      serverName: 'grepmind',
-      package: input.mcpPackage,
-      startupTimeoutMs: input.startupTimeoutMs,
-      ...unknownMcp,
-    },
+    ...(code ? { code } : {}),
+    ...(docs ? { docs } : {}),
     ...unknownTopLevel,
   };
 }
@@ -146,4 +138,38 @@ function parseJsonObject(
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value != null && !Array.isArray(value);
+}
+
+function pickIndexingRules(
+  value: unknown,
+  section: 'code' | 'docs',
+): ProjectIndexingRules | undefined {
+  if (value == null) {
+    return undefined;
+  }
+  if (!isRecord(value)) {
+    throw new Error(`${section} must be an object when present`);
+  }
+
+  const rules: ProjectIndexingRules = {};
+  if (value.include != null) {
+    rules.include = readStringArray(value.include, `${section}.include`);
+  }
+  if (value.exclude != null) {
+    rules.exclude = readStringArray(value.exclude, `${section}.exclude`);
+  }
+
+  return rules.include == null && rules.exclude == null ? undefined : rules;
+}
+
+function readStringArray(value: unknown, field: string): string[] {
+  if (!Array.isArray(value)) {
+    throw new TypeError(`${field} must be an array of strings`);
+  }
+  for (const [index, entry] of value.entries()) {
+    if (typeof entry !== 'string') {
+      throw new TypeError(`${field}[${index}] must be a string`);
+    }
+  }
+  return [...value];
 }
