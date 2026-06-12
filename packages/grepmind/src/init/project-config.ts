@@ -164,11 +164,11 @@ function pickIndexingRules(
 
 function readStringArray(value: unknown, field: string): string[] {
   if (!Array.isArray(value)) {
-    throw new Error(`${field} must be an array of strings`);
+    throw new TypeError(`${field} must be an array of strings`);
   }
   for (const [index, entry] of value.entries()) {
     if (typeof entry !== 'string') {
-      throw new Error(`${field}[${index}] must be a string`);
+      throw new TypeError(`${field}[${index}] must be a string`);
     }
   }
   return [...value];
