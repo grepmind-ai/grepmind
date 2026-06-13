@@ -6,7 +6,10 @@ import process from 'node:process';
 import { promisify } from 'node:util';
 
 import { AgentRuntimeClient } from './client.js';
-import type { LocalProjectRecord } from './protocol.js';
+import type {
+  LocalProjectRecord,
+  RegisterProjectSkippedCommandResult,
+} from './protocol.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -53,12 +56,23 @@ export async function ensureWorkspaceRegistered(
       },
       { timeoutMs: options.timeoutMs },
     );
+    if (result.registered === false) {
+      throw new Error(formatSkippedRegistration(result));
+    }
     return result.snapshot.project;
   } catch (error) {
     throw new Error(
       `Grepmind could not register workspace ${workspacePath}: ${formatError(error)}`,
     );
   }
+}
+
+function formatSkippedRegistration(
+  result: RegisterProjectSkippedCommandResult,
+): string {
+  const target = result.repoFullName ?? result.remoteIdentity;
+  const message = result.githubAppRepair?.message ?? 'GitHub App access is required';
+  return `registration skipped for ${target}: ${message}`;
 }
 
 async function findUniqueRegisteredProject(input: {
