@@ -4,6 +4,7 @@ import type {
   EmbeddingProfileDescriptor,
   ProjectBindingDto,
   RegisterProjectRequest,
+  RegisterProjectSkippedResponse,
 } from '../backend/contracts/index.js';
 import type { LocalProjectRecord, LocalProjectSnapshot } from '../db/schema.js';
 import type { AgentRepositories } from '../repositories/agent-repositories.js';
@@ -14,6 +15,12 @@ import type { ProjectBranchRow } from '../repositories/project-branch-repository
 export interface RegisterLocalProjectInput extends RegisterProjectRequest {
   workspacePath: string;
 }
+
+export type RegisterLocalProjectResult =
+  | {
+      snapshot: LocalProjectSnapshot;
+    }
+  | RegisterProjectSkippedResponse;
 
 export interface UpsertProjectProjectionInput {
   project: ProjectBindingDto;
@@ -34,8 +41,8 @@ export class ProjectRegistryService {
 
   async registerProject(
     input: RegisterLocalProjectInput,
-  ): Promise<LocalProjectSnapshot> {
-    const remoteProject = await this.backend.registerProject({
+  ): Promise<RegisterLocalProjectResult> {
+    const response = await this.backend.registerProject({
       remoteUrl: input.remoteUrl,
       repoFullName: input.repoFullName,
       defaultBranch: input.defaultBranch,
@@ -43,6 +50,11 @@ export class ProjectRegistryService {
       workspaceFingerprint: input.workspaceFingerprint,
       preferredActiveBranch: input.preferredActiveBranch,
     });
+    if (response.registered === false) {
+      return response;
+    }
+
+    const remoteProject = response as ProjectBindingDto;
 
     await this.upsertProjectProjection({
       project: remoteProject,
@@ -53,7 +65,9 @@ export class ProjectRegistryService {
       localActiveBranch: input.preferredActiveBranch ?? null,
     });
 
-    return this.requireProjectSnapshot(remoteProject.bindingId);
+    return {
+      snapshot: await this.requireProjectSnapshot(remoteProject.bindingId),
+    };
   }
 
   async refreshProject(bindingId: number): Promise<LocalProjectSnapshot> {

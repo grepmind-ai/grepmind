@@ -29,6 +29,7 @@ interface BundledAgentCommand extends AgentControlCommand {
 
 let cachedContext: McpWorkspaceContext | null = null;
 let cachedRuntimeClient: AgentRuntimeClient | null = null;
+let runtimePreparationPromise: Promise<McpWorkspaceContext> | null = null;
 
 export async function prepareMcpRuntime(options: {
   workspacePath: string;
@@ -82,6 +83,34 @@ export async function prepareMcpRuntime(options: {
   };
 
   return cachedContext;
+}
+
+export function startMcpRuntimePreparation(options: {
+  workspacePath: string;
+}): Promise<McpWorkspaceContext> {
+  if (!runtimePreparationPromise) {
+    runtimePreparationPromise = prepareMcpRuntime(options);
+    void runtimePreparationPromise.catch((error) => {
+      console.error(
+        'Grepmind MCP runtime preparation failed:',
+        formatError(error),
+      );
+    });
+  }
+
+  return runtimePreparationPromise;
+}
+
+export async function ensureMcpRuntimePrepared(): Promise<McpWorkspaceContext> {
+  if (cachedContext) {
+    return cachedContext;
+  }
+
+  if (!runtimePreparationPromise) {
+    throw new Error('Grepmind MCP runtime preparation has not started');
+  }
+
+  return runtimePreparationPromise;
 }
 
 export function getMcpWorkspaceContext(): McpWorkspaceContext {

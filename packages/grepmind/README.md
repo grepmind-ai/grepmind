@@ -243,9 +243,9 @@ By default, local state is stored in `~/.grepmind-agent`.
 - Public npm package: `grepmind`.
 - Runtime implementation: delegated to `@grepmind/agent`.
 - Deployment templates: delegated to `@grepmind/deployment`.
-- Supported public command namespace: `grepmind auth`, `grepmind agent auth`, `grepmind agent run`, `register`, `projects`, `list`, `clean`, `init`, and `deploy`.
+- Supported public command namespace: `grepmind auth`, `grepmind agent auth`, `grepmind agent run`, `stop`, `register`, `projects`, `list`, `clean`, `init`, and `deploy`.
 
-Use `grepmind` for the stable public CLI. Use `@grepmind/agent` directly when you need lower-level runtime commands such as `stop`, `sync`, `status`, `search-head`, `remove`, `reset`, or `bootstrap`.
+Use `grepmind` for the stable public CLI. Use `@grepmind/agent` directly when you need lower-level runtime commands such as `sync`, `status`, `search-head`, `remove`, `reset`, or `bootstrap`.
 
 ## Development
 

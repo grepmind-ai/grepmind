@@ -42,6 +42,20 @@ export interface BranchDescriptor {
   };
 }
 
+export type AgentGitHubAppRepairAction =
+  | 'install_app'
+  | 'update_installation'
+  | 'update_repository_selection'
+  | 'update_permissions'
+  | 'retry_refresh'
+  | 'resolve_repository_conflict';
+
+export interface AgentGitHubAppRepair {
+  action: AgentGitHubAppRepairAction;
+  errorCode: string;
+  message: string;
+}
+
 export interface ProjectBindingDto {
   bindingId: number;
   repoId: number;
@@ -53,6 +67,22 @@ export interface ProjectBindingDto {
   branches: BranchDescriptor[];
   embeddingProfiles: EmbeddingProfileDescriptor[];
   updatedAt: string;
+  githubAppRepair?: AgentGitHubAppRepair | null;
+}
+
+export type RegisterProjectSkippedReason = 'github_app_access_required';
+
+export type RegisterProjectRegisteredResponse = ProjectBindingDto & {
+  registered?: true;
+};
+
+export interface RegisterProjectSkippedResponse {
+  registered: false;
+  reason: RegisterProjectSkippedReason;
+  connectionSource: 'github';
+  repoFullName: string | null;
+  remoteIdentity: string;
+  githubAppRepair?: AgentGitHubAppRepair | null;
 }
 
 export interface RegisterProjectRequest {
@@ -65,7 +95,9 @@ export interface RegisterProjectRequest {
   preferredActiveBranch?: string;
 }
 
-export type RegisterProjectResponse = ProjectBindingDto;
+export type RegisterProjectResponse =
+  | RegisterProjectRegisteredResponse
+  | RegisterProjectSkippedResponse;
 
 export interface ListProjectsResponse {
   items: ProjectBindingDto[];

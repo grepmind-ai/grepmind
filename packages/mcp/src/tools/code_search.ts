@@ -7,6 +7,7 @@ import {
   type SearchResult,
   type ResponseMeta,
 } from './search-client.js';
+import { ensureMcpRuntimePrepared } from '../runtime-context.js';
 
 const DEFAULT_SEARCH_LIMIT = 10;
 const MAX_SEARCH_LIMIT = 100;
@@ -120,6 +121,7 @@ export async function codeSearchTool(input: CodeSearchInput): Promise<{
   _meta?: ResponseMeta;
 }> {
   try {
+    await ensureMcpRuntimePrepared();
     const { results } = await searchCode({
       query: input.query,
       mode: 'semantic',

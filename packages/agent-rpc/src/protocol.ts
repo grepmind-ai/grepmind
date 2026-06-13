@@ -94,6 +94,22 @@ export interface LocalProjectSnapshot {
   embeddingProfiles: EmbeddingProfileDescriptor[];
 }
 
+export type AgentGitHubAppRepairAction =
+  | 'install_app'
+  | 'update_installation'
+  | 'update_repository_selection'
+  | 'update_permissions'
+  | 'retry_refresh'
+  | 'resolve_repository_conflict';
+
+export interface AgentGitHubAppRepair {
+  action: AgentGitHubAppRepairAction;
+  errorCode: string;
+  message: string;
+}
+
+export type RegisterProjectSkippedReason = 'github_app_access_required';
+
 export interface AgentStatusQuery {
   bindingId?: number;
   branch?: string;
@@ -148,10 +164,24 @@ export interface SyncProjectResult {
   syncedAt: string;
 }
 
-export interface RegisterProjectCommandResult {
+export interface RegisterProjectRegisteredCommandResult {
+  registered?: true;
   snapshot: LocalProjectSnapshot;
   projectionVersion: number;
 }
+
+export interface RegisterProjectSkippedCommandResult {
+  registered: false;
+  reason: RegisterProjectSkippedReason;
+  connectionSource: 'github';
+  repoFullName: string | null;
+  remoteIdentity: string;
+  githubAppRepair?: AgentGitHubAppRepair | null;
+}
+
+export type RegisterProjectCommandResult =
+  | RegisterProjectRegisteredCommandResult
+  | RegisterProjectSkippedCommandResult;
 
 export interface ListProjectsCommandResult {
   items: LocalProjectRecord[];

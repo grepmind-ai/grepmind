@@ -2,7 +2,7 @@
 import 'dotenv/config';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { prepareMcpRuntime } from './runtime-context.js';
+import { startMcpRuntimePreparation } from './runtime-context.js';
 import { agentStatusSchema, agentStatusTool } from './tools/agent_status.js';
 import { codeSearchSchema, codeSearchTool } from './tools/code_search.js';
 import { parseMcpCliArgs, resolveWorkspaceRoot } from './workspace.js';
@@ -35,7 +35,7 @@ async function main(): Promise<void> {
 
   parseMcpCliArgs(process.argv.slice(2));
   const workspacePath = await resolveWorkspaceRoot();
-  await prepareMcpRuntime({ workspacePath });
+  startMcpRuntimePreparation({ workspacePath });
 
   const transport = new StdioServerTransport();
   await server.connect(transport);

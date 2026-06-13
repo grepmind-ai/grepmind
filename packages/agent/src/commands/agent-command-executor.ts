@@ -27,11 +27,14 @@ export class AgentCommandExecutor {
   async registerProject(
     input: RegisterLocalProjectInput,
   ): Promise<RegisterProjectCommandResult> {
-    const snapshot = await this.runtime.projects.registerProject(input);
+    const result = await this.runtime.projects.registerProject(input);
+    if (!('snapshot' in result)) {
+      return result;
+    }
 
     return {
-      snapshot,
-      projectionVersion: toProjectionVersion(snapshot.project.updatedAt),
+      snapshot: result.snapshot,
+      projectionVersion: toProjectionVersion(result.snapshot.project.updatedAt),
     };
   }
 
