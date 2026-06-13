@@ -28,7 +28,7 @@ export class AgentCommandExecutor {
     input: RegisterLocalProjectInput,
   ): Promise<RegisterProjectCommandResult> {
     const result = await this.runtime.projects.registerProject(input);
-    if ('registered' in result && result.registered === false) {
+    if (!('snapshot' in result)) {
       return result;
     }
 
