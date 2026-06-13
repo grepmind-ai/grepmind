@@ -1,19 +1,16 @@
-import { execFile, spawn } from 'node:child_process';
-import { readFile } from 'node:fs/promises';
+import { spawn } from 'node:child_process';
+import { closeSync, openSync } from 'node:fs';
+import { mkdir, readFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { promisify } from 'node:util';
 import {
   AgentRuntimeClient,
   AgentRuntimeClientError,
   isRuntimeUnavailableError,
 } from './client.js';
-import {
-  inspectCredentialPayload,
-  type AgentCredentialInspection,
-} from './credential-inspection.js';
-
-const execFileAsync = promisify(execFile);
+import { refreshExpiredAccountSessionIfPossible } from './auth-refresh.js';
+import { inspectCredential } from './credential-store.js';
+import { getAgentRuntimeLogPath } from './control.js';
 
 export const DEFAULT_AGENT_DATA_DIR = path.join(
   os.homedir(),
@@ -28,7 +25,6 @@ const DEFAULT_AGENT_COMMAND: AgentControlCommand = {
 const DEFAULT_RUNTIME_READY_TIMEOUT_MS = 15_000;
 const DEFAULT_COMMAND_TIMEOUT_MS = 10 * 60 * 1000;
 const READY_POLL_INTERVAL_MS = 200;
-const KEYCHAIN_SERVICE = 'grepmind-agent';
 
 export interface AgentControlCommand {
   command: string;
@@ -274,6 +270,13 @@ export async function ensureAgentAuth(
     return status;
   }
 
+  if (await refreshExpiredAccountSessionIfPossible(status)) {
+    const refreshedStatus = await getAgentAuthStatus(dataDir);
+    if (!refreshedStatus.needsLogin) {
+      return refreshedStatus;
+    }
+  }
+
   const hostname =
     options.hostname?.trim() ?? process.env.GREPMIND_AGENT_HOSTNAME?.trim();
   if (!hostname) {
@@ -305,8 +308,10 @@ export async function startAgentRuntime(
   options: EnsureAgentRuntimeOptions = {},
 ): Promise<void> {
   const dataDir = resolveAgentDataDir(options.dataDir);
+  const runtimeLogPath = getAgentRuntimeLogPath(dataDir);
   await spawnDetachedAgentCommand({
     command: options.command,
+    runtimeLogPath,
     args: [
       'run',
       '--detach',
@@ -454,18 +459,37 @@ async function runAgentCommand(input: {
 async function spawnDetachedAgentCommand(input: {
   command?: AgentControlCommand;
   args: string[];
+  runtimeLogPath: string;
 }): Promise<void> {
   const command = normalizeCommand(input.command);
-  const child = spawn(command.command, [...command.baseArgs, ...input.args], {
-    detached: true,
-    stdio: 'ignore',
-    env: process.env,
-    cwd: process.cwd(),
-  });
+  await mkdir(path.dirname(input.runtimeLogPath), { recursive: true });
+  const stdoutFd = openSync(input.runtimeLogPath, 'a');
+  const stderrFd = openSync(input.runtimeLogPath, 'a');
+  let child;
+  try {
+    child = spawn(command.command, [...command.baseArgs, ...input.args], {
+      detached: true,
+      stdio: ['ignore', stdoutFd, stderrFd],
+      env: process.env,
+      cwd: process.cwd(),
+    });
+  } catch (error) {
+    closeSync(stdoutFd);
+    closeSync(stderrFd);
+    throw error;
+  }
 
   await new Promise<void>((resolve, reject) => {
-    child.once('error', reject);
-    child.once('spawn', resolve);
+    child.once('error', (error) => {
+      closeSync(stdoutFd);
+      closeSync(stderrFd);
+      reject(error);
+    });
+    child.once('spawn', () => {
+      closeSync(stdoutFd);
+      closeSync(stderrFd);
+      resolve();
+    });
   });
   child.unref();
 }
@@ -478,60 +502,6 @@ function normalizeCommand(command?: AgentControlCommand): {
     command: command?.command ?? DEFAULT_AGENT_COMMAND.command,
     baseArgs: command?.baseArgs ?? DEFAULT_AGENT_COMMAND.baseArgs ?? [],
   };
-}
-
-async function inspectCredential(
-  auth: AgentCliAuthConfig,
-): Promise<AgentCredentialInspection> {
-  if (process.platform !== 'darwin') {
-    const status =
-      auth.credentialStoreKind === 'unsupported'
-        ? 'unsupported'
-        : 'unavailable';
-    return {
-      status,
-      accountSessionStatus: status,
-      accountSessionExpiresAt: null,
-      selectedAccountId: null,
-      selectedAccountName: null,
-    };
-  }
-
-  try {
-    const { stdout } = await execFileAsync(
-      '/usr/bin/security',
-      [
-        'find-generic-password',
-        '-s',
-        KEYCHAIN_SERVICE,
-        '-a',
-        auth.credentialStoreKey,
-        '-w',
-      ],
-      {
-        encoding: 'utf8',
-        maxBuffer: 1024 * 1024,
-      },
-    );
-    return inspectCredentialPayload(stdout);
-  } catch (error) {
-    if (isSecurityItemNotFound(error)) {
-      return {
-        status: 'missing',
-        accountSessionStatus: 'missing',
-        accountSessionExpiresAt: null,
-        selectedAccountId: null,
-        selectedAccountName: null,
-      };
-    }
-    return {
-      status: 'unavailable',
-      accountSessionStatus: 'unavailable',
-      accountSessionExpiresAt: null,
-      selectedAccountId: null,
-      selectedAccountName: null,
-    };
-  }
 }
 
 function normalizeAuthConfig(value: unknown): AgentCliAuthConfig | undefined {
@@ -572,15 +542,6 @@ function isRuntimeReadyWaitError(error: unknown): boolean {
       error.code === 'BROKEN_PIPE' ||
       error.code === 'TIMEOUT' ||
       error.code === 'RUNTIME_NOT_READY')
-  );
-}
-
-function isSecurityItemNotFound(error: unknown): boolean {
-  return (
-    error instanceof Error &&
-    /could not be found|The specified item could not be found/i.test(
-      error.message,
-    )
   );
 }
 

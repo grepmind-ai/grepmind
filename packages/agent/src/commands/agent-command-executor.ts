@@ -21,8 +21,15 @@ export interface SyncProjectCommandInput {
   targets?: SearchTarget[];
 }
 
+export interface AgentCommandExecutorOptions {
+  syncHead?: (bindingId: number) => Promise<void>;
+}
+
 export class AgentCommandExecutor {
-  constructor(private readonly runtime: AgentRuntime) {}
+  constructor(
+    private readonly runtime: AgentRuntime,
+    private readonly options: AgentCommandExecutorOptions = {},
+  ) {}
 
   async registerProject(
     input: RegisterLocalProjectInput,
@@ -48,6 +55,7 @@ export class AgentCommandExecutor {
     input: SyncProjectCommandInput = {},
   ): Promise<SyncProjectCommandResult> {
     if (input.bindingId != null) {
+      await this.syncHead(input.bindingId);
       return {
         results: [
           await this.runtime.sync.syncProject(input.bindingId, {
@@ -57,10 +65,19 @@ export class AgentCommandExecutor {
       };
     }
 
+    const projects = await this.runtime.projects.listProjects();
+    const results: SyncProjectCommandResult['results'] = [];
+    for (const project of projects) {
+      await this.syncHead(project.bindingId);
+      results.push(
+        await this.runtime.sync.syncProject(project.bindingId, {
+          targets: input.targets,
+        }),
+      );
+    }
+
     return {
-      results: await this.runtime.sync.syncAllProjects({
-        targets: input.targets,
-      }),
+      results,
     };
   }
 
@@ -76,6 +93,10 @@ export class AgentCommandExecutor {
 
   async status(input: AgentStatusQuery = {}): Promise<AgentStatusSnapshot> {
     return loadAgentStatusSnapshot(this.runtime.db, input);
+  }
+
+  private async syncHead(bindingId: number): Promise<void> {
+    await this.options.syncHead?.(bindingId);
   }
 }
 

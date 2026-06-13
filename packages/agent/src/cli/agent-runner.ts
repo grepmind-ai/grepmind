@@ -254,6 +254,11 @@ export class AgentRunner {
     return this.realtimeClient.runSearch(input, options);
   }
 
+  async syncHead(bindingId: number): Promise<void> {
+    const revisionPublication = await this.requireRevisionPublication();
+    await revisionPublication.ensureAttachedAndSyncHead(bindingId);
+  }
+
   private async requireRuntime(): Promise<AgentRuntime> {
     if (!this.runtime) {
       await this.start();

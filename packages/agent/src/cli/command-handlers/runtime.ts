@@ -7,6 +7,7 @@ import {
   spawnAgentRuntimeProcess,
   waitForAgentRuntimeReady,
 } from '../../runtime/client.js';
+import { getAgentRuntimeLogPath } from '../../runtime/control.js';
 import type { AgentCliExecutionContext } from '../cli-context.js';
 import { createAgentConsole } from '../cli-context.js';
 import { hasBooleanFlag } from '../flags.js';
@@ -28,6 +29,10 @@ export async function runCommand(
     agentConsole.success(
       'runtime',
       `Agent runtime started in background for ${config.dataDir}`,
+    );
+    agentConsole.info(
+      'runtime',
+      `Runtime logs: ${getAgentRuntimeLogPath(config.dataDir)}`,
     );
     return;
   }
