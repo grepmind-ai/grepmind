@@ -545,10 +545,18 @@ async function withTimeout<T>(
   timeoutMs: number,
   message: string,
 ): Promise<T> {
-  const timeout = delay(timeoutMs).then(() => {
+  const controller = new AbortController();
+  const timeout = delay(timeoutMs, undefined, {
+    signal: controller.signal,
+    ref: false,
+  }).then(() => {
     throw new Error(message);
   });
-  return Promise.race([promise, timeout]);
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    controller.abort();
+  }
 }
 
 function rejectUnexpectedPositionals(
