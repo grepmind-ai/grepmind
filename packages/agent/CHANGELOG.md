@@ -1,5 +1,11 @@
 # @grepmind/agent
 
+## 0.1.6
+
+### Patch Changes
+
+- e81f9a1: Clean up auth callback timeout handles after login.
+
 ## 0.1.5
 
 ### Patch Changes
