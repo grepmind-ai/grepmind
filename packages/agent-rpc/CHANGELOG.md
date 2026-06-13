@@ -1,5 +1,11 @@
 # @grepmind/agent-rpc
 
+## 0.2.2
+
+### Patch Changes
+
+- fe82c5b: Harden MCP runtime startup and expose agent stop command
+
 ## 0.2.1
 
 ### Patch Changes

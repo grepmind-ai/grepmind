@@ -1,5 +1,17 @@
 # grepmind
 
+## 0.4.0
+
+### Minor Changes
+
+- 164f21a: Update Grepmind init project config contract
+
+### Patch Changes
+
+- fe82c5b: Harden MCP runtime startup and expose agent stop command
+- Updated dependencies [fe82c5b]
+  - @grepmind/agent@0.1.5
+
 ## 0.3.1
 
 ### Patch Changes
