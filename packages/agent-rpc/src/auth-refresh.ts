@@ -2,11 +2,7 @@ import { execFile } from 'node:child_process';
 import { chmod, readFile, writeFile } from 'node:fs/promises';
 import { promisify } from 'node:util';
 
-import type {
-  AgentAuthStatus,
-  AgentCliAuthConfig,
-  AgentCliConfigSnapshot,
-} from './bootstrap.js';
+import type { AgentAuthStatus, AgentCliAuthConfig } from './bootstrap.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -48,29 +44,32 @@ interface StoredOAuthCredential {
 export async function refreshExpiredAccountSessionIfPossible(
   status: AgentAuthStatus,
 ): Promise<boolean> {
+  const config = status.config;
+  const auth = config?.auth;
   if (
     status.credentialStatus !== 'available' ||
     status.accountSessionStatus !== 'expired' ||
-    !status.config?.auth
+    !config ||
+    !auth
   ) {
     return false;
   }
 
   try {
-    const credential = await loadStoredCredential(status.config.auth);
+    const credential = await loadStoredCredential(auth);
     if (!credential.accountSession) {
       return false;
     }
 
     const credentialWithFreshAccessToken = await refreshOAuthCredentialIfNeeded(
-      status.config,
+      auth,
       status.configPath,
       credential,
     );
     const accountSession = await refreshStoredAccountSession(
       credentialWithFreshAccessToken,
     );
-    await saveStoredCredential(status.config.auth.credentialStoreKey, {
+    await saveStoredCredential(auth.credentialStoreKey, {
       ...credentialWithFreshAccessToken,
       accountSession,
     });
@@ -81,7 +80,7 @@ export async function refreshExpiredAccountSessionIfPossible(
 }
 
 async function refreshOAuthCredentialIfNeeded(
-  config: AgentCliConfigSnapshot & { auth: AgentCliAuthConfig },
+  auth: AgentCliAuthConfig,
   configPath: string,
   credential: StoredOAuthCredential,
 ): Promise<StoredOAuthCredential> {
@@ -144,7 +143,7 @@ async function refreshOAuthCredentialIfNeeded(
         : credential.refreshToken,
     expiresAt: new Date(Date.now() + payload.expires_in * 1000).toISOString(),
   };
-  await saveStoredCredential(config.auth.credentialStoreKey, nextCredential);
+  await saveStoredCredential(auth.credentialStoreKey, nextCredential);
   await updateStoredConfigAuthExpiresAt(configPath, nextCredential.expiresAt);
   return nextCredential;
 }
