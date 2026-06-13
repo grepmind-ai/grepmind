@@ -24,6 +24,10 @@ export {
   isAgentAccountSessionErrorCode,
   isMutatingRpcMethod,
 } from './protocol.js';
+export {
+  AGENT_RUNTIME_LOG_FILENAME,
+  getAgentRuntimeLogPath,
+} from './control.js';
 export type {
   AgentAuthStatus,
   AgentAccountSessionStatus,

@@ -261,6 +261,7 @@ export class AgentRuntimeRequestDispatcher {
       startedAt: meta.startedAt,
       pid: meta.pid,
       dataDir: this.options.dataDir,
+      runtimeLogPath: meta.runtimeLogPath,
     };
   }
 

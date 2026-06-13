@@ -33,6 +33,7 @@ export interface AgentRuntimeMeta {
   startedAt: string;
   pid: number;
   socketPath: string;
+  runtimeLogPath?: string;
   token: string;
 }
 
@@ -42,6 +43,7 @@ export interface AgentRuntimePingResult {
   startedAt: string;
   pid: number;
   dataDir: string;
+  runtimeLogPath?: string;
 }
 
 export interface EmbeddingProfileDescriptor {

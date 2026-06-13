@@ -17,6 +17,7 @@ export const AGENT_SOCKET_FILENAME = 'agent.sock';
 export const AGENT_PID_FILENAME = 'agent.pid';
 export const AGENT_META_FILENAME = 'agent.meta.json';
 export const AGENT_LOCK_FILENAME = 'agent.lock';
+export const AGENT_RUNTIME_LOG_FILENAME = 'agent-runtime.log';
 
 const PRIVATE_DIR_MODE = 0o700;
 const PRIVATE_FILE_MODE = 0o600;
@@ -41,6 +42,10 @@ export function getAgentPidPath(dataDir: string): string {
 
 export function getAgentMetaPath(dataDir: string): string {
   return path.join(dataDir, AGENT_META_FILENAME);
+}
+
+export function getAgentRuntimeLogPath(dataDir: string): string {
+  return path.join(dataDir, AGENT_RUNTIME_LOG_FILENAME);
 }
 
 export function getAgentLockPath(dataDir: string): string {

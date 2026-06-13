@@ -1,5 +1,6 @@
 import { execFile, spawn } from 'node:child_process';
-import { readFile } from 'node:fs/promises';
+import { closeSync, openSync } from 'node:fs';
+import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -12,6 +13,7 @@ import {
   inspectCredentialPayload,
   type AgentCredentialInspection,
 } from './credential-inspection.js';
+import { getAgentRuntimeLogPath } from './control.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -29,6 +31,12 @@ const DEFAULT_RUNTIME_READY_TIMEOUT_MS = 15_000;
 const DEFAULT_COMMAND_TIMEOUT_MS = 10 * 60 * 1000;
 const READY_POLL_INTERVAL_MS = 200;
 const KEYCHAIN_SERVICE = 'grepmind-agent';
+const OAUTH_REFRESH_SKEW_MS = 5 * 60 * 1000;
+const AGENT_ACCOUNT_SESSION_HEADER = 'x-grepmind-agent-account-session';
+const AGENT_ACCOUNT_SESSION_CAPABILITY_HEADER =
+  'x-grepmind-agent-capability';
+const AGENT_ACCOUNT_SESSION_DEVICE_HEADER = 'x-grepmind-agent-device-id';
+const AGENT_ACCOUNT_SESSION_CAPABILITY = 'account-session/v1';
 
 export interface AgentControlCommand {
   command: string;
@@ -54,6 +62,34 @@ export interface AgentCliConfigSnapshot {
   deviceId?: string;
   dataDir: string;
   auth?: AgentCliAuthConfig;
+}
+
+interface StoredAgentAccountSession {
+  token: string;
+  deviceId: string;
+  expiresAt: string;
+  refreshAfter: string;
+  account: {
+    accountId: number;
+    displayName: string;
+    clerkOrgSlug: string | null;
+  };
+}
+
+interface StoredOAuthCredential {
+  credentialType: 'oauth_token';
+  host: string;
+  apiBaseUrl: string;
+  accessToken: string;
+  refreshToken: string;
+  tokenEndpoint: string;
+  userInfoEndpoint?: string;
+  oauthClientId: string;
+  scopes: string[];
+  expiresAt: string;
+  accountSubject: string | null;
+  accountEmail: string | null;
+  accountSession?: StoredAgentAccountSession;
 }
 
 export type AgentCredentialStatus =
@@ -274,6 +310,14 @@ export async function ensureAgentAuth(
     return status;
   }
 
+  const refreshedStatus = await refreshExpiredAccountSessionIfPossible(
+    dataDir,
+    status,
+  );
+  if (refreshedStatus && !refreshedStatus.needsLogin) {
+    return refreshedStatus;
+  }
+
   const hostname =
     options.hostname?.trim() ?? process.env.GREPMIND_AGENT_HOSTNAME?.trim();
   if (!hostname) {
@@ -305,8 +349,10 @@ export async function startAgentRuntime(
   options: EnsureAgentRuntimeOptions = {},
 ): Promise<void> {
   const dataDir = resolveAgentDataDir(options.dataDir);
+  const runtimeLogPath = getAgentRuntimeLogPath(dataDir);
   await spawnDetachedAgentCommand({
     command: options.command,
+    runtimeLogPath,
     args: [
       'run',
       '--detach',
@@ -454,18 +500,37 @@ async function runAgentCommand(input: {
 async function spawnDetachedAgentCommand(input: {
   command?: AgentControlCommand;
   args: string[];
+  runtimeLogPath: string;
 }): Promise<void> {
   const command = normalizeCommand(input.command);
-  const child = spawn(command.command, [...command.baseArgs, ...input.args], {
-    detached: true,
-    stdio: 'ignore',
-    env: process.env,
-    cwd: process.cwd(),
-  });
+  await mkdir(path.dirname(input.runtimeLogPath), { recursive: true });
+  const stdoutFd = openSync(input.runtimeLogPath, 'a');
+  const stderrFd = openSync(input.runtimeLogPath, 'a');
+  let child;
+  try {
+    child = spawn(command.command, [...command.baseArgs, ...input.args], {
+      detached: true,
+      stdio: ['ignore', stdoutFd, stderrFd],
+      env: process.env,
+      cwd: process.cwd(),
+    });
+  } catch (error) {
+    closeSync(stdoutFd);
+    closeSync(stderrFd);
+    throw error;
+  }
 
   await new Promise<void>((resolve, reject) => {
-    child.once('error', reject);
-    child.once('spawn', resolve);
+    child.once('error', (error) => {
+      closeSync(stdoutFd);
+      closeSync(stderrFd);
+      reject(error);
+    });
+    child.once('spawn', () => {
+      closeSync(stdoutFd);
+      closeSync(stderrFd);
+      resolve();
+    });
   });
   child.unref();
 }
@@ -532,6 +597,342 @@ async function inspectCredential(
       selectedAccountName: null,
     };
   }
+}
+
+async function refreshExpiredAccountSessionIfPossible(
+  dataDir: string,
+  status: AgentAuthStatus,
+): Promise<AgentAuthStatus | null> {
+  if (
+    status.credentialStatus !== 'available' ||
+    status.accountSessionStatus !== 'expired' ||
+    !status.config?.auth
+  ) {
+    return null;
+  }
+
+  try {
+    const credential = await loadStoredCredential(status.config.auth);
+    if (!credential.accountSession) {
+      return null;
+    }
+
+    const credentialWithFreshAccessToken =
+      await refreshOAuthCredentialIfNeeded(status.config, credential);
+    const accountSession = await refreshStoredAccountSession(
+      credentialWithFreshAccessToken,
+    );
+    await saveStoredCredential(status.config.auth.credentialStoreKey, {
+      ...credentialWithFreshAccessToken,
+      accountSession,
+    });
+    return getAgentAuthStatus(dataDir);
+  } catch {
+    return null;
+  }
+}
+
+async function refreshOAuthCredentialIfNeeded(
+  config: AgentCliConfigSnapshot & { auth: AgentCliAuthConfig },
+  credential: StoredOAuthCredential,
+): Promise<StoredOAuthCredential> {
+  if (!needsOAuthRefresh(credential.expiresAt)) {
+    return credential;
+  }
+
+  const response = await fetch(credential.tokenEndpoint, {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: new URLSearchParams({
+      grant_type: 'refresh_token',
+      client_id: credential.oauthClientId,
+      refresh_token: credential.refreshToken,
+      ...(credential.scopes.length > 0
+        ? { scope: credential.scopes.join(' ') }
+        : {}),
+    }),
+  });
+  const payload = await readJsonObject(response);
+  if (!response.ok || typeof payload.error === 'string') {
+    throw new Error(
+      `AUTH_REFRESH_FAILED: ${
+        typeof payload.error_description === 'string'
+          ? payload.error_description
+          : typeof payload.error === 'string'
+            ? payload.error
+            : `HTTP ${response.status}`
+      }`,
+    );
+  }
+  if (typeof payload.access_token !== 'string') {
+    throw new Error(
+      'AUTH_REFRESH_FAILED: refresh response did not include an access token',
+    );
+  }
+  if (
+    typeof payload.token_type !== 'string' ||
+    payload.token_type.toLowerCase() !== 'bearer'
+  ) {
+    throw new Error(
+      'AUTH_REFRESH_FAILED: refresh response token_type must be Bearer',
+    );
+  }
+  if (typeof payload.expires_in !== 'number' || payload.expires_in <= 0) {
+    throw new Error(
+      'AUTH_REFRESH_FAILED: refresh response did not include a valid expires_in',
+    );
+  }
+
+  const nextCredential: StoredOAuthCredential = {
+    ...credential,
+    accessToken: payload.access_token,
+    refreshToken:
+      typeof payload.refresh_token === 'string'
+        ? payload.refresh_token
+        : credential.refreshToken,
+    expiresAt: new Date(Date.now() + payload.expires_in * 1000).toISOString(),
+  };
+  await saveStoredCredential(config.auth.credentialStoreKey, nextCredential);
+  await updateStoredConfigAuthExpiresAt(config, nextCredential.expiresAt).catch(
+    () => {},
+  );
+  return nextCredential;
+}
+
+async function refreshStoredAccountSession(
+  credential: StoredOAuthCredential,
+): Promise<StoredAgentAccountSession> {
+  const current = credential.accountSession;
+  if (!current) {
+    throw new Error('AGENT_ACCOUNT_SESSION_REQUIRED: stored session missing');
+  }
+
+  const response = await fetch(
+    `${credential.apiBaseUrl.replace(/\/+$/, '')}/api/agent/account-sessions/refresh`,
+    {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${credential.accessToken}`,
+        [AGENT_ACCOUNT_SESSION_CAPABILITY_HEADER]:
+          AGENT_ACCOUNT_SESSION_CAPABILITY,
+        [AGENT_ACCOUNT_SESSION_DEVICE_HEADER]: current.deviceId,
+        [AGENT_ACCOUNT_SESSION_HEADER]: current.token,
+      },
+      body: '{}',
+    },
+  );
+  const payload = await readJsonObject(response);
+  if (!response.ok) {
+    throw new Error(
+      `${
+        typeof payload.code === 'string'
+          ? payload.code
+          : 'AGENT_ACCOUNT_SESSION_REFRESH_FAILED'
+      }: ${
+        typeof payload.message === 'string'
+          ? payload.message
+          : `HTTP ${response.status}`
+      }`,
+    );
+  }
+
+  return normalizeAccountSessionResponse(payload, current.deviceId);
+}
+
+function needsOAuthRefresh(expiresAt: string): boolean {
+  const expiresAtMs = Date.parse(expiresAt);
+  return (
+    !Number.isFinite(expiresAtMs) ||
+    expiresAtMs <= Date.now() + OAUTH_REFRESH_SKEW_MS
+  );
+}
+
+async function loadStoredCredential(
+  auth: AgentCliAuthConfig,
+): Promise<StoredOAuthCredential> {
+  const { stdout } = await execFileAsync(
+    '/usr/bin/security',
+    [
+      'find-generic-password',
+      '-s',
+      KEYCHAIN_SERVICE,
+      '-a',
+      auth.credentialStoreKey,
+      '-w',
+    ],
+    {
+      encoding: 'utf8',
+      maxBuffer: 1024 * 1024,
+    },
+  );
+  return parseStoredCredential(stdout);
+}
+
+async function saveStoredCredential(
+  credentialStoreKey: string,
+  credential: StoredOAuthCredential,
+): Promise<void> {
+  await execFileAsync(
+    '/usr/bin/security',
+    [
+      'add-generic-password',
+      '-U',
+      '-s',
+      KEYCHAIN_SERVICE,
+      '-a',
+      credentialStoreKey,
+      '-w',
+      JSON.stringify(credential),
+    ],
+    {
+      encoding: 'utf8',
+      maxBuffer: 1024 * 1024,
+    },
+  );
+}
+
+function parseStoredCredential(raw: string): StoredOAuthCredential {
+  const parsed = JSON.parse(raw.trim()) as Partial<StoredOAuthCredential>;
+  if (
+    parsed.credentialType !== 'oauth_token' ||
+    typeof parsed.host !== 'string' ||
+    typeof parsed.apiBaseUrl !== 'string' ||
+    typeof parsed.accessToken !== 'string' ||
+    typeof parsed.refreshToken !== 'string' ||
+    typeof parsed.tokenEndpoint !== 'string' ||
+    typeof parsed.oauthClientId !== 'string' ||
+    typeof parsed.expiresAt !== 'string' ||
+    !Array.isArray(parsed.scopes)
+  ) {
+    throw new Error(
+      'AUTH_CREDENTIAL_INVALID: secure credential payload is invalid',
+    );
+  }
+
+  const accountSession = normalizeStoredAccountSession(parsed.accountSession);
+  return {
+    credentialType: 'oauth_token',
+    host: parsed.host,
+    apiBaseUrl: parsed.apiBaseUrl,
+    accessToken: parsed.accessToken,
+    refreshToken: parsed.refreshToken,
+    tokenEndpoint: parsed.tokenEndpoint,
+    ...(typeof parsed.userInfoEndpoint === 'string'
+      ? { userInfoEndpoint: parsed.userInfoEndpoint }
+      : {}),
+    oauthClientId: parsed.oauthClientId,
+    scopes: parsed.scopes.filter(
+      (scope): scope is string => typeof scope === 'string',
+    ),
+    expiresAt: parsed.expiresAt,
+    accountSubject:
+      typeof parsed.accountSubject === 'string' ? parsed.accountSubject : null,
+    accountEmail:
+      typeof parsed.accountEmail === 'string' ? parsed.accountEmail : null,
+    ...(accountSession ? { accountSession } : {}),
+  };
+}
+
+function normalizeStoredAccountSession(
+  value: unknown,
+): StoredAgentAccountSession | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+
+  const record = value as Partial<StoredAgentAccountSession>;
+  return normalizeAccountSessionPayload(
+    {
+      accountSessionToken: record.token,
+      expiresAt: record.expiresAt,
+      refreshAfter: record.refreshAfter,
+      account: record.account,
+    },
+    typeof record.deviceId === 'string' ? record.deviceId : null,
+  );
+}
+
+function normalizeAccountSessionResponse(
+  payload: Record<string, unknown>,
+  deviceId: string,
+): StoredAgentAccountSession {
+  return normalizeAccountSessionPayload(payload, deviceId);
+}
+
+function normalizeAccountSessionPayload(
+  payload: Record<string, unknown>,
+  deviceId: string | null,
+): StoredAgentAccountSession {
+  const account =
+    payload.account &&
+    typeof payload.account === 'object' &&
+    !Array.isArray(payload.account)
+      ? (payload.account as Record<string, unknown>)
+      : null;
+  if (
+    typeof payload.accountSessionToken !== 'string' ||
+    typeof deviceId !== 'string' ||
+    typeof payload.expiresAt !== 'string' ||
+    typeof payload.refreshAfter !== 'string' ||
+    !account ||
+    typeof account.accountId !== 'number' ||
+    typeof account.displayName !== 'string'
+  ) {
+    throw new Error('AGENT_ACCOUNT_SESSION_INVALID: session payload invalid');
+  }
+
+  return {
+    token: payload.accountSessionToken,
+    deviceId,
+    expiresAt: payload.expiresAt,
+    refreshAfter: payload.refreshAfter,
+    account: {
+      accountId: account.accountId,
+      displayName: account.displayName,
+      clerkOrgSlug:
+        typeof account.clerkOrgSlug === 'string' ? account.clerkOrgSlug : null,
+    },
+  };
+}
+
+async function updateStoredConfigAuthExpiresAt(
+  config: AgentCliConfigSnapshot & { auth: AgentCliAuthConfig },
+  expiresAt: string,
+): Promise<void> {
+  const configPath = getAgentConfigPath(config.dataDir);
+  const raw = await readFile(configPath, 'utf8');
+  const parsed = JSON.parse(raw) as Record<string, unknown>;
+  const auth =
+    parsed.auth && typeof parsed.auth === 'object' && !Array.isArray(parsed.auth)
+      ? (parsed.auth as Record<string, unknown>)
+      : null;
+  if (!auth) {
+    return;
+  }
+
+  parsed.auth = {
+    ...auth,
+    expiresAt,
+  };
+  await writeFile(configPath, `${JSON.stringify(parsed, null, 2)}\n`, {
+    encoding: 'utf8',
+    mode: 0o600,
+  });
+  await chmod(configPath, 0o600).catch(() => {});
+}
+
+async function readJsonObject(
+  response: Response,
+): Promise<Record<string, unknown>> {
+  const payload = (await response.json().catch(() => ({}))) as unknown;
+  return payload && typeof payload === 'object' && !Array.isArray(payload)
+    ? (payload as Record<string, unknown>)
+    : {};
 }
 
 function normalizeAuthConfig(value: unknown): AgentCliAuthConfig | undefined {

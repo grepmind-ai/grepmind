@@ -5,6 +5,7 @@ import path from 'node:path';
 import type { AgentRuntimeMeta } from './protocol.js';
 
 export const AGENT_META_FILENAME = 'agent.meta.json';
+export const AGENT_RUNTIME_LOG_FILENAME = 'agent-runtime.log';
 
 const AGENT_SOCKET_DIRNAME = 'grepmind-agent-runtime';
 
@@ -18,6 +19,10 @@ export function getAgentSocketPath(dataDir: string): string {
 
 export function getAgentMetaPath(dataDir: string): string {
   return path.join(dataDir, AGENT_META_FILENAME);
+}
+
+export function getAgentRuntimeLogPath(dataDir: string): string {
+  return path.join(dataDir, AGENT_RUNTIME_LOG_FILENAME);
 }
 
 export async function readAgentMetaFile(

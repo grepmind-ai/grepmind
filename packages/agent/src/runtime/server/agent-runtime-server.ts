@@ -14,6 +14,7 @@ import {
   cleanupRuntimeArtifactFiles,
   cleanupStaleRuntimeArtifacts,
   getAgentSocketPath,
+  getAgentRuntimeLogPath,
   writeAgentMetaFile,
   writeAgentPidFile,
   type AgentRuntimeLock,
@@ -99,7 +100,9 @@ export class AgentRuntimeServer {
 
       await this.runner.start();
       const runtime = await this.runner.getRuntime();
-      this.commandExecutor = new AgentCommandExecutor(runtime);
+      this.commandExecutor = new AgentCommandExecutor(runtime, {
+        syncHead: (bindingId) => this.runner.syncHead(bindingId),
+      });
       this.searchHeadService = new SearchHeadService({
         projects: runtime.projects,
         revisionAttachments: runtime.repositories.projectRevisionAttachments,
@@ -113,6 +116,7 @@ export class AgentRuntimeServer {
         startedAt: new Date().toISOString(),
         pid: process.pid,
         socketPath: getAgentSocketPath(this.config.dataDir),
+        runtimeLogPath: getAgentRuntimeLogPath(this.config.dataDir),
         token: randomUUID(),
       };
 
