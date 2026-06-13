@@ -4,6 +4,7 @@ import {
 } from '@grepmind/agent-rpc';
 import { z } from 'zod';
 import {
+  ensureMcpRuntimePrepared,
   getMcpWorkspaceContext,
   getReadyAgentRuntimeClient,
 } from '../runtime-context.js';
@@ -14,6 +15,20 @@ export async function agentStatusTool(): Promise<{
   content: Array<{ type: 'text'; text: string }>;
   isError?: boolean;
 }> {
+  try {
+    await ensureMcpRuntimePrepared();
+  } catch (error) {
+    return jsonResponse(
+      {
+        runtime: {
+          running: false,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      },
+      true,
+    );
+  }
+
   const context = getMcpWorkspaceContext();
   const client = getReadyAgentRuntimeClient();
   const auth = await getAgentAuthStatus(context.dataDir);

@@ -6,7 +6,8 @@
         "/Users/phl/Projects/zaytra/grepmind-public/packages/mcp/dist/index.js"
       ],
       "env": {
-        "GREPMIND_AGENT_HOSTNAME": "127.0.0.1:5173"
+        "GREPMIND_AGENT_HOSTNAME": "app.grepmind.ai",
+        "GREPMIND_MCP_STARTUP_TIMEOUT_MS": "120000"
       }
     }
   }
