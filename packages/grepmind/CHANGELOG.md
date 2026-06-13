@@ -1,5 +1,11 @@
 # grepmind
 
+## 0.4.2
+
+### Patch Changes
+
+- @grepmind/agent@0.1.7
+
 ## 0.4.1
 
 ### Patch Changes

@@ -1,5 +1,12 @@
 # @grepmind/agent
 
+## 0.1.7
+
+### Patch Changes
+
+- Updated dependencies [2f5cb74]
+  - @grepmind/agent-rpc@0.2.3
+
 ## 0.1.6
 
 ### Patch Changes

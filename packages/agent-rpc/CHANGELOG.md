@@ -1,5 +1,11 @@
 # @grepmind/agent-rpc
 
+## 0.2.3
+
+### Patch Changes
+
+- 2f5cb74: Refresh expired agent account sessions before prompting for login.
+
 ## 0.2.2
 
 ### Patch Changes
