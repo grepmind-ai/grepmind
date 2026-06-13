@@ -65,7 +65,9 @@ export class ProjectRegistryService {
       localActiveBranch: input.preferredActiveBranch ?? null,
     });
 
-    return { snapshot: await this.requireProjectSnapshot(remoteProject.bindingId) };
+    return {
+      snapshot: await this.requireProjectSnapshot(remoteProject.bindingId),
+    };
   }
 
   async refreshProject(bindingId: number): Promise<LocalProjectSnapshot> {

@@ -51,8 +51,12 @@ export async function registerCommand(args: ParsedArgs): Promise<void> {
   });
   if (result.registered === false) {
     const target = result.repoFullName ?? result.remoteIdentity;
-    const message = result.githubAppRepair?.message ?? 'GitHub App access is required';
-    agentConsole.info('project', `Registration skipped for ${target}: ${message}`);
+    const message =
+      result.githubAppRepair?.message ?? 'GitHub App access is required';
+    agentConsole.info(
+      'project',
+      `Registration skipped for ${target}: ${message}`,
+    );
     return;
   }
 

@@ -71,7 +71,8 @@ function formatSkippedRegistration(
   result: RegisterProjectSkippedCommandResult,
 ): string {
   const target = result.repoFullName ?? result.remoteIdentity;
-  const message = result.githubAppRepair?.message ?? 'GitHub App access is required';
+  const message =
+    result.githubAppRepair?.message ?? 'GitHub App access is required';
   return `registration skipped for ${target}: ${message}`;
 }
 
