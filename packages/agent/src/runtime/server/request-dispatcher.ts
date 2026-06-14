@@ -2,6 +2,7 @@ import { AgentBackendClientError } from '../../backend/agent-backend-client.js';
 import { AgentRealtimeSearchError } from '../../backend/agent-backend-realtime-client.js';
 import { AgentCommandExecutor } from '../../commands/agent-command-executor.js';
 import {
+  SearchHeadChangedError,
   SearchHeadNotReadyError,
   SearchHeadService,
 } from '../../services/search-head-service.js';
@@ -373,6 +374,14 @@ export function toRpcError(error: unknown): AgentRpcError {
     };
   }
   if (error instanceof SearchHeadNotReadyError) {
+    return {
+      code: error.code,
+      message: error.message,
+      retryable: error.retryable,
+      details: error.details,
+    };
+  }
+  if (error instanceof SearchHeadChangedError) {
     return {
       code: error.code,
       message: error.message,

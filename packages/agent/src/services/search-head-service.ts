@@ -44,7 +44,9 @@ export interface SearchHeadServiceOptions {
   repairLocalHead?: (
     bindingId: number,
     target: SearchTarget | undefined,
-  ) => Promise<void>;
+    expectedHead: SearchHeadRepairExpectedHead,
+    deadlineMs: number,
+  ) => Promise<SearchHeadRepairResult>;
   searchTransport: {
     search(
       input: SearchRequestPayload,
@@ -53,6 +55,21 @@ export interface SearchHeadServiceOptions {
   };
   localHeadService?: LocalHeadService;
 }
+
+export interface SearchHeadRepairExpectedHead {
+  branch: string;
+  headCommitSha: string;
+}
+
+export type SearchHeadRepairResult =
+  | { status: 'synced' }
+  | { status: 'expired' }
+  | {
+      status: 'head_changed';
+      branch: string | null;
+      headCommitSha: string | null;
+      detached: boolean;
+    };
 
 export class SearchHeadNotReadyError extends Error {
   readonly code = 'SEARCH_HEAD_QUEUED';
@@ -84,6 +101,43 @@ export class SearchHeadNotReadyError extends Error {
       target: input.target ?? null,
       retryAfterMs: SEARCH_HEAD_REPAIR_POLL_INTERVAL_MS,
       repairAttempts: input.repairAttempts,
+    };
+  }
+}
+
+export class SearchHeadChangedError extends Error {
+  readonly code = 'SEARCH_HEAD_CHANGED';
+  readonly retryable = true;
+  readonly details: {
+    bindingId: number;
+    expected: SearchHeadRepairExpectedHead;
+    actual: {
+      branch: string | null;
+      headCommitSha: string | null;
+      detached: boolean;
+    };
+    target: SearchTarget | null;
+  };
+
+  constructor(input: {
+    bindingId: number;
+    expected: SearchHeadRepairExpectedHead;
+    actual: {
+      branch: string | null;
+      headCommitSha: string | null;
+      detached: boolean;
+    };
+    target: SearchTarget | undefined;
+  }) {
+    super(
+      `Local HEAD changed while preparing search for ${input.expected.branch}@${input.expected.headCommitSha}; retry the search.`,
+    );
+    this.name = 'SearchHeadChangedError';
+    this.details = {
+      bindingId: input.bindingId,
+      expected: input.expected,
+      actual: input.actual,
+      target: input.target ?? null,
     };
   }
 }
@@ -170,11 +224,32 @@ export class SearchHeadService {
 
     if (this.options.repairLocalHead) {
       const repairDeadlineMs = createRepairDeadlineMs(timeoutMs);
+      const expectedHead = { branch, headCommitSha };
       let repairAttempts = 0;
 
       while (Date.now() < repairDeadlineMs) {
         repairAttempts += 1;
-        await this.options.repairLocalHead(bindingId, target);
+        const repairResult = await this.options.repairLocalHead(
+          bindingId,
+          target,
+          expectedHead,
+          repairDeadlineMs,
+        );
+        if (repairResult.status === 'expired') {
+          break;
+        }
+        if (repairResult.status === 'head_changed') {
+          throw new SearchHeadChangedError({
+            bindingId,
+            expected: expectedHead,
+            actual: {
+              branch: repairResult.branch,
+              headCommitSha: repairResult.headCommitSha,
+              detached: repairResult.detached,
+            },
+            target,
+          });
+        }
         const repairedRevisionId =
           await this.options.revisionAttachments.findRevisionForHead(
             bindingId,
