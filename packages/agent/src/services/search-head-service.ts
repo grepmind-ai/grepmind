@@ -10,6 +10,10 @@ import { ProjectRevisionAttachmentRepository } from '../repositories/project-rev
 import { LocalHeadService } from './local-head-service.js';
 import type { ProjectRegistryService } from './project-registry-service.js';
 
+const DEFAULT_SEARCH_HEAD_TIMEOUT_MS = 30_000;
+const SEARCH_HEAD_REPAIR_TIMEOUT_RESERVE_MS = 5_000;
+const SEARCH_HEAD_REPAIR_POLL_INTERVAL_MS = 1_000;
+
 export interface SearchHeadCommandInput {
   bindingId?: number;
   workspacePath?: string;
@@ -50,6 +54,40 @@ export interface SearchHeadServiceOptions {
   localHeadService?: LocalHeadService;
 }
 
+export class SearchHeadNotReadyError extends Error {
+  readonly code = 'SEARCH_HEAD_QUEUED';
+  readonly retryable = true;
+  readonly details: {
+    bindingId: number;
+    branch: string;
+    headCommitSha: string;
+    target: SearchTarget | null;
+    retryAfterMs: number;
+    repairAttempts: number;
+  };
+
+  constructor(input: {
+    bindingId: number;
+    branch: string;
+    headCommitSha: string;
+    target: SearchTarget | undefined;
+    repairAttempts: number;
+  }) {
+    super(
+      `Local HEAD ${input.branch}@${input.headCommitSha} is queued for indexing; retry shortly.`,
+    );
+    this.name = 'SearchHeadNotReadyError';
+    this.details = {
+      bindingId: input.bindingId,
+      branch: input.branch,
+      headCommitSha: input.headCommitSha,
+      target: input.target ?? null,
+      retryAfterMs: SEARCH_HEAD_REPAIR_POLL_INTERVAL_MS,
+      repairAttempts: input.repairAttempts,
+    };
+  }
+}
+
 export class SearchHeadService {
   private readonly localHeadService: LocalHeadService;
 
@@ -82,6 +120,7 @@ export class SearchHeadService {
       observedHead.branch,
       observedHead.headCommitSha,
       target,
+      options.timeoutMs,
     );
 
     const response = await this.options.searchTransport.search(
@@ -116,6 +155,7 @@ export class SearchHeadService {
     branch: string,
     headCommitSha: string,
     target: SearchTarget | undefined,
+    timeoutMs: number | undefined,
   ): Promise<number> {
     const revisionId =
       await this.options.revisionAttachments.findRevisionForHead(
@@ -129,17 +169,37 @@ export class SearchHeadService {
     }
 
     if (this.options.repairLocalHead) {
-      await this.options.repairLocalHead(bindingId, target);
-      const repairedRevisionId =
-        await this.options.revisionAttachments.findRevisionForHead(
-          bindingId,
-          branch,
-          headCommitSha,
-        );
+      const repairDeadlineMs = createRepairDeadlineMs(timeoutMs);
+      let repairAttempts = 0;
 
-      if (repairedRevisionId != null) {
-        return repairedRevisionId;
+      while (Date.now() < repairDeadlineMs) {
+        repairAttempts += 1;
+        await this.options.repairLocalHead(bindingId, target);
+        const repairedRevisionId =
+          await this.options.revisionAttachments.findRevisionForHead(
+            bindingId,
+            branch,
+            headCommitSha,
+          );
+
+        if (repairedRevisionId != null) {
+          return repairedRevisionId;
+        }
+
+        const remainingMs = repairDeadlineMs - Date.now();
+        if (remainingMs <= 0) {
+          break;
+        }
+        await delay(Math.min(SEARCH_HEAD_REPAIR_POLL_INTERVAL_MS, remainingMs));
       }
+
+      throw new SearchHeadNotReadyError({
+        bindingId,
+        branch,
+        headCommitSha,
+        target,
+        repairAttempts,
+      });
     }
 
     throw new Error(
@@ -255,6 +315,21 @@ function normalizeTags(tags: string[] | undefined): string[] | undefined {
   }
 
   return [...new Set(normalized)];
+}
+
+function createRepairDeadlineMs(timeoutMs: number | undefined): number {
+  const requestTimeoutMs = timeoutMs ?? DEFAULT_SEARCH_HEAD_TIMEOUT_MS;
+  const repairBudgetMs = Math.max(
+    0,
+    requestTimeoutMs - SEARCH_HEAD_REPAIR_TIMEOUT_RESERVE_MS,
+  );
+  return Date.now() + repairBudgetMs;
+}
+
+async function delay(ms: number): Promise<void> {
+  await new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 }
 
 function samePath(left: string, right: string): boolean {
