@@ -10,6 +10,10 @@ import { ProjectRevisionAttachmentRepository } from '../repositories/project-rev
 import { LocalHeadService } from './local-head-service.js';
 import type { ProjectRegistryService } from './project-registry-service.js';
 
+const DEFAULT_SEARCH_HEAD_TIMEOUT_MS = 30_000;
+const SEARCH_HEAD_REPAIR_TIMEOUT_RESERVE_MS = 5_000;
+const SEARCH_HEAD_REPAIR_POLL_INTERVAL_MS = 1_000;
+
 export interface SearchHeadCommandInput {
   bindingId?: number;
   workspacePath?: string;
@@ -37,6 +41,12 @@ export interface SearchHeadServiceOptions {
     ProjectRevisionAttachmentRepository,
     'findRevisionForHead'
   >;
+  repairLocalHead?: (
+    bindingId: number,
+    target: SearchTarget | undefined,
+    expectedHead: SearchHeadRepairExpectedHead,
+    deadlineMs: number,
+  ) => Promise<SearchHeadRepairResult>;
   searchTransport: {
     search(
       input: SearchRequestPayload,
@@ -44,6 +54,92 @@ export interface SearchHeadServiceOptions {
     ): Promise<SearchResponsePayload>;
   };
   localHeadService?: LocalHeadService;
+}
+
+export interface SearchHeadRepairExpectedHead {
+  branch: string;
+  headCommitSha: string;
+}
+
+export type SearchHeadRepairResult =
+  | { status: 'synced' }
+  | { status: 'expired' }
+  | {
+      status: 'head_changed';
+      branch: string | null;
+      headCommitSha: string | null;
+      detached: boolean;
+    };
+
+export class SearchHeadNotReadyError extends Error {
+  readonly code = 'SEARCH_HEAD_QUEUED';
+  readonly retryable = true;
+  readonly details: {
+    bindingId: number;
+    branch: string;
+    headCommitSha: string;
+    target: SearchTarget | null;
+    retryAfterMs: number;
+    repairAttempts: number;
+  };
+
+  constructor(input: {
+    bindingId: number;
+    branch: string;
+    headCommitSha: string;
+    target: SearchTarget | undefined;
+    repairAttempts: number;
+  }) {
+    super(
+      `Local HEAD ${input.branch}@${input.headCommitSha} is queued for indexing; retry shortly.`,
+    );
+    this.name = 'SearchHeadNotReadyError';
+    this.details = {
+      bindingId: input.bindingId,
+      branch: input.branch,
+      headCommitSha: input.headCommitSha,
+      target: input.target ?? null,
+      retryAfterMs: SEARCH_HEAD_REPAIR_POLL_INTERVAL_MS,
+      repairAttempts: input.repairAttempts,
+    };
+  }
+}
+
+export class SearchHeadChangedError extends Error {
+  readonly code = 'SEARCH_HEAD_CHANGED';
+  readonly retryable = true;
+  readonly details: {
+    bindingId: number;
+    expected: SearchHeadRepairExpectedHead;
+    actual: {
+      branch: string | null;
+      headCommitSha: string | null;
+      detached: boolean;
+    };
+    target: SearchTarget | null;
+  };
+
+  constructor(input: {
+    bindingId: number;
+    expected: SearchHeadRepairExpectedHead;
+    actual: {
+      branch: string | null;
+      headCommitSha: string | null;
+      detached: boolean;
+    };
+    target: SearchTarget | undefined;
+  }) {
+    super(
+      `Local HEAD changed while preparing search for ${input.expected.branch}@${input.expected.headCommitSha}; retry the search.`,
+    );
+    this.name = 'SearchHeadChangedError';
+    this.details = {
+      bindingId: input.bindingId,
+      expected: input.expected,
+      actual: input.actual,
+      target: input.target ?? null,
+    };
+  }
 }
 
 export class SearchHeadService {
@@ -73,18 +169,13 @@ export class SearchHeadService {
       );
     }
 
-    const revisionId =
-      await this.options.revisionAttachments.findRevisionForHead(
-        project.bindingId,
-        observedHead.branch,
-        observedHead.headCommitSha,
-      );
-
-    if (revisionId == null) {
-      throw new Error(
-        `Local HEAD ${observedHead.branch}@${observedHead.headCommitSha} is not synced yet, search cannot run on server for this commit.`,
-      );
-    }
+    const revisionId = await this.resolveRevisionForObservedHead(
+      project.bindingId,
+      observedHead.branch,
+      observedHead.headCommitSha,
+      target,
+      options.timeoutMs,
+    );
 
     const response = await this.options.searchTransport.search(
       {
@@ -111,6 +202,84 @@ export class SearchHeadService {
         revisionId,
       },
     };
+  }
+
+  private async resolveRevisionForObservedHead(
+    bindingId: number,
+    branch: string,
+    headCommitSha: string,
+    target: SearchTarget | undefined,
+    timeoutMs: number | undefined,
+  ): Promise<number> {
+    const revisionId =
+      await this.options.revisionAttachments.findRevisionForHead(
+        bindingId,
+        branch,
+        headCommitSha,
+      );
+
+    if (revisionId != null) {
+      return revisionId;
+    }
+
+    if (this.options.repairLocalHead) {
+      const repairDeadlineMs = createRepairDeadlineMs(timeoutMs);
+      const expectedHead = { branch, headCommitSha };
+      let repairAttempts = 0;
+
+      while (Date.now() < repairDeadlineMs) {
+        repairAttempts += 1;
+        const repairResult = await this.options.repairLocalHead(
+          bindingId,
+          target,
+          expectedHead,
+          repairDeadlineMs,
+        );
+        if (repairResult.status === 'expired') {
+          break;
+        }
+        if (repairResult.status === 'head_changed') {
+          throw new SearchHeadChangedError({
+            bindingId,
+            expected: expectedHead,
+            actual: {
+              branch: repairResult.branch,
+              headCommitSha: repairResult.headCommitSha,
+              detached: repairResult.detached,
+            },
+            target,
+          });
+        }
+        const repairedRevisionId =
+          await this.options.revisionAttachments.findRevisionForHead(
+            bindingId,
+            branch,
+            headCommitSha,
+          );
+
+        if (repairedRevisionId != null) {
+          return repairedRevisionId;
+        }
+
+        const remainingMs = repairDeadlineMs - Date.now();
+        if (remainingMs <= 0) {
+          break;
+        }
+        await delay(Math.min(SEARCH_HEAD_REPAIR_POLL_INTERVAL_MS, remainingMs));
+      }
+
+      throw new SearchHeadNotReadyError({
+        bindingId,
+        branch,
+        headCommitSha,
+        target,
+        repairAttempts,
+      });
+    }
+
+    throw new Error(
+      `Local HEAD ${branch}@${headCommitSha} is not synced yet, search cannot run on server for this commit.`,
+    );
   }
 
   private async resolveProject(
@@ -221,6 +390,21 @@ function normalizeTags(tags: string[] | undefined): string[] | undefined {
   }
 
   return [...new Set(normalized)];
+}
+
+function createRepairDeadlineMs(timeoutMs: number | undefined): number {
+  const requestTimeoutMs = timeoutMs ?? DEFAULT_SEARCH_HEAD_TIMEOUT_MS;
+  const repairBudgetMs = Math.max(
+    0,
+    requestTimeoutMs - SEARCH_HEAD_REPAIR_TIMEOUT_RESERVE_MS,
+  );
+  return Date.now() + repairBudgetMs;
+}
+
+async function delay(ms: number): Promise<void> {
+  await new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 }
 
 function samePath(left: string, right: string): boolean {

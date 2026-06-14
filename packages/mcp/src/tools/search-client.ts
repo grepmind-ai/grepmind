@@ -238,6 +238,14 @@ function normalizeStableAgentRuntimeSearchError(
       return new Error(
         `Search index is not ready yet for workspace ${resolvedWorkspacePath} (binding #${workspaceContext.bindingId}). Wait for Grepmind background sync to finish, then retry.`,
       );
+    case 'SEARCH_HEAD_QUEUED':
+      return new Error(
+        `Local HEAD is queued for Grepmind indexing in workspace ${resolvedWorkspacePath} (binding #${workspaceContext.bindingId}). Retry shortly.`,
+      );
+    case 'SEARCH_HEAD_CHANGED':
+      return new Error(
+        `Local HEAD changed while Grepmind was preparing search in workspace ${resolvedWorkspacePath} (binding #${workspaceContext.bindingId}). Retry the search.`,
+      );
     case 'PLAN_REQUIRED':
       return new Error(
         'Grepmind search requires an active account plan. Open the Grepmind app, select this account, choose a plan, then retry the MCP search.',

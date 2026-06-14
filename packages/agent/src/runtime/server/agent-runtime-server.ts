@@ -7,7 +7,11 @@ import {
   noopAgentLogger,
   type AgentLogger,
 } from '../../logging/agent-logger.js';
-import { SearchHeadService } from '../../services/search-head-service.js';
+import { LocalHeadService } from '../../services/local-head-service.js';
+import {
+  SearchHeadService,
+  type SearchHeadRepairResult,
+} from '../../services/search-head-service.js';
 import {
   acquireAgentRuntimeLock,
   chmodSocketPrivate,
@@ -42,6 +46,7 @@ export interface AgentRuntimeServerOptions {
 export class AgentRuntimeServer {
   private readonly logger: AgentLogger;
   private readonly queue = new SingleWriterQueue();
+  private readonly localHeadService = new LocalHeadService();
   private readonly runner: AgentRunner;
   private readonly requestDispatcher: AgentRuntimeRequestDispatcher;
   private readonly stopped = createDeferred<void>();
@@ -106,6 +111,40 @@ export class AgentRuntimeServer {
       this.searchHeadService = new SearchHeadService({
         projects: runtime.projects,
         revisionAttachments: runtime.repositories.projectRevisionAttachments,
+        repairLocalHead: async (
+          bindingId,
+          target,
+          expectedHead,
+          deadlineMs,
+        ): Promise<SearchHeadRepairResult> => {
+          return this.queue.enqueue<SearchHeadRepairResult>(async () => {
+            if (Date.now() >= deadlineMs) {
+              return { status: 'expired' };
+            }
+            const project = await runtime.projects.requireProject(bindingId);
+            const currentHead = await this.localHeadService.readObservedHead(
+              project.workspacePath,
+            );
+            if (
+              !currentHead ||
+              currentHead.branch !== expectedHead.branch ||
+              currentHead.headCommitSha !== expectedHead.headCommitSha
+            ) {
+              return {
+                status: 'head_changed',
+                branch: currentHead?.branch ?? null,
+                headCommitSha: currentHead?.headCommitSha ?? null,
+                detached: currentHead == null,
+              };
+            }
+
+            await this.runner.syncHead(bindingId);
+            await runtime.sync.syncProject(bindingId, {
+              targets: target == null ? undefined : [target],
+            });
+            return { status: 'synced' };
+          });
+        },
         searchTransport: this.runner,
       });
       this.idempotencyStore = new AgentRpcIdempotencyStore(runtime.db);
