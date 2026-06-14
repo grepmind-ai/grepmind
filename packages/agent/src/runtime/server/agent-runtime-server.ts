@@ -106,6 +106,14 @@ export class AgentRuntimeServer {
       this.searchHeadService = new SearchHeadService({
         projects: runtime.projects,
         revisionAttachments: runtime.repositories.projectRevisionAttachments,
+        repairLocalHead: async (bindingId, target) => {
+          await this.queue.enqueue(async () => {
+            await this.runner.syncHead(bindingId);
+            await runtime.sync.syncProject(bindingId, {
+              targets: target == null ? undefined : [target],
+            });
+          });
+        },
         searchTransport: this.runner,
       });
       this.idempotencyStore = new AgentRpcIdempotencyStore(runtime.db);

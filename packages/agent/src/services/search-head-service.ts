@@ -37,6 +37,10 @@ export interface SearchHeadServiceOptions {
     ProjectRevisionAttachmentRepository,
     'findRevisionForHead'
   >;
+  repairLocalHead?: (
+    bindingId: number,
+    target: SearchTarget | undefined,
+  ) => Promise<void>;
   searchTransport: {
     search(
       input: SearchRequestPayload,
@@ -73,18 +77,12 @@ export class SearchHeadService {
       );
     }
 
-    const revisionId =
-      await this.options.revisionAttachments.findRevisionForHead(
-        project.bindingId,
-        observedHead.branch,
-        observedHead.headCommitSha,
-      );
-
-    if (revisionId == null) {
-      throw new Error(
-        `Local HEAD ${observedHead.branch}@${observedHead.headCommitSha} is not synced yet, search cannot run on server for this commit.`,
-      );
-    }
+    const revisionId = await this.resolveRevisionForObservedHead(
+      project.bindingId,
+      observedHead.branch,
+      observedHead.headCommitSha,
+      target,
+    );
 
     const response = await this.options.searchTransport.search(
       {
@@ -111,6 +109,42 @@ export class SearchHeadService {
         revisionId,
       },
     };
+  }
+
+  private async resolveRevisionForObservedHead(
+    bindingId: number,
+    branch: string,
+    headCommitSha: string,
+    target: SearchTarget | undefined,
+  ): Promise<number> {
+    const revisionId =
+      await this.options.revisionAttachments.findRevisionForHead(
+        bindingId,
+        branch,
+        headCommitSha,
+      );
+
+    if (revisionId != null) {
+      return revisionId;
+    }
+
+    if (this.options.repairLocalHead) {
+      await this.options.repairLocalHead(bindingId, target);
+      const repairedRevisionId =
+        await this.options.revisionAttachments.findRevisionForHead(
+          bindingId,
+          branch,
+          headCommitSha,
+        );
+
+      if (repairedRevisionId != null) {
+        return repairedRevisionId;
+      }
+    }
+
+    throw new Error(
+      `Local HEAD ${branch}@${headCommitSha} is not synced yet, search cannot run on server for this commit.`,
+    );
   }
 
   private async resolveProject(
