@@ -16,6 +16,7 @@
     "build:grepmind": "npm -w grepmind run build",
     "pack:dry-run": "npm -w @grepmind/agent-rpc pack --dry-run && npm -w @grepmind/agent pack --dry-run && npm -w @grepmind/mcp pack --dry-run && npm -w @grepmind/deployment pack --dry-run && npm -w grepmind pack --dry-run",
     "changeset": "changeset",
+    "changeset:check": "node tools/validate-changesets.mjs",
     "version:packages": "changeset version",
     "version:packages:beta": "node tools/changeset-version-beta.mjs",
     "release:stable": "npm run build && npm run pack:dry-run && node tools/assert-stable-release.mjs && changeset publish --tag latest",

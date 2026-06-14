@@ -304,10 +304,25 @@ export class AgentSourceRequestService {
     >,
   ): Promise<void> {
     const branches = await this.projects.listBranches(request.bindingId);
-    const matchingBranch = branches.find(
+    const matchingBranchById = branches.find(
       (branch) => branch.repoBranchId === request.repoBranchId,
     );
-    if (!matchingBranch) {
+    if (matchingBranchById) {
+      if (
+        request.expectedBranch &&
+        matchingBranchById.branch !== request.expectedBranch
+      ) {
+        throw new AgentSourceRequestError(
+          `Repo branch ${request.repoBranchId} does not match ${request.expectedBranch}`,
+          'SNAPSHOT_SOURCE_STALE',
+          false,
+        );
+      }
+
+      return;
+    }
+
+    if (!request.expectedBranch) {
       throw new AgentSourceRequestError(
         `Binding ${request.bindingId} does not expose repo branch ${request.repoBranchId}`,
         'SNAPSHOT_SOURCE_STALE',
@@ -315,12 +330,12 @@ export class AgentSourceRequestService {
       );
     }
 
-    if (
-      request.expectedBranch &&
-      matchingBranch.branch !== request.expectedBranch
-    ) {
+    const matchingBranchByName = branches.find(
+      (branch) => branch.branch === request.expectedBranch,
+    );
+    if (matchingBranchByName?.repoBranchId != null) {
       throw new AgentSourceRequestError(
-        `Repo branch ${request.repoBranchId} does not match ${request.expectedBranch}`,
+        `Local branch ${request.expectedBranch} is linked to repo branch ${matchingBranchByName.repoBranchId}, not ${request.repoBranchId}`,
         'SNAPSHOT_SOURCE_STALE',
         false,
       );
