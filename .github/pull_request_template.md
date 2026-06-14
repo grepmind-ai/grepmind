@@ -32,9 +32,10 @@ Choose the closest option and delete the others:
 <!--
 Required for package source, package script, migration, or package.json changes.
 Not required for docs-only, CI-only, or repository maintenance changes.
+The changeset body is the release/changelog text used by release automation.
 -->
 
-- [ ] Added a changeset for package source or package manifest changes
+- [ ] Added a user-facing changeset for package source or package manifest changes
 - [ ] Not needed for this change
 
 ## Compatibility
