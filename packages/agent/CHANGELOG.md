@@ -1,5 +1,11 @@
 # @grepmind/agent
 
+## 0.1.11
+
+### Patch Changes
+
+- 1ebed20: Stop macOS launchd runtime supervisors during agent stop
+
 ## 0.1.10
 
 ### Patch Changes

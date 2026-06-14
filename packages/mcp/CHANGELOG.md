@@ -1,5 +1,12 @@
 # @grepmind/mcp
 
+## 0.1.10
+
+### Patch Changes
+
+- Updated dependencies [1ebed20]
+  - @grepmind/agent@0.1.11
+
 ## 0.1.9
 
 ### Patch Changes

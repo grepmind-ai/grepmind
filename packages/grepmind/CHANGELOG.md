@@ -1,5 +1,12 @@
 # grepmind
 
+## 0.4.6
+
+### Patch Changes
+
+- Updated dependencies [1ebed20]
+  - @grepmind/agent@0.1.11
+
 ## 0.4.5
 
 ### Patch Changes
