@@ -66,11 +66,7 @@ export class AgentSourceRequestService {
     send: RealtimeSend,
   ): Promise<void> {
     try {
-      const project = await this.prepareSourceRequest(
-        request,
-        request.targetCommitSha,
-        'snapshot',
-      );
+      const project = await this.prepareSourceRequest(request, 'snapshot');
       const commitSha = await this.verifyCommit(
         project.workspacePath,
         request.targetCommitSha,
@@ -111,11 +107,7 @@ export class AgentSourceRequestService {
     request: AgentCommitGraphRequestPayload,
   ): Promise<AgentCommitGraphResponsePayload> {
     if (request.kind === 'nearest_attached_ancestor') {
-      const project = await this.prepareSourceRequest(
-        request,
-        request.targetSha,
-        'commit_graph',
-      );
+      const project = await this.prepareSourceRequest(request, 'commit_graph');
       await this.verifyCommit(
         project.workspacePath,
         request.targetSha,
@@ -141,11 +133,7 @@ export class AgentSourceRequestService {
       };
     }
 
-    const project = await this.prepareSourceRequest(
-      request,
-      request.toInclusiveSha,
-      'commit_graph',
-    );
+    const project = await this.prepareSourceRequest(request, 'commit_graph');
     await this.verifyCommit(
       project.workspacePath,
       request.fromExclusiveSha,
@@ -179,7 +167,6 @@ export class AgentSourceRequestService {
       | 'expectedDeviceId'
       | 'expectedBranch'
     >,
-    expectedHeadSha: string,
     operation: SourceRequestOperation,
   ): Promise<LocalProjectRecord> {
     let project: LocalProjectRecord;
@@ -229,9 +216,7 @@ export class AgentSourceRequestService {
     if (request.expectedBranch) {
       if (
         attachState.currentObservedHead &&
-        (attachState.currentObservedHead.branch !== request.expectedBranch ||
-          normalizeCommitSha(attachState.currentObservedHead.headCommitSha) !==
-            expectedHeadSha)
+        attachState.currentObservedHead.branch !== request.expectedBranch
       ) {
         throw new AgentSourceRequestError(
           `Binding ${request.bindingId} observed head is stale`,
@@ -268,12 +253,9 @@ export class AgentSourceRequestService {
         project.workspacePath,
       );
 
-      if (
-        observedHead.branch !== request.expectedBranch ||
-        observedHead.headCommitSha !== expectedHeadSha
-      ) {
+      if (observedHead.branch !== request.expectedBranch) {
         throw new AgentSourceRequestError(
-          `Binding ${request.bindingId} working tree head no longer matches ${request.expectedBranch}@${expectedHeadSha.slice(0, 12)}`,
+          `Binding ${request.bindingId} working tree branch no longer matches ${request.expectedBranch}`,
           'SNAPSHOT_SOURCE_STALE',
           false,
         );
