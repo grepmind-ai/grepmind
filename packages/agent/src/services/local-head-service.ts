@@ -13,18 +13,40 @@ export interface ObservedLocalHead {
   observedAt: string;
 }
 
+export interface ObservedLocalSource {
+  remoteFingerprint: string;
+  agentRepoRef: string;
+}
+
 export class LocalHeadService {
-  async readObservedHead(
+  async readObservedSource(
     workspacePath: string,
-  ): Promise<ObservedLocalHead | null> {
+  ): Promise<ObservedLocalSource> {
     const resolvedWorkspacePath = path.resolve(workspacePath);
     const origin = await this.runGit(
       resolvedWorkspacePath,
       ['remote', 'get-url', 'origin'],
       'origin remote is not configured',
     );
+    const normalizedRemoteFingerprint = normalizeRemoteFingerprint(origin);
+    if (!normalizedRemoteFingerprint) {
+      throw new Error(
+        `Remote fingerprint is empty for workspace: ${resolvedWorkspacePath}`,
+      );
+    }
+
+    return {
+      remoteFingerprint: normalizedRemoteFingerprint,
+      agentRepoRef: resolvedWorkspacePath,
+    };
+  }
+
+  async readObservedHead(
+    workspacePath: string,
+  ): Promise<ObservedLocalHead | null> {
+    const observedSource = await this.readObservedSource(workspacePath);
     const branch = await this.runGit(
-      resolvedWorkspacePath,
+      observedSource.agentRepoRef,
       ['rev-parse', '--abbrev-ref', 'HEAD'],
       'failed to resolve current branch from HEAD',
     );
@@ -34,24 +56,18 @@ export class LocalHeadService {
     }
 
     const headCommitSha = await this.runGit(
-      resolvedWorkspacePath,
+      observedSource.agentRepoRef,
       ['rev-parse', 'HEAD'],
       'failed to resolve HEAD commit',
     );
 
     const normalizedHeadCommitSha = normalizeCommitSha(headCommitSha);
-    const normalizedRemoteFingerprint = normalizeRemoteFingerprint(origin);
-    if (!normalizedRemoteFingerprint) {
-      throw new Error(
-        `Remote fingerprint is empty for workspace: ${resolvedWorkspacePath}`,
-      );
-    }
 
     return {
       branch,
       headCommitSha: normalizedHeadCommitSha,
-      remoteFingerprint: normalizedRemoteFingerprint,
-      agentRepoRef: resolvedWorkspacePath,
+      remoteFingerprint: observedSource.remoteFingerprint,
+      agentRepoRef: observedSource.agentRepoRef,
       observedAt: new Date().toISOString(),
     };
   }

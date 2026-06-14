@@ -182,4 +182,24 @@ export class RevisionPublicationService {
   ): BindingRealtimeState[] {
     return listBindingSubscriptions(this.stateByBindingId, bindingIds);
   }
+
+  getActiveAttachState(bindingId: number): ActiveAttachState | null {
+    const state = this.stateByBindingId.get(bindingId);
+    if (!state) {
+      return null;
+    }
+
+    return {
+      ...state,
+      currentObservedHead: state.currentObservedHead
+        ? { ...state.currentObservedHead }
+        : undefined,
+      lastMaterializedHead: state.lastMaterializedHead
+        ? { ...state.lastMaterializedHead }
+        : undefined,
+      lastQueuedHead: state.lastQueuedHead
+        ? { ...state.lastQueuedHead }
+        : undefined,
+    };
+  }
 }

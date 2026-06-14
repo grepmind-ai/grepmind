@@ -10,6 +10,7 @@ import {
   type AgentRuntime,
 } from '../runtime/agent-runtime.js';
 import { noopAgentLogger, type AgentLogger } from '../logging/agent-logger.js';
+import { AgentSourceRequestService } from '../services/agent-source-request-service.js';
 import { RevisionPublicationService } from '../services/revision-publication-service.js';
 import type { AgentCliConfig } from './config.js';
 import { toBackendOptions } from './config.js';
@@ -64,6 +65,13 @@ export class AgentRunner {
     });
     if (this.bootstrap.supportedFeatures.agentWebSocket) {
       const runtime = this.runtime;
+      const sourceRequests = new AgentSourceRequestService({
+        projects: runtime.projects,
+        deviceId: this.config.deviceId,
+        logger: this.logger,
+        getAttachState: (bindingId) =>
+          this.revisionPublication?.getActiveAttachState(bindingId) ?? null,
+      });
       this.realtimeClient = new AgentBackendRealtimeClient({
         baseUrl: this.config.apiBaseUrl,
         accessToken: backendOptions.accessToken,
@@ -75,6 +83,10 @@ export class AgentRunner {
         logger: this.logger,
         capabilities: { sourceTransport: 'snapshot' },
         onIndexSearchRequested: (payload) => runtime.search.search(payload),
+        onSnapshotExportRequested: (payload, send) =>
+          sourceRequests.exportSnapshot(payload, send),
+        onCommitGraphRequested: (payload) =>
+          sourceRequests.queryCommitGraph(payload),
         onStopRequested: () => {
           this.requestStop();
           this.onStopRequested?.();

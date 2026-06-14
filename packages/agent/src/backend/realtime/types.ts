@@ -2,6 +2,9 @@ import type { AgentLogger } from '../../logging/agent-logger.js';
 import type { AgentBackendAccountSessionProvider } from '../account-session.js';
 import type { AgentBackendAccessTokenProvider } from '../agent-backend-client.js';
 import type {
+  AgentCommitGraphRequestPayload,
+  AgentCommitGraphResponsePayload,
+  AgentSnapshotExportRequestPayload,
   SearchChunkPointer,
   SearchIndexRequestPayload,
   SearchResponsePayload,
@@ -30,6 +33,13 @@ export interface AgentBackendRealtimeClientOptions {
   onIndexSearchRequested?: (
     payload: SearchIndexRequestPayload,
   ) => Promise<SearchChunkPointer[]>;
+  onSnapshotExportRequested?: (
+    payload: AgentSnapshotExportRequestPayload,
+    send: RealtimeSend,
+  ) => Promise<void>;
+  onCommitGraphRequested?: (
+    payload: AgentCommitGraphRequestPayload,
+  ) => Promise<AgentCommitGraphResponsePayload>;
   searchRequestTimeoutMs?: number;
 }
 

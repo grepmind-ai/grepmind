@@ -53,6 +53,8 @@ export class AgentBackendRealtimeClient {
   private readonly capabilities: Record<string, unknown>;
   private readonly onStopRequested?: AgentBackendRealtimeClientOptions['onStopRequested'];
   private readonly onIndexSearchRequested?: AgentBackendRealtimeClientOptions['onIndexSearchRequested'];
+  private readonly onSnapshotExportRequested?: AgentBackendRealtimeClientOptions['onSnapshotExportRequested'];
+  private readonly onCommitGraphRequested?: AgentBackendRealtimeClientOptions['onCommitGraphRequested'];
   private readonly searchRequestTimeoutMs: number;
   private ws: WebSocketLike | null = null;
   private bindings: AgentBackendRealtimeBinding[] = [];
@@ -83,6 +85,8 @@ export class AgentBackendRealtimeClient {
     this.capabilities = options.capabilities ?? {};
     this.onStopRequested = options.onStopRequested;
     this.onIndexSearchRequested = options.onIndexSearchRequested;
+    this.onSnapshotExportRequested = options.onSnapshotExportRequested;
+    this.onCommitGraphRequested = options.onCommitGraphRequested;
     this.searchRequestTimeoutMs =
       options.searchRequestTimeoutMs ?? DEFAULT_SEARCH_REQUEST_TIMEOUT_MS;
     this.accessToken?.onRefresh?.(() => {
@@ -345,6 +349,8 @@ export class AgentBackendRealtimeClient {
       send: (type, data) => this.send(type, data),
       onStopRequested: this.onStopRequested,
       onIndexSearchRequested: this.onIndexSearchRequested,
+      onSnapshotExportRequested: this.onSnapshotExportRequested,
+      onCommitGraphRequested: this.onCommitGraphRequested,
       startHeartbeat: (heartbeatMs) => {
         this.startHeartbeat(heartbeatMs);
       },
