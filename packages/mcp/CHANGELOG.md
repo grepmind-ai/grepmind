@@ -1,5 +1,13 @@
 # @grepmind/mcp
 
+## 0.1.9
+
+### Patch Changes
+
+- 9b4492a: Queue local head repair before serving search results.
+- Updated dependencies [9b4492a]
+  - @grepmind/agent@0.1.10
+
 ## 0.1.8
 
 ### Patch Changes
