@@ -1,5 +1,11 @@
 # @grepmind/agent
 
+## 0.1.10
+
+### Patch Changes
+
+- 9b4492a: Queue local head repair before serving search results.
+
 ## 0.1.9
 
 ### Patch Changes
