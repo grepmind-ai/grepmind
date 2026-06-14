@@ -11,6 +11,7 @@ import { getAgentRuntimeLogPath } from '../../runtime/control.js';
 import type { AgentCliExecutionContext } from '../cli-context.js';
 import { createAgentConsole } from '../cli-context.js';
 import { hasBooleanFlag } from '../flags.js';
+import { removeMacosLaunchdRuntimeSupervisor } from '../macos-launchd.js';
 import { loadConfigForCommand } from '../command-support.js';
 import type { ParsedArgs } from '../parse-args.js';
 
@@ -86,6 +87,19 @@ export async function stopCommand(args: ParsedArgs): Promise<void> {
   const agentConsole = createAgentConsole(args);
   const config = await loadConfigForCommand(args);
   const client = new AgentRuntimeClient(config.dataDir);
+  const launchdCleanup = await removeMacosLaunchdRuntimeSupervisor(
+    config.dataDir,
+  );
+
+  for (const label of launchdCleanup.removedLabels) {
+    agentConsole.info(
+      'runtime',
+      `Removed macOS launchd runtime supervisor "${label}"`,
+    );
+  }
+  for (const warning of launchdCleanup.warnings) {
+    agentConsole.warn('runtime', warning);
+  }
 
   try {
     await client.shutdown({
@@ -93,6 +107,13 @@ export async function stopCommand(args: ParsedArgs): Promise<void> {
     });
   } catch (error) {
     if (isRuntimeUnavailableError(error)) {
+      if (launchdCleanup.removedLabels.length > 0) {
+        agentConsole.info(
+          'runtime',
+          `Agent runtime stopped for ${config.dataDir}`,
+        );
+        return;
+      }
       throw new Error(`Agent runtime is not running for ${config.dataDir}`);
     }
     throw error;
