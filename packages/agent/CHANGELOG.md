@@ -1,5 +1,11 @@
 # @grepmind/agent
 
+## 0.1.9
+
+### Patch Changes
+
+- cdd7fcd: Allow agent snapshot exports for newly observed branches before the local branch projection has received the server repo branch id.
+
 ## 0.1.8
 
 ### Patch Changes
