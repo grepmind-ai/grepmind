@@ -7,7 +7,6 @@ import {
   AgentRuntimeClientError,
   ensureAgentReady,
   ensureWorkspaceRegistered,
-  getAgentAuthStatus,
   resolveAgentDataDir,
   type AgentControlCommand,
   type LocalProjectRecord,
@@ -39,13 +38,6 @@ export async function prepareMcpRuntime(options: {
   const startupTimeoutMs = resolveMcpStartupTimeoutMs();
   const agentCommand = await resolveBundledAgentCommand();
   const hostname = process.env.GREPMIND_AGENT_HOSTNAME?.trim() || undefined;
-
-  const initialAuth = await getAgentAuthStatus(dataDir);
-  if (initialAuth.needsLogin && !hostname) {
-    throw new Error(
-      `Grepmind agent is not authenticated for ${dataDir}. Set GREPMIND_AGENT_HOSTNAME so MCP startup can open the OAuth flow, or pre-login with "${formatAgentLoginCommand(agentCommand.entrypointPath, dataDir, '<host>')}".`,
-    );
-  }
 
   try {
     await ensureAgentReady({

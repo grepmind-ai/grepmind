@@ -367,7 +367,7 @@ function normalizeRequiredString(value: unknown): string | null {
   }
 
   const normalized = value.trim();
-  return normalized ? normalized : null;
+  return normalized || null;
 }
 
 function normalizeOptionalString(value: unknown): string | null | undefined {

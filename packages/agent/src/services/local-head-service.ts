@@ -19,7 +19,9 @@ export interface ObservedLocalSource {
 }
 
 export class LocalHeadService {
-  async readObservedSource(workspacePath: string): Promise<ObservedLocalSource> {
+  async readObservedSource(
+    workspacePath: string,
+  ): Promise<ObservedLocalSource> {
     const resolvedWorkspacePath = path.resolve(workspacePath);
     const origin = await this.runGit(
       resolvedWorkspacePath,
