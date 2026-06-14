@@ -1,5 +1,13 @@
 # @grepmind/mcp
 
+## 0.1.7
+
+### Patch Changes
+
+- 8cf4b90: Allow MCP startup to refresh expired agent sessions before login.
+- Updated dependencies [8cf4b90]
+  - @grepmind/agent@0.1.8
+
 ## 0.1.6
 
 ### Patch Changes

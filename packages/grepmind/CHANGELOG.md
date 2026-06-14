@@ -1,5 +1,12 @@
 # grepmind
 
+## 0.4.3
+
+### Patch Changes
+
+- Updated dependencies [8cf4b90]
+  - @grepmind/agent@0.1.8
+
 ## 0.4.2
 
 ### Patch Changes

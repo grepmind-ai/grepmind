@@ -1,5 +1,11 @@
 # @grepmind/agent
 
+## 0.1.8
+
+### Patch Changes
+
+- 8cf4b90: Refactor agent realtime source helpers to satisfy lint limits.
+
 ## 0.1.7
 
 ### Patch Changes
