@@ -8,6 +8,7 @@ const execFileAsync = promisify(execFile);
 
 const KEYCHAIN_SERVICE = 'grepmind-agent';
 const OAUTH_REFRESH_SKEW_MS = 5 * 60 * 1000;
+const ACCOUNT_SESSION_REFRESH_SKEW_MS = 30_000;
 const AGENT_ACCOUNT_SESSION_HEADER = 'x-grepmind-agent-account-session';
 const AGENT_ACCOUNT_SESSION_CAPABILITY_HEADER = 'x-grepmind-agent-capability';
 const AGENT_ACCOUNT_SESSION_DEVICE_HEADER = 'x-grepmind-agent-device-id';
@@ -44,20 +45,32 @@ interface StoredOAuthCredential {
 export async function refreshExpiredAccountSessionIfPossible(
   status: AgentAuthStatus,
 ): Promise<boolean> {
+  if (status.accountSessionStatus !== 'expired') {
+    return false;
+  }
+
+  return refreshAgentAuthIfPossible(status, { forceAccountSession: true });
+}
+
+export async function refreshAgentAuthIfPossible(
+  status: AgentAuthStatus,
+  options: { forceAccountSession?: boolean } = {},
+): Promise<boolean> {
   const config = status.config;
   const auth = config?.auth;
-  if (
-    status.credentialStatus !== 'available' ||
-    status.accountSessionStatus !== 'expired' ||
-    !config ||
-    !auth
-  ) {
+  if (status.credentialStatus !== 'available' || !config || !auth) {
     return false;
   }
 
   try {
     const credential = await loadStoredCredential(auth);
-    if (!credential.accountSession) {
+    const accountSession = credential.accountSession;
+    const shouldRefreshOAuth = needsOAuthRefresh(credential.expiresAt);
+    const shouldRefreshAccountSession =
+      Boolean(options.forceAccountSession) ||
+      shouldRefreshStoredAccountSession(accountSession);
+
+    if (!shouldRefreshOAuth && !shouldRefreshAccountSession) {
       return false;
     }
 
@@ -66,12 +79,17 @@ export async function refreshExpiredAccountSessionIfPossible(
       status.configPath,
       credential,
     );
-    const accountSession = await refreshStoredAccountSession(
+
+    if (!shouldRefreshAccountSession) {
+      return shouldRefreshOAuth;
+    }
+
+    const nextAccountSession = await refreshStoredAccountSession(
       credentialWithFreshAccessToken,
     );
     await saveStoredCredential(auth.credentialStoreKey, {
       ...credentialWithFreshAccessToken,
-      accountSession,
+      accountSession: nextAccountSession,
     });
     return true;
   } catch {
@@ -174,15 +192,10 @@ async function refreshStoredAccountSession(
   );
   const payload = await readJsonObject(response);
   if (!response.ok) {
+    const error = normalizeErrorPayload(payload);
     throw new Error(
-      `${
-        typeof payload.code === 'string'
-          ? payload.code
-          : 'AGENT_ACCOUNT_SESSION_REFRESH_FAILED'
-      }: ${
-        typeof payload.message === 'string'
-          ? payload.message
-          : `HTTP ${response.status}`
+      `${error.code ?? 'AGENT_ACCOUNT_SESSION_REFRESH_FAILED'}: ${
+        error.message ?? `HTTP ${response.status}`
       }`,
     );
   }
@@ -196,6 +209,25 @@ function needsOAuthRefresh(expiresAt: string): boolean {
     !Number.isFinite(expiresAtMs) ||
     expiresAtMs <= Date.now() + OAUTH_REFRESH_SKEW_MS
   );
+}
+
+function shouldRefreshStoredAccountSession(
+  session: StoredAgentAccountSession | undefined,
+): boolean {
+  if (!session) {
+    return false;
+  }
+
+  const expiresAtMs = Date.parse(session.expiresAt);
+  if (
+    !Number.isFinite(expiresAtMs) ||
+    expiresAtMs <= Date.now() + ACCOUNT_SESSION_REFRESH_SKEW_MS
+  ) {
+    return true;
+  }
+
+  const refreshAfterMs = Date.parse(session.refreshAfter);
+  return !Number.isFinite(refreshAfterMs) || refreshAfterMs <= Date.now();
 }
 
 async function loadStoredCredential(
@@ -382,4 +414,28 @@ async function readJsonObject(
   return payload && typeof payload === 'object' && !Array.isArray(payload)
     ? (payload as Record<string, unknown>)
     : {};
+}
+
+function normalizeErrorPayload(
+  payload: Record<string, unknown>,
+): { code?: string; message?: string } {
+  const wrappedError =
+    payload.error && typeof payload.error === 'object'
+      ? (payload.error as Record<string, unknown>)
+      : null;
+
+  return {
+    code:
+      typeof payload.code === 'string'
+        ? payload.code
+        : typeof wrappedError?.code === 'string'
+          ? wrappedError.code
+          : undefined,
+    message:
+      typeof payload.message === 'string'
+        ? payload.message
+        : typeof wrappedError?.message === 'string'
+          ? wrappedError.message
+          : undefined,
+  };
 }

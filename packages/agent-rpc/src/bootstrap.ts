@@ -8,7 +8,7 @@ import {
   AgentRuntimeClientError,
   isRuntimeUnavailableError,
 } from './client.js';
-import { refreshExpiredAccountSessionIfPossible } from './auth-refresh.js';
+import { refreshAgentAuthIfPossible } from './auth-refresh.js';
 import { inspectCredential } from './credential-store.js';
 import { getAgentRuntimeLogPath } from './control.js';
 
@@ -265,16 +265,16 @@ export async function ensureAgentAuth(
   options: EnsureAgentAuthOptions = {},
 ): Promise<AgentAuthStatus> {
   const dataDir = resolveAgentDataDir(options.dataDir);
-  const status = await getAgentAuthStatus(dataDir);
+  let status = await getAgentAuthStatus(dataDir);
+  if (
+    await refreshAgentAuthIfPossible(status, {
+      forceAccountSession: status.needsLogin,
+    })
+  ) {
+    status = await getAgentAuthStatus(dataDir);
+  }
   if (!status.needsLogin) {
     return status;
-  }
-
-  if (await refreshExpiredAccountSessionIfPossible(status)) {
-    const refreshedStatus = await getAgentAuthStatus(dataDir);
-    if (!refreshedStatus.needsLogin) {
-      return refreshedStatus;
-    }
   }
 
   const hostname =
