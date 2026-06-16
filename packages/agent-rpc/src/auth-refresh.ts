@@ -416,9 +416,10 @@ async function readJsonObject(
     : {};
 }
 
-function normalizeErrorPayload(
-  payload: Record<string, unknown>,
-): { code?: string; message?: string } {
+function normalizeErrorPayload(payload: Record<string, unknown>): {
+  code?: string;
+  message?: string;
+} {
   const wrappedError =
     payload.error && typeof payload.error === 'object'
       ? (payload.error as Record<string, unknown>)
