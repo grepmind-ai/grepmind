@@ -1,5 +1,11 @@
 # @grepmind/agent-rpc
 
+## 0.2.4
+
+### Patch Changes
+
+- 874f02a: Refresh agent auth before stored account sessions expire
+
 ## 0.2.3
 
 ### Patch Changes

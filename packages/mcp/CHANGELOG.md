@@ -1,5 +1,13 @@
 # @grepmind/mcp
 
+## 0.1.11
+
+### Patch Changes
+
+- Updated dependencies [874f02a]
+  - @grepmind/agent-rpc@0.2.4
+  - @grepmind/agent@0.1.12
+
 ## 0.1.10
 
 ### Patch Changes
