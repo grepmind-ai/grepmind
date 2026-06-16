@@ -1,6 +1,6 @@
 {
   "name": "@grepmind/mcp",
-  "version": "0.1.10",
+  "version": "0.1.11",
   "description": "MCP server for semantic search over markdown notes and code using embeddings",
   "type": "module",
   "main": "dist/index.js",
@@ -60,8 +60,8 @@
     "url": "https://github.com/grepmind-ai/grepmind/issues"
   },
   "dependencies": {
-    "@grepmind/agent": "0.1.11",
-    "@grepmind/agent-rpc": "0.2.3",
+    "@grepmind/agent": "0.1.12",
+    "@grepmind/agent-rpc": "0.2.4",
     "@modelcontextprotocol/sdk": "^1.26.0",
     "dotenv": "^17.2.4",
     "zod": "^3.23.0"
