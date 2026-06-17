@@ -19,6 +19,8 @@ export interface WriteDecision {
   preservedCommand: boolean;
 }
 
+const DEFAULT_MCP_TOOL_TIMEOUT_SEC = 210;
+
 export function createGeneratedMcpEntry(input: {
   hostname: string;
   workspaceRoot: string;
@@ -40,7 +42,7 @@ export function createGeneratedMcpEntry(input: {
     env,
     cwd: input.workspaceRoot,
     startupTimeoutMs: input.startupTimeoutMs,
-    toolTimeoutSec: 60,
+    toolTimeoutSec: DEFAULT_MCP_TOOL_TIMEOUT_SEC,
   };
 }
 

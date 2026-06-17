@@ -1,0 +1,270 @@
+import {
+  formatDiagnosticTail,
+  stripAnsi,
+} from './context-layer-diagnostics.js';
+import { ContextLayerError } from './context-layer-errors.js';
+
+export const REQUIRED_CONTEXT_PACK_HEADINGS = [
+  '# context_pack',
+  '## Short Answer',
+  '## Code Context',
+  '## Docs Context',
+  '## Flow',
+  '## Evidence',
+  '## Risks And Gaps',
+  '## Suggested Next Edits',
+] as const;
+
+type RequiredContextPackHeading = (typeof REQUIRED_CONTEXT_PACK_HEADINGS)[number];
+
+interface ParsedContextPackSection {
+  heading: RequiredContextPackHeading;
+  content: string;
+}
+
+interface ParsedContextPack {
+  sections: ParsedContextPackSection[];
+}
+
+export function normalizeContextPackMarkdown(
+  raw: string,
+  options?: { runtimeDurationMs?: number; stderrTail?: string },
+): string {
+  const parsed = parseContextPackMarkdown(raw, options);
+  return renderContextPack(parsed.sections);
+}
+
+export function summarizeContextPackForLimit(input: {
+  contextPackMarkdown: string;
+  maxOutputBytes: number;
+  fullContextPackPath: string;
+  runtimeDurationMs?: number;
+}): string {
+  const parsed = parseContextPackMarkdown(input.contextPackMarkdown, {
+    runtimeDurationMs: input.runtimeDurationMs,
+  });
+  const suffix = `\n\n[context_layer output truncated. Full context_pack saved at ${input.fullContextPackPath}.]`;
+  const suffixBytes = byteLength(suffix);
+  const minimal = renderContextPack(
+    parsed.sections.map((section) => ({
+      heading: section.heading,
+      content:
+        section.heading === '# context_pack'
+          ? ''
+          : '[section omitted. See full context_pack path below.]',
+    })),
+  );
+
+  if (byteLength(minimal) + suffixBytes > input.maxOutputBytes) {
+    throw new ContextLayerError(
+      'CODEX_SUBAGENT_OUTPUT_TOO_LARGE',
+      'Codex context_layer output exceeded the response limit and even the compact context_pack summary is too large.',
+      { runtimeDurationMs: input.runtimeDurationMs },
+    );
+  }
+
+  const weightedSections = parsed.sections.filter(
+    (section) => section.heading !== '# context_pack',
+  );
+  const weights = new Map<RequiredContextPackHeading, number>([
+    ['## Short Answer', 1],
+    ['## Code Context', 3],
+    ['## Docs Context', 2],
+    ['## Flow', 2],
+    ['## Evidence', 3],
+    ['## Risks And Gaps', 2],
+    ['## Suggested Next Edits', 2],
+  ]);
+  const renderOverhead = byteLength(
+    renderContextPack(
+      parsed.sections.map((section) => ({ ...section, content: '' })),
+    ),
+  );
+  const markerBytes = weightedSections.length * byteLength('\n\n[section truncated]');
+  const bodyBudget = Math.max(
+    0,
+    input.maxOutputBytes - suffixBytes - renderOverhead - markerBytes,
+  );
+  const totalWeight = weightedSections.reduce(
+    (total, section) => total + (weights.get(section.heading) ?? 1),
+    0,
+  );
+
+  const summarizedSections = parsed.sections.map((section) => {
+    if (section.heading === '# context_pack') {
+      return section;
+    }
+    const budget = Math.max(
+      120,
+      Math.floor((bodyBudget * (weights.get(section.heading) ?? 1)) / totalWeight),
+    );
+    const truncated = truncateUtf8(section.content, budget);
+    return {
+      heading: section.heading,
+      content:
+        truncated === section.content.trim()
+          ? truncated
+          : `${truncated}\n\n[section truncated]`,
+    };
+  });
+
+  const summary = `${renderContextPack(summarizedSections)}${suffix}`;
+  if (byteLength(summary) <= input.maxOutputBytes) {
+    return summary;
+  }
+
+  return `${minimal}${suffix}`;
+}
+
+function parseContextPackMarkdown(
+  raw: string,
+  options?: { runtimeDurationMs?: number; stderrTail?: string },
+): ParsedContextPack {
+  const text = stripAnsi(raw).replace(/\r\n?/g, '\n').trim();
+  if (!text) {
+    throw new ContextLayerError(
+      'CODEX_SUBAGENT_EMPTY_OUTPUT',
+      `Codex context_layer subagent returned an empty output message. ${formatDiagnosticTail(options?.stderrTail)}`,
+      { runtimeDurationMs: options?.runtimeDurationMs },
+    );
+  }
+
+  const lines = text.split('\n');
+  const headingMatches = collectMarkdownHeadings(lines);
+  const actualHeadings = headingMatches.map((match) => match.heading);
+  const expectedHeadings = [...REQUIRED_CONTEXT_PACK_HEADINGS];
+
+  if (headingMatches.length !== expectedHeadings.length) {
+    throwMalformedContextPack(
+      `expected exactly ${expectedHeadings.length} top-level context_pack headings, got ${headingMatches.length}`,
+      options,
+    );
+  }
+
+  for (let index = 0; index < expectedHeadings.length; index += 1) {
+    if (actualHeadings[index] !== expectedHeadings[index]) {
+      throwMalformedContextPack(
+        `expected heading "${expectedHeadings[index]}" at position ${index + 1}, got "${actualHeadings[index] ?? 'none'}"`,
+        options,
+      );
+    }
+  }
+
+  if (headingMatches[0]?.lineIndex !== 0) {
+    throwMalformedContextPack(
+      'the first non-empty line must be "# context_pack"',
+      options,
+    );
+  }
+
+  const h1Content = lines
+    .slice(headingMatches[0].lineIndex + 1, headingMatches[1].lineIndex)
+    .join('\n')
+    .trim();
+  if (h1Content) {
+    throwMalformedContextPack(
+      'do not put prose between "# context_pack" and "## Short Answer"',
+      options,
+    );
+  }
+
+  const sections: ParsedContextPackSection[] = headingMatches.map(
+    (match, index) => {
+      const next = headingMatches[index + 1];
+      const content = lines
+        .slice(match.lineIndex + 1, next?.lineIndex ?? lines.length)
+        .join('\n')
+        .trim();
+      return { heading: match.heading, content };
+    },
+  );
+
+  for (const section of sections) {
+    if (section.heading === '# context_pack') {
+      continue;
+    }
+    if (!section.content) {
+      throwMalformedContextPack(
+        `${section.heading} must contain concise content; use "No relevant docs found" for an empty docs layer`,
+        options,
+      );
+    }
+  }
+
+  return { sections };
+}
+
+function collectMarkdownHeadings(lines: string[]): Array<{
+  heading: RequiredContextPackHeading | string;
+  lineIndex: number;
+}> {
+  const headings: Array<{
+    heading: RequiredContextPackHeading | string;
+    lineIndex: number;
+  }> = [];
+  let insideFence = false;
+
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
+    const line = lines[lineIndex].trim();
+    if (/^(```|~~~)/.test(line)) {
+      insideFence = !insideFence;
+      continue;
+    }
+    if (insideFence) {
+      continue;
+    }
+
+    const match = /^(#{1,6})\s+(.+?)\s*$/.exec(line);
+    if (!match) {
+      continue;
+    }
+    const heading = `${match[1]} ${match[2]}`;
+    if (!REQUIRED_CONTEXT_PACK_HEADINGS.includes(heading as never)) {
+      headings.push({ heading, lineIndex });
+      continue;
+    }
+    headings.push({ heading: heading as RequiredContextPackHeading, lineIndex });
+  }
+
+  return headings;
+}
+
+function renderContextPack(sections: ParsedContextPackSection[]): string {
+  return sections
+    .map((section) =>
+      section.heading === '# context_pack'
+        ? section.heading
+        : `${section.heading}\n\n${section.content.trim()}`,
+    )
+    .join('\n\n')
+    .trim();
+}
+
+function throwMalformedContextPack(
+  reason: string,
+  options?: { runtimeDurationMs?: number; stderrTail?: string },
+): never {
+  throw new ContextLayerError(
+    'CODEX_SUBAGENT_FAILED',
+    `Codex context_layer subagent returned malformed context_pack: ${reason}. ${formatDiagnosticTail(options?.stderrTail)}`,
+    { runtimeDurationMs: options?.runtimeDurationMs },
+  );
+}
+
+function truncateUtf8(value: string, maxBytes: number): string {
+  const text = value.trim();
+  const buffer = Buffer.from(text, 'utf8');
+  if (buffer.byteLength <= maxBytes) {
+    return text;
+  }
+
+  let end = Math.max(0, maxBytes);
+  while (end > 0 && (buffer[end] & 0xc0) === 0x80) {
+    end -= 1;
+  }
+  return buffer.subarray(0, end).toString('utf8').trimEnd();
+}
+
+function byteLength(value: string): number {
+  return Buffer.byteLength(value, 'utf8');
+}
