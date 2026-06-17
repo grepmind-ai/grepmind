@@ -81,15 +81,15 @@ Backend видит только текущий semantic запрос:
 
 ```ts
 {
-  requestId,
-  bindingId,
-  revisionId,
-  query,
-  target,
-  limit,
-  threshold,
-  rerank,
-  tags
+  (requestId,
+    bindingId,
+    revisionId,
+    query,
+    target,
+    limit,
+    threshold,
+    rerank,
+    tags);
 }
 ```
 
@@ -228,7 +228,7 @@ export async function searchCode(params: {
   exact?: SearchExactQuery;
   globs?: string[];
   contextLines?: number;
-}): Promise<SearchResponse>
+}): Promise<SearchResponse>;
 ```
 
 Передавать новые поля в `client.searchHead(...)`.

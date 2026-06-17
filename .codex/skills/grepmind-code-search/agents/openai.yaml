@@ -1,9 +1,9 @@
 interface:
-  display_name: "Project Code Search"
-  short_description: "Use project-local semantic search first"
-  default_prompt: "Use $grepmind-code-search to investigate this project workspace task with semantic code search first."
+  display_name: 'Project Code Search'
+  short_description: 'Use project-local semantic search first'
+  default_prompt: 'Use $grepmind-code-search to investigate this project workspace task with semantic code search first.'
 dependencies:
   tools:
-    - type: "mcp"
-      value: "grepmind"
-      description: "MCP server providing project-local semantic code and docs search"
+    - type: 'mcp'
+      value: 'grepmind'
+      description: 'MCP server providing project-local semantic code and docs search'

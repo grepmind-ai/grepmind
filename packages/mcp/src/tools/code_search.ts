@@ -72,7 +72,9 @@ export const codeSearchSchema = z
       .min(0)
       .max(MAX_CONTEXT_LINES)
       .optional()
-      .describe('Local rg context lines around exact matches (default: 2, max: 10)'),
+      .describe(
+        'Local rg context lines around exact matches (default: 2, max: 10)',
+      ),
     compact: z
       .boolean()
       .optional()

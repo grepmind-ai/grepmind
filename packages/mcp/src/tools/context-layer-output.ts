@@ -15,7 +15,8 @@ export const REQUIRED_CONTEXT_PACK_HEADINGS = [
   '## Suggested Next Edits',
 ] as const;
 
-type RequiredContextPackHeading = (typeof REQUIRED_CONTEXT_PACK_HEADINGS)[number];
+type RequiredContextPackHeading =
+  (typeof REQUIRED_CONTEXT_PACK_HEADINGS)[number];
 
 interface ParsedContextPackSection {
   heading: RequiredContextPackHeading;
@@ -80,7 +81,8 @@ export function summarizeContextPackForLimit(input: {
       parsed.sections.map((section) => ({ ...section, content: '' })),
     ),
   );
-  const markerBytes = weightedSections.length * byteLength('\n\n[section truncated]');
+  const markerBytes =
+    weightedSections.length * byteLength('\n\n[section truncated]');
   const bodyBudget = Math.max(
     0,
     input.maxOutputBytes - suffixBytes - renderOverhead - markerBytes,
@@ -96,7 +98,9 @@ export function summarizeContextPackForLimit(input: {
     }
     const budget = Math.max(
       120,
-      Math.floor((bodyBudget * (weights.get(section.heading) ?? 1)) / totalWeight),
+      Math.floor(
+        (bodyBudget * (weights.get(section.heading) ?? 1)) / totalWeight,
+      ),
     );
     const truncated = truncateUtf8(section.content, budget);
     return {
@@ -120,7 +124,7 @@ function parseContextPackMarkdown(
   raw: string,
   options?: { runtimeDurationMs?: number; stderrTail?: string },
 ): ParsedContextPack {
-  const text = stripAnsi(raw).replace(/\r\n?/g, '\n').trim();
+  const text = stripAnsi(raw).replaceAll(/\r\n?/g, '\n').trim();
   if (!text) {
     throw new ContextLayerError(
       'CODEX_SUBAGENT_EMPTY_OUTPUT',
@@ -223,7 +227,10 @@ function collectMarkdownHeadings(lines: string[]): Array<{
       headings.push({ heading, lineIndex });
       continue;
     }
-    headings.push({ heading: heading as RequiredContextPackHeading, lineIndex });
+    headings.push({
+      heading: heading as RequiredContextPackHeading,
+      lineIndex,
+    });
   }
 
   return headings;

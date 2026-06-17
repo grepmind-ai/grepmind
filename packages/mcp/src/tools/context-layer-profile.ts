@@ -161,6 +161,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value != null && !Array.isArray(value);
 }
 
+const ANSI_ESCAPE_PATTERN = new RegExp(
+  `${String.fromCodePoint(27)}\\[[0-?]*[ -/]*[@-~]`,
+  'g',
+);
+
 function stripAnsi(value: string): string {
-  return value.replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, '');
+  return value.replaceAll(ANSI_ESCAPE_PATTERN, '');
 }

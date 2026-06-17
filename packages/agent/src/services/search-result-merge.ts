@@ -136,7 +136,9 @@ function isRgItemNearSemanticItem(
 }
 
 function createExactKey(item: SearchResultItem): string {
-  return [item.relativePath, item.symbol.startLine, item.symbol.endLine].join(':');
+  return [item.relativePath, item.symbol.startLine, item.symbol.endLine].join(
+    ':',
+  );
 }
 
 function appendRgContext(

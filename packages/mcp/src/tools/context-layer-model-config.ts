@@ -102,5 +102,5 @@ function readSpeedEnv(): ContextLayerSpeed | undefined {
 
 function readStringEnv(name: string): string | undefined {
   const raw = process.env[name]?.trim();
-  return raw ? raw : undefined;
+  return raw || undefined;
 }

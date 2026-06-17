@@ -10,6 +10,10 @@ const SAFE_DIAGNOSTIC_LINE_PATTERNS = [
 ];
 
 const MAX_SAFE_DIAGNOSTIC_LINES = 30;
+const ANSI_ESCAPE_PATTERN = new RegExp(
+  `${String.fromCodePoint(27)}\\[[0-?]*[ -/]*[@-~]`,
+  'g',
+);
 
 export function formatDiagnosticTail(value: string | undefined): string {
   const safeText = safeDiagnosticText(value);
@@ -31,5 +35,5 @@ export function safeDiagnosticText(value: string | undefined): string {
 }
 
 export function stripAnsi(value: string): string {
-  return value.replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, '');
+  return value.replaceAll(ANSI_ESCAPE_PATTERN, '');
 }
