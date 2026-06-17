@@ -39,7 +39,7 @@ async function main(): Promise<void> {
       'context_layer',
       {
         description:
-          'Prepare a read-only multi-file and multi-doc context_pack for a coding agent using Grepmind code_search and a Codex CLI subagent. Use code_search for fast targeted semantic or exact search; use context_layer for architecture traces, cross-file flows, risks, and suggested next edits before complex changes.',
+          'Prepare a read-only multi-file and multi-doc context_pack for a coding agent using a mandatory Codex prompt-refiner stage followed by a Grepmind code_search research subagent. The tool may first return agent_questions with a refinementSession; answer them by calling context_layer again with refinementSession and agentAnswers.',
         inputSchema: contextLayerSchema,
       },
       contextLayerTool,

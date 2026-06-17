@@ -2,23 +2,22 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { ensureMcpRuntimePrepared } from '../runtime-context.js';
 import {
-  DEFAULT_CONTEXT_LAYER_TIMEOUT_MS,
   runCodexSubagent,
   resolveContextLayerMaxOutputBytes,
   resolveContextLayerTimeoutMs,
 } from './codex-subagent-runner.js';
+import {
+  resolvePromptRefinerTimeoutMs,
+  runPromptRefinerSubagent,
+} from './codex-prompt-refiner-runner.js';
 import { ContextLayerError } from './context-layer-errors.js';
 import type { ContextLayerErrorCode } from './context-layer-errors.js';
 import {
-  DEFAULT_CONTEXT_LAYER_CODEX_MODEL,
-  DEFAULT_CONTEXT_LAYER_CODEX_SPEED,
-  DEFAULT_CONTEXT_LAYER_CODEX_THINKING,
   resolveContextLayerModel,
-  type ContextLayerRuntimeProvider,
-  type ContextLayerSpeed,
-  type ContextLayerThinking,
+  type ResolvedContextLayerModel,
 } from './context-layer-model-config.js';
 import {
+  hashRefinementSessionId,
   hashWorkspacePath,
   incrementContextLayerCounter,
 } from './context-layer-observability.js';
@@ -26,10 +25,29 @@ import {
   buildContextLayerPrompt,
   type ContextLayerFocus,
 } from './context-layer-prompt.js';
+import {
+  createRefinementSession,
+  deleteRefinementSession,
+  getRefinementSession,
+  recordRefinementAttempt,
+  updateRefinementSessionQuestions,
+  type RefinementAgentAnswer,
+  type RefinementSession,
+} from './context-layer-refinement-session.js';
+import {
+  toAgentQuestionsResult,
+  toErrorResult,
+  type ContextLayerResult,
+} from './context-layer-results.js';
+import type {
+  PromptRefinerOutput,
+  PromptRefinerQuestion,
+} from './prompt-refiner-output.js';
 
 export const DEFAULT_MAX_FILES = 30;
 export const DEFAULT_MAX_SEARCH_CALLS = 8;
 export const DEFAULT_FOCUS = 'implementation';
+export const DEFAULT_CONTEXT_LAYER_TOOL_TIMEOUT_BUFFER_SEC = 30;
 
 export const contextLayerSchema = z
   .object({
@@ -48,51 +66,46 @@ export const contextLayerSchema = z
     focus: z
       .enum(['implementation', 'debugging', 'architecture', 'review'])
       .optional(),
+    refinementSession: z.string().min(1).optional(),
+    agentAnswers: z
+      .array(
+        z
+          .object({
+            questionId: z.string().min(1),
+            answer: z.string().min(1),
+          })
+          .strict(),
+      )
+      .max(10)
+      .optional(),
   })
   .strict();
 
 export type ContextLayerInput = z.infer<typeof contextLayerSchema>;
 
-interface ContextLayerSuccessResult {
-  [key: string]: unknown;
-  content: Array<{ type: 'text'; text: string }>;
-  _meta: {
-    model_provider: ContextLayerRuntimeProvider;
-    model_name: string;
-    model_thinking: ContextLayerThinking;
-    model_speed: ContextLayerSpeed;
-    max_search_calls: number;
-    context_pack_path?: string;
-    runtime_duration_ms: number;
-    truncated: boolean;
-    timeout: boolean;
-  };
-}
-
-interface ContextLayerErrorResult {
-  [key: string]: unknown;
-  content: Array<{ type: 'text'; text: string }>;
-  isError: true;
-  _meta: {
-    error_code: ContextLayerErrorCode;
-    model_provider?: ContextLayerRuntimeProvider;
-    model_name?: string;
-    model_thinking?: ContextLayerThinking;
-    model_speed?: ContextLayerSpeed;
-    max_search_calls?: number;
-    runtime_duration_ms?: number;
-    truncated: false;
-    timeout: boolean;
-  };
+interface RefinementState {
+  originalQuery: string;
+  additionalCallerContext?: string;
+  focus: ContextLayerFocus;
+  maxFiles: number;
+  maxSearchCalls: number;
+  model: ResolvedContextLayerModel;
+  session?: RefinementSession;
+  previousRefinedQueryDraft?: string;
+  previousQuestions?: PromptRefinerQuestion[];
+  agentAnswers?: RefinementAgentAnswer[];
 }
 
 export async function contextLayerTool(
   input: ContextLayerInput,
-): Promise<ContextLayerSuccessResult | ContextLayerErrorResult> {
+): Promise<ContextLayerResult> {
   const requestId = randomUUID();
   const startedAt = Date.now();
-  const maxSearchCalls = input.maxSearchCalls ?? DEFAULT_MAX_SEARCH_CALLS;
-  let model: ReturnType<typeof resolveContextLayerModel> | undefined;
+  let maxSearchCalls = input.maxSearchCalls ?? DEFAULT_MAX_SEARCH_CALLS;
+  let model: ResolvedContextLayerModel | undefined;
+  let refinementSessionId = input.refinementSession;
+  let promptRefinerRuntimeDurationMs: number | undefined;
+  let researchRuntimeDurationMs: number | undefined;
 
   incrementContextLayerCounter('context_layer_requested', { requestId });
 
@@ -107,6 +120,13 @@ export async function contextLayerTool(
       );
     }
 
+    if (input.agentAnswers != null && input.refinementSession == null) {
+      throw new ContextLayerError(
+        'REFINEMENT_SESSION_REQUIRED',
+        'agentAnswers can only be used together with refinementSession.',
+      );
+    }
+
     model = resolveContextLayerModel(input.model);
     if (model.provider === 'claude') {
       throw new ContextLayerError(
@@ -116,32 +136,120 @@ export async function contextLayerTool(
     }
 
     const workspaceContext = await ensureMcpRuntimePrepared();
+    const refinementState = resolveRefinementState({
+      input,
+      workspacePath: workspaceContext.workspacePath,
+      model,
+      requestId,
+    });
+    maxSearchCalls = refinementState.maxSearchCalls;
+    refinementSessionId = refinementState.session?.id ?? input.refinementSession;
+
+    if (
+      refinementState.session != null &&
+      refinementState.agentAnswers == null
+    ) {
+      incrementContextLayerCounter('context_layer_agent_questions_returned', {
+        requestId,
+        sessionHash: hashRefinementSessionId(refinementState.session.id),
+        questionCount: refinementState.session.questions.length,
+        durationMs: Date.now() - startedAt,
+      });
+      return toAgentQuestionsResult({
+        session: refinementState.session,
+        refinerDurationMs: 0,
+        runtimeDurationMs: Date.now() - startedAt,
+      });
+    }
+
+    const refinerTimeoutMs = resolvePromptRefinerTimeoutMs();
+    incrementContextLayerCounter('context_layer_prompt_refiner_started', {
+      requestId,
+      workspaceHash: hashWorkspacePath(workspaceContext.workspacePath),
+      sessionHash:
+        refinementState.session == null
+          ? undefined
+          : hashRefinementSessionId(refinementState.session.id),
+      timeoutMs: refinerTimeoutMs,
+    });
+
+    const refiner = await runPromptRefinerSubagent({
+      workspacePath: workspaceContext.workspacePath,
+      modelName: refinementState.model.name,
+      modelSpeed: refinementState.model.speed,
+      modelThinking: refinementState.model.thinking,
+      originalQuery: refinementState.originalQuery,
+      additionalCallerContext: refinementState.additionalCallerContext,
+      previousRefinedQueryDraft: refinementState.previousRefinedQueryDraft,
+      previousQuestions: refinementState.previousQuestions,
+      agentAnswers: refinementState.agentAnswers,
+      focus: refinementState.focus,
+      maxFiles: refinementState.maxFiles,
+      maxSearchCalls: refinementState.maxSearchCalls,
+      timeoutMs: refinerTimeoutMs,
+    });
+    promptRefinerRuntimeDurationMs = refiner.runtimeDurationMs;
+    incrementContextLayerCounter('context_layer_prompt_refiner_completed', {
+      requestId,
+      durationMs: refiner.runtimeDurationMs,
+    });
+
+    if (refiner.output.status === 'needs_agent_answers') {
+      const session = upsertQuestionsSession({
+        state: refinementState,
+        workspacePath: workspaceContext.workspacePath,
+        refinement: refiner.output,
+      });
+      refinementSessionId = session.id;
+      incrementContextLayerCounter('context_layer_agent_questions_returned', {
+        requestId,
+        sessionHash: hashRefinementSessionId(session.id),
+        questionCount: session.questions.length,
+        durationMs: Date.now() - startedAt,
+      });
+      return toAgentQuestionsResult({
+        session,
+        refinerDurationMs: refiner.runtimeDurationMs,
+        runtimeDurationMs: Date.now() - startedAt,
+      });
+    }
+
+    deleteRefinementSession(refinementState.session?.id);
+    if (refinementState.session != null) {
+      incrementContextLayerCounter('context_layer_refinement_session_completed', {
+        requestId,
+        sessionHash: hashRefinementSessionId(refinementState.session.id),
+      });
+    }
+
     const timeoutMs = resolveContextLayerTimeoutMs();
     const maxOutputBytes = resolveContextLayerMaxOutputBytes();
     const prompt = buildContextLayerPrompt({
       workspacePath: workspaceContext.workspacePath,
-      query: input.query,
-      maxFiles: input.maxFiles ?? DEFAULT_MAX_FILES,
-      maxSearchCalls,
-      focus: (input.focus ?? DEFAULT_FOCUS) as ContextLayerFocus,
+      query: refiner.output.refinedQuery,
+      originalQuery: refinementState.originalQuery,
+      refinerAssumptions: refiner.output.assumptions,
+      maxFiles: refinementState.maxFiles,
+      maxSearchCalls: refinementState.maxSearchCalls,
+      focus: refinementState.focus,
     });
 
     incrementContextLayerCounter('context_layer_subagent_started', {
       requestId,
       workspaceHash: hashWorkspacePath(workspaceContext.workspacePath),
-      maxSearchCalls,
+      maxSearchCalls: refinementState.maxSearchCalls,
       timeoutMs,
     });
     const result = await runCodexSubagent({
       workspacePath: workspaceContext.workspacePath,
-      dataDir: workspaceContext.dataDir,
       prompt,
-      modelName: model.name,
-      modelSpeed: model.speed,
-      modelThinking: model.thinking,
+      modelName: refinementState.model.name,
+      modelSpeed: refinementState.model.speed,
+      modelThinking: refinementState.model.thinking,
       timeoutMs,
       maxOutputBytes,
     });
+    researchRuntimeDurationMs = result.runtimeDurationMs;
 
     if (result.truncated) {
       incrementContextLayerCounter('context_layer_output_truncated', {
@@ -157,41 +265,219 @@ export async function contextLayerTool(
     return {
       content: [{ type: 'text', text: result.contextPackMarkdown }],
       _meta: {
-        model_provider: model.provider,
-        model_name: model.name,
-        model_thinking: model.thinking,
-        model_speed: model.speed,
-        max_search_calls: maxSearchCalls,
+        result_kind: 'context_pack',
+        model_provider: refinementState.model.provider,
+        model_name: refinementState.model.name,
+        model_thinking: refinementState.model.thinking,
+        model_speed: refinementState.model.speed,
+        max_search_calls: refinementState.maxSearchCalls,
         context_pack_path: result.contextPackPath,
-        runtime_duration_ms: result.runtimeDurationMs,
+        prompt_refiner_runtime_duration_ms: refiner.runtimeDurationMs,
+        research_runtime_duration_ms: result.runtimeDurationMs,
+        runtime_duration_ms: Date.now() - startedAt,
         truncated: result.truncated,
         timeout: result.timeout,
       },
     };
   } catch (error) {
-    const normalized = normalizeContextLayerError(error);
-    if (normalized.code === 'CODEX_SUBAGENT_TIMEOUT') {
-      incrementContextLayerCounter('context_layer_subagent_timeout', {
-        requestId,
-        durationMs: normalized.runtimeDurationMs,
-      });
-    } else if (normalized.code === 'CODEX_SUBAGENT_PROFILE_MISSING') {
-      incrementContextLayerCounter('context_layer_profile_missing', {
-        requestId,
-      });
-    } else {
-      incrementContextLayerCounter('context_layer_subagent_failed', {
-        requestId,
-        errorCode: normalized.code,
-      });
-    }
-
-    return toErrorResult(normalized, {
+    return handleContextLayerError({
+      error,
+      requestId,
+      startedAt,
       model: model ?? input.model,
       maxSearchCalls,
-      runtimeDurationMs: normalized.runtimeDurationMs ?? Date.now() - startedAt,
+      refinementSessionId,
+      promptRefinerRuntimeDurationMs,
+      researchRuntimeDurationMs,
     });
   }
+}
+
+function handleContextLayerError(input: {
+  error: unknown;
+  requestId: string;
+  startedAt: number;
+  model: Parameters<typeof toErrorResult>[1]['model'];
+  maxSearchCalls: number;
+  refinementSessionId: string | undefined;
+  promptRefinerRuntimeDurationMs: number | undefined;
+  researchRuntimeDurationMs: number | undefined;
+}): ContextLayerResult {
+  const normalized = normalizeContextLayerError(input.error);
+  recordContextLayerErrorCounter({
+    error: normalized,
+    requestId: input.requestId,
+    refinementSessionId: input.refinementSessionId,
+  });
+
+  return toErrorResult(normalized, {
+    model: input.model,
+    maxSearchCalls: input.maxSearchCalls,
+    refinementSession: input.refinementSessionId,
+    promptRefinerRuntimeDurationMs:
+      input.promptRefinerRuntimeDurationMs ??
+      (isPromptRefinerRuntimeError(normalized.code)
+        ? normalized.runtimeDurationMs
+        : undefined),
+    researchRuntimeDurationMs:
+      input.researchRuntimeDurationMs ??
+      (isResearchRuntimeError(normalized.code)
+        ? normalized.runtimeDurationMs
+        : undefined),
+    runtimeDurationMs: Date.now() - input.startedAt,
+  });
+}
+
+function recordContextLayerErrorCounter(input: {
+  error: ContextLayerError;
+  requestId: string;
+  refinementSessionId: string | undefined;
+}): void {
+  if (input.error.code === 'PROMPT_REFINER_TIMEOUT') {
+    incrementContextLayerCounter('context_layer_prompt_refiner_timeout', {
+      requestId: input.requestId,
+      durationMs: input.error.runtimeDurationMs,
+    });
+  } else if (isPromptRefinerError(input.error.code)) {
+    incrementContextLayerCounter('context_layer_prompt_refiner_failed', {
+      requestId: input.requestId,
+      errorCode: input.error.code,
+    });
+  } else if (input.error.code === 'REFINEMENT_SESSION_EXPIRED') {
+    incrementContextLayerCounter('context_layer_refinement_session_expired', {
+      requestId: input.requestId,
+      sessionHash:
+        input.refinementSessionId == null
+          ? undefined
+          : hashRefinementSessionId(input.refinementSessionId),
+    });
+  } else if (input.error.code === 'CODEX_SUBAGENT_TIMEOUT') {
+    incrementContextLayerCounter('context_layer_subagent_timeout', {
+      requestId: input.requestId,
+      durationMs: input.error.runtimeDurationMs,
+    });
+  } else if (input.error.code === 'CODEX_SUBAGENT_PROFILE_MISSING') {
+    incrementContextLayerCounter('context_layer_profile_missing', {
+      requestId: input.requestId,
+    });
+  } else {
+    incrementContextLayerCounter('context_layer_subagent_failed', {
+      requestId: input.requestId,
+      errorCode: input.error.code,
+    });
+  }
+}
+
+function resolveRefinementState(input: {
+  input: ContextLayerInput;
+  workspacePath: string;
+  model: ResolvedContextLayerModel;
+  requestId: string;
+}): RefinementState {
+  const maxFiles = input.input.maxFiles ?? DEFAULT_MAX_FILES;
+  const maxSearchCalls =
+    input.input.maxSearchCalls ?? DEFAULT_MAX_SEARCH_CALLS;
+  const focus = (input.input.focus ?? DEFAULT_FOCUS) as ContextLayerFocus;
+
+  if (input.input.refinementSession == null) {
+    return {
+      originalQuery: input.input.query,
+      focus,
+      maxFiles,
+      maxSearchCalls,
+      model: input.model,
+    };
+  }
+
+  const existing = getRefinementSession(input.input.refinementSession);
+  if (existing.workspacePath !== input.workspacePath) {
+    throw new ContextLayerError(
+      'REFINEMENT_SESSION_NOT_FOUND',
+      `Refinement session ${existing.id} does not belong to this workspace.`,
+    );
+  }
+
+  incrementContextLayerCounter('context_layer_refinement_session_resumed', {
+    requestId: input.requestId,
+    sessionHash: hashRefinementSessionId(existing.id),
+  });
+
+  if (input.input.agentAnswers == null) {
+    return {
+      originalQuery: existing.originalQuery,
+      additionalCallerContext: additionalCallerContextForResume(
+        existing,
+        input.input.query,
+      ),
+      focus: existing.focus,
+      maxFiles: existing.maxFiles,
+      maxSearchCalls: existing.maxSearchCalls,
+      model: existing.model,
+      session: existing,
+      previousRefinedQueryDraft: existing.refinedQueryDraft,
+      previousQuestions: existing.questions,
+    };
+  }
+
+  const updated = recordRefinementAttempt(existing, input.input.agentAnswers);
+  return {
+    originalQuery: updated.originalQuery,
+    additionalCallerContext: additionalCallerContextForResume(
+      updated,
+      input.input.query,
+    ),
+    focus: updated.focus,
+    maxFiles: updated.maxFiles,
+    maxSearchCalls: updated.maxSearchCalls,
+    model: updated.model,
+    session: updated,
+    previousRefinedQueryDraft: updated.refinedQueryDraft,
+    previousQuestions: updated.questions,
+    agentAnswers: input.input.agentAnswers,
+  };
+}
+
+function upsertQuestionsSession(input: {
+  state: RefinementState;
+  workspacePath: string;
+  refinement: Extract<PromptRefinerOutput, { status: 'needs_agent_answers' }>;
+}): RefinementSession {
+  if (input.state.session != null) {
+    return updateRefinementSessionQuestions(input.state.session, {
+      refinedQueryDraft: input.refinement.refinedQueryDraft,
+      assumptions: input.refinement.assumptions,
+      questions: input.refinement.questions,
+    });
+  }
+
+  const session = createRefinementSession({
+    workspacePath: input.workspacePath,
+    originalQuery: input.state.originalQuery,
+    additionalCallerContext: input.state.additionalCallerContext,
+    focus: input.state.focus,
+    maxFiles: input.state.maxFiles,
+    maxSearchCalls: input.state.maxSearchCalls,
+    model: input.state.model,
+    refinedQueryDraft: input.refinement.refinedQueryDraft,
+    assumptions: input.refinement.assumptions,
+    questions: input.refinement.questions,
+  });
+  incrementContextLayerCounter('context_layer_refinement_session_created', {
+    sessionHash: hashRefinementSessionId(session.id),
+    questionCount: session.questions.length,
+  });
+  return session;
+}
+
+function additionalCallerContextForResume(
+  session: RefinementSession,
+  query: string,
+): string | undefined {
+  const trimmed = query.trim();
+  if (!trimmed || trimmed === session.originalQuery.trim()) {
+    return session.additionalCallerContext;
+  }
+  return trimmed;
 }
 
 function normalizeContextLayerError(error: unknown): ContextLayerError {
@@ -205,44 +491,33 @@ function normalizeContextLayerError(error: unknown): ContextLayerError {
   );
 }
 
-function toErrorResult(
-  error: ContextLayerError,
-  context: {
-    model:
-      | {
-          provider?: ContextLayerRuntimeProvider;
-          name?: string;
-          thinking?: ContextLayerThinking;
-          speed?: ContextLayerSpeed;
-        }
-      | undefined;
-    maxSearchCalls: number;
-    runtimeDurationMs: number;
-  },
-): ContextLayerErrorResult {
-  return {
-    content: [
-      {
-        type: 'text',
-        text: `Error: Grepmind context_layer subagent failed: ${error.message}`,
-      },
-    ],
-    isError: true,
-    _meta: {
-      error_code: error.code,
-      model_provider: context.model?.provider,
-      model_name: context.model?.name ?? DEFAULT_CONTEXT_LAYER_CODEX_MODEL,
-      model_thinking:
-        context.model?.thinking ?? DEFAULT_CONTEXT_LAYER_CODEX_THINKING,
-      model_speed: context.model?.speed ?? DEFAULT_CONTEXT_LAYER_CODEX_SPEED,
-      max_search_calls: context.maxSearchCalls,
-      runtime_duration_ms: context.runtimeDurationMs,
-      truncated: false,
-      timeout: error.timeout,
-    },
-  };
+function isPromptRefinerError(code: ContextLayerErrorCode): boolean {
+  return (
+    code === 'PROMPT_REFINER_FAILED' ||
+    code === 'PROMPT_REFINER_EMPTY_OUTPUT' ||
+    code === 'PROMPT_REFINER_MALFORMED_OUTPUT' ||
+    code === 'PROMPT_REFINER_PROFILE_INVALID'
+  );
+}
+
+function isPromptRefinerRuntimeError(code: ContextLayerErrorCode): boolean {
+  return code === 'PROMPT_REFINER_TIMEOUT' || isPromptRefinerError(code);
+}
+
+function isResearchRuntimeError(code: ContextLayerErrorCode): boolean {
+  return (
+    code === 'CODEX_SUBAGENT_TIMEOUT' ||
+    code === 'CODEX_SUBAGENT_FAILED' ||
+    code === 'CODEX_SUBAGENT_EMPTY_OUTPUT' ||
+    code === 'CODEX_SUBAGENT_OUTPUT_TOO_LARGE' ||
+    code === 'CODE_SEARCH_UNAVAILABLE'
+  );
 }
 
 export function defaultContextLayerToolTimeoutSec(): number {
-  return Math.ceil(DEFAULT_CONTEXT_LAYER_TIMEOUT_MS / 1000) + 30;
+  return (
+    Math.ceil(resolvePromptRefinerTimeoutMs() / 1000) +
+    Math.ceil(resolveContextLayerTimeoutMs() / 1000) +
+    DEFAULT_CONTEXT_LAYER_TOOL_TIMEOUT_BUFFER_SEC
+  );
 }

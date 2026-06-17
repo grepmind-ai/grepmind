@@ -7,6 +7,8 @@ export type ContextLayerFocus =
 export interface ContextLayerPromptInput {
   workspacePath: string;
   query: string;
+  originalQuery?: string;
+  refinerAssumptions?: string[];
   maxFiles: number;
   maxSearchCalls: number;
   focus: ContextLayerFocus;
@@ -59,8 +61,14 @@ Limits:
 - Prefer high-signal references over broad dumps.
 - Spend the file budget on files that prove the flow, not on peripheral matches.
 
-User query:
+Refined user query:
 ${input.query}
+
+Original query:
+${input.originalQuery?.trim() || input.query}
+
+Prompt-refiner assumptions:
+${formatRefinerAssumptions(input.refinerAssumptions)}
 
 Available search tool:
 - code_search: use it to find relevant code/docs by natural-language query. Start broad, then search code and docs separately when useful.
@@ -132,4 +140,11 @@ the most important file(s), and the confidence level if there are meaningful gap
 3. Validation or side effect: guards, permissions, status changes, writes, external calls, with file:line evidence snippet.
 4. Persistence or response: saved rows/files, returned DTOs, emitted output, cleanup, or retention, with file:line evidence snippet.
 `;
+}
+
+function formatRefinerAssumptions(assumptions: string[] | undefined): string {
+  if (assumptions == null || assumptions.length === 0) {
+    return '- None.';
+  }
+  return assumptions.map((assumption) => `- ${assumption}`).join('\n');
 }

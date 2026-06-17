@@ -10,48 +10,40 @@ import {
   type ContextLayerSpeed,
   type ContextLayerThinking,
 } from './context-layer-model-config.js';
+import { buildContextLayerPromptRefinerPrompt } from './context-layer-prompt-refiner.js';
+import type { ContextLayerPromptRefinerInput } from './context-layer-prompt-refiner.js';
 import {
-  CONTEXT_LAYER_SUBAGENT_PROFILE,
-  verifyContextLayerSubagentProfile,
-} from './context-layer-profile.js';
-import {
-  normalizeContextPackMarkdown,
-  summarizeContextPackForLimit,
-} from './context-layer-output.js';
+  CONTEXT_LAYER_REFINER_PROFILE,
+  verifyContextLayerRefinerProfile,
+} from './context-layer-refiner-profile.js';
+import { parsePromptRefinerOutput } from './prompt-refiner-output.js';
+import type { PromptRefinerOutput } from './prompt-refiner-output.js';
 
-export const DEFAULT_CONTEXT_LAYER_TIMEOUT_MS = 180_000;
-export const MAX_CONTEXT_LAYER_TIMEOUT_MS = 600_000;
-export const DEFAULT_CONTEXT_LAYER_MAX_OUTPUT_BYTES = 400_000;
-export const MIN_CONTEXT_LAYER_MAX_OUTPUT_BYTES = 8_000;
-export const DIAGNOSTIC_TAIL_BYTES = 16_000;
+export const DEFAULT_PROMPT_REFINER_TIMEOUT_MS = 45_000;
+export const MAX_PROMPT_REFINER_TIMEOUT_MS = 120_000;
 
-export interface CodexSubagentRunInput {
-  workspacePath: string;
-  prompt: string;
+interface PromptRefinerRunInput extends ContextLayerPromptRefinerInput {
   modelName: string;
   modelSpeed: ContextLayerSpeed;
   modelThinking: ContextLayerThinking;
   timeoutMs: number;
-  maxOutputBytes: number;
 }
 
-export interface CodexSubagentRunResult {
-  contextPackMarkdown: string;
-  contextPackPath?: string;
+export interface PromptRefinerRunResult {
+  output: PromptRefinerOutput;
   runtimeDurationMs: number;
-  truncated: boolean;
   timeout: false;
 }
 
-export async function runCodexSubagent(
-  input: CodexSubagentRunInput,
-): Promise<CodexSubagentRunResult> {
+export async function runPromptRefinerSubagent(
+  input: PromptRefinerRunInput,
+): Promise<PromptRefinerRunResult> {
   const startedAt = Date.now();
   const codexBin = await resolveCodexCliPath();
   await verifyCodexCliShape(codexBin);
-  await verifyContextLayerSubagentProfile(codexBin, input.workspacePath);
+  await verifyContextLayerRefinerProfile(codexBin, input.workspacePath);
 
-  const args = buildCodexExecArgs({
+  const args = buildPromptRefinerExecArgs({
     workspacePath: input.workspacePath,
     modelName: input.modelName,
     modelSpeed: input.modelSpeed,
@@ -60,115 +52,92 @@ export async function runCodexSubagent(
   const processResult = await runCodexProcess({
     codexBin,
     args,
-    prompt: input.prompt,
+    prompt: buildContextLayerPromptRefinerPrompt(input),
     cwd: input.workspacePath,
     timeoutMs: input.timeoutMs,
-    stdoutMaxBytes: Math.max(
-      DIAGNOSTIC_TAIL_BYTES,
-      input.maxOutputBytes + 64_000,
-    ),
   });
   const runtimeDurationMs = Date.now() - startedAt;
 
   if (processResult.timedOut) {
     throw new ContextLayerError(
-      'CODEX_SUBAGENT_TIMEOUT',
-      `Codex context_layer subagent timed out after ${input.timeoutMs}ms.`,
+      'PROMPT_REFINER_TIMEOUT',
+      `Codex prompt-refiner timed out after ${input.timeoutMs}ms.`,
       { timeout: true, runtimeDurationMs },
     );
   }
 
   if (processResult.error != null) {
     throw new ContextLayerError(
-      'CODEX_SUBAGENT_FAILED',
-      `Codex context_layer subagent failed to start: ${processResult.error.message}`,
+      'PROMPT_REFINER_FAILED',
+      `Codex prompt-refiner failed to start: ${processResult.error.message}`,
       { runtimeDurationMs },
     );
   }
 
   if (processResult.exitCode !== 0) {
     throw new ContextLayerError(
-      'CODEX_SUBAGENT_FAILED',
+      'PROMPT_REFINER_FAILED',
       formatFailedExitMessage(processResult),
       { runtimeDurationMs },
     );
   }
 
-  const contextPackMarkdown = readLastMessageFromStdout(
-    processResult.stdoutTail,
-    {
-      runtimeDurationMs,
-      stderrTail: processResult.stderrTail,
-    },
-  );
-  const outputBytes = Buffer.byteLength(contextPackMarkdown, 'utf8');
-  if (outputBytes > input.maxOutputBytes) {
-    return {
-      contextPackMarkdown: truncateContextPack(
-        contextPackMarkdown,
-        input.maxOutputBytes,
+  const rawOutput = readLastMessageFromStdout(processResult.stdoutTail, {
+    runtimeDurationMs,
+    stderrTail: processResult.stderrTail,
+  });
+  let output: PromptRefinerOutput;
+  try {
+    output = parsePromptRefinerOutput(rawOutput);
+  } catch (error) {
+    if (error instanceof ContextLayerError) {
+      throw new ContextLayerError(error.code, error.message, {
+        timeout: error.timeout,
         runtimeDurationMs,
-      ),
-      runtimeDurationMs,
-      truncated: true,
-      timeout: false,
-    };
+      });
+    }
+    throw error;
   }
 
   return {
-    contextPackMarkdown,
+    output,
     runtimeDurationMs,
-    truncated: false,
     timeout: false,
   };
 }
 
-export function resolveContextLayerTimeoutMs(): number {
-  const raw = process.env.GREPMIND_CONTEXT_LAYER_TIMEOUT_MS?.trim();
+export function resolvePromptRefinerTimeoutMs(): number {
+  const raw =
+    process.env.GREPMIND_CONTEXT_LAYER_PROMPT_REFINER_TIMEOUT_MS?.trim();
   if (!raw) {
-    return DEFAULT_CONTEXT_LAYER_TIMEOUT_MS;
+    return DEFAULT_PROMPT_REFINER_TIMEOUT_MS;
   }
   const value = Number(raw);
   if (
     !Number.isInteger(value) ||
     value <= 0 ||
-    value > MAX_CONTEXT_LAYER_TIMEOUT_MS
+    value > MAX_PROMPT_REFINER_TIMEOUT_MS
   ) {
     throw new ContextLayerError(
-      'CODEX_SUBAGENT_FAILED',
-      `GREPMIND_CONTEXT_LAYER_TIMEOUT_MS must be a positive integer no greater than ${MAX_CONTEXT_LAYER_TIMEOUT_MS}.`,
+      'PROMPT_REFINER_FAILED',
+      `GREPMIND_CONTEXT_LAYER_PROMPT_REFINER_TIMEOUT_MS must be a positive integer no greater than ${MAX_PROMPT_REFINER_TIMEOUT_MS}.`,
     );
   }
   return value;
 }
 
-export function resolveContextLayerMaxOutputBytes(): number {
-  const raw = process.env.GREPMIND_CONTEXT_LAYER_MAX_OUTPUT_BYTES?.trim();
-  if (!raw) {
-    return DEFAULT_CONTEXT_LAYER_MAX_OUTPUT_BYTES;
-  }
-  const value = Number(raw);
-  if (!Number.isInteger(value) || value < MIN_CONTEXT_LAYER_MAX_OUTPUT_BYTES) {
-    throw new ContextLayerError(
-      'CODEX_SUBAGENT_FAILED',
-      `GREPMIND_CONTEXT_LAYER_MAX_OUTPUT_BYTES must be an integer of at least ${MIN_CONTEXT_LAYER_MAX_OUTPUT_BYTES}.`,
-    );
-  }
-  return value;
-}
-
-export function buildCodexExecArgs(input: {
+function buildPromptRefinerExecArgs(input: {
   workspacePath: string;
   modelName: string;
   modelSpeed: ContextLayerSpeed;
   modelThinking: ContextLayerThinking;
 }): string[] {
-  const args = [
+  return [
     '--ask-for-approval',
     'never',
     'exec',
     '--profile',
-    CONTEXT_LAYER_SUBAGENT_PROFILE,
+    CONTEXT_LAYER_REFINER_PROFILE,
     '--model',
     input.modelName,
     '--config',
@@ -189,8 +158,6 @@ export function buildCodexExecArgs(input: {
     '--json',
     '-',
   ];
-
-  return args;
 }
 
 function runCodexProcess(input: {
@@ -199,7 +166,6 @@ function runCodexProcess(input: {
   prompt: string;
   cwd: string;
   timeoutMs: number;
-  stdoutMaxBytes?: number;
 }): Promise<{
   exitCode: number | null;
   signal: NodeJS.Signals | null;
@@ -211,10 +177,8 @@ function runCodexProcess(input: {
   return new Promise((resolve) => {
     let settled = false;
     let timedOut = false;
-    const stdout = new TailBuffer(
-      input.stdoutMaxBytes ?? DIAGNOSTIC_TAIL_BYTES,
-    );
-    const stderr = new TailBuffer(DIAGNOSTIC_TAIL_BYTES);
+    const stdout = new TailBuffer(16_000);
+    const stderr = new TailBuffer(16_000);
     const child = spawn(input.codexBin, input.args, {
       cwd: input.cwd,
       env: {
@@ -295,29 +259,17 @@ function readLastMessageFromStdout(
         event.item?.type === 'agent_message' &&
         typeof event.item.text === 'string'
       ) {
-        return normalizeContextPackMarkdown(event.item.text, context);
+        return event.item.text;
       }
     } catch {
       // Ignore non-event JSON fragments from Codex diagnostics.
     }
   }
   throw new ContextLayerError(
-    'CODEX_SUBAGENT_EMPTY_OUTPUT',
-    `Codex context_layer subagent did not return an output message in stdout JSON events. ${formatDiagnosticTail(context.stderrTail)}`,
+    'PROMPT_REFINER_EMPTY_OUTPUT',
+    `Codex prompt-refiner did not return an output message in stdout JSON events. ${formatDiagnosticTail(context.stderrTail)}`,
     { runtimeDurationMs: context.runtimeDurationMs },
   );
-}
-
-function truncateContextPack(
-  contextPackMarkdown: string,
-  maxOutputBytes: number,
-  runtimeDurationMs: number,
-): string {
-  return summarizeContextPackForLimit({
-    contextPackMarkdown,
-    maxOutputBytes,
-    runtimeDurationMs,
-  });
 }
 
 function formatFailedExitMessage(result: {
@@ -328,7 +280,7 @@ function formatFailedExitMessage(result: {
 }): string {
   const exit =
     result.exitCode == null ? `signal ${result.signal}` : result.exitCode;
-  return `Codex context_layer subagent exited with ${exit}. ${formatProcessDiagnosticTail(result)}`;
+  return `Codex prompt-refiner exited with ${exit}. ${formatProcessDiagnosticTail(result)}`;
 }
 
 class TailBuffer {

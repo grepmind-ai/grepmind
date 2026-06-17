@@ -64,9 +64,10 @@ Global MCP configuration without a workspace is not supported. For multiple repo
 To update the package used by MCP client config, rerun `grepmind init --force
 --mcp-package @grepmind/mcp@latest`.
 
-For Codex, `grepmind init --codex` writes `tool_timeout_sec = 210` so the
+For Codex, `grepmind init --codex` writes a `tool_timeout_sec` value that
+covers the prompt-refiner timeout, the research timeout, and a buffer so the
 longer-running `context_layer` tool can return its own timeout or result before
-the MCP client cancels the call.
+the MCP client cancels the call. With default budgets this value is `255`.
 
 ## Startup Behavior
 
@@ -88,7 +89,10 @@ Workspace registration happens only during startup. Tool calls do not choose rep
 
 Use `code_search` for quick semantic or exact retrieval. Use `context_layer`
 when the agent needs a curated multi-file or multi-doc `context_pack` before a
-larger implementation, debugging, architecture, or review task.
+larger implementation, debugging, architecture, or review task. `context_layer`
+always runs a prompt-refiner subagent before research; if the refiner needs
+caller context, the tool returns `# agent_questions` instead of starting
+research.
 
 ### `code_search`
 
@@ -139,14 +143,17 @@ case-sensitive local `rg` signal.
 
 ### `context_layer`
 
-Runs a read-only Codex CLI subagent in the startup workspace and asks it to
-prepare a markdown `context_pack`. The subagent can call Grepmind `code_search`
-itself, including optional exact local `rg` signal through `exact`, `globs`, and
-`contextLines`, and then return a curated map of code, docs, flow, evidence,
-risks, and suggested edit surfaces.
+Runs a prompt-refiner Codex CLI subagent first, then a read-only Codex CLI
+research subagent in the startup workspace after the refined query is ready. The
+research subagent can call Grepmind `code_search` itself, including optional
+exact local `rg` signal through `exact`, `globs`, and `contextLines`, and then
+return a curated map of code, docs, flow, evidence, risks, and suggested edit
+surfaces.
 
 `context_layer` is not a search mode and does not run `code_search` before the
-subagent starts. Retrieval remains inside the subagent's reasoning loop.
+research subagent starts. Retrieval remains inside the research subagent's
+reasoning loop. The prompt-refiner is instructed not to inspect the repository
+and runs with a dedicated Codex profile.
 
 Input fields:
 
@@ -160,6 +167,8 @@ Input fields:
 | `maxFiles`       | `number`                                                        | Optional deep-inspection limit. Defaults to `30`.  |
 | `maxSearchCalls` | `number`                                                        | Optional search-call budget. Defaults to `8`.      |
 | `focus`          | `"implementation" \| "debugging" \| "architecture" \| "review"` | Optional task focus. Defaults to `implementation`. |
+| `refinementSession` | `string`                                                     | Continue a prompt-refinement session.              |
+| `agentAnswers`   | `{ questionId: string, answer: string }[]`                      | Answers from the calling agent for a session.      |
 
 Example tool input:
 
@@ -176,6 +185,46 @@ Example tool input:
   "focus": "implementation"
 }
 ```
+
+If the prompt-refiner needs more context from the calling agent, the output is a
+normal non-error `agent_questions` result:
+
+```md
+# agent_questions
+
+Refinement session: clr_...
+
+## Refined Query Draft
+
+...
+
+## Questions For Calling Agent
+
+1. q1: Which existing conversation constraint should the research agent preserve?
+   Reason: The original task references prior context not present in the query.
+   Expected answer: A concise summary of the constraint from the calling agent's state.
+```
+
+Repeat the tool call with the session key and answers from the calling agent:
+
+```json
+{
+  "query": "same task, continuing refinement",
+  "refinementSession": "clr_...",
+  "agentAnswers": [
+    {
+      "questionId": "q1",
+      "answer": "The caller already inspected context_layer.ts and wants an implementation plan, not code changes."
+    }
+  ]
+}
+```
+
+A repeated call with a valid `refinementSession` and no new `agentAnswers`
+returns the cached `agent_questions` result without running the refiner again.
+Refinement sessions are in-memory, expire after 30 minutes by default, and do
+not survive MCP process restarts. Once research starts, the `context_pack`
+format remains unchanged.
 
 Expected output headings:
 
@@ -195,9 +244,13 @@ Requirements and safety:
 
 - Codex CLI must be installed or `GREPMIND_CONTEXT_LAYER_CODEX_BIN` must point
   to a compatible binary.
+- `$CODEX_HOME/grepmind-context-layer-refiner.config.toml` must be configured
+  as a valid profile for prompt refinement.
 - `$CODEX_HOME/grepmind-context-layer-subagent.config.toml` must exist.
 - The subagent profile or project `.codex/config.toml` must keep Grepmind MCP
   available so the subagent can call `code_search`.
+- Before launching the prompt-refiner, the runner verifies
+  `codex mcp list --json` can load the refiner profile.
 - Before launching the LLM subagent, the runner checks the profile file directly
   and verifies `codex mcp list --json` exposes an enabled `grepmind` server for
   the startup workspace.
@@ -242,8 +295,11 @@ Returns JSON diagnostics for the current MCP workspace:
 | `GREPMIND_CONTEXT_LAYER_CODEX_THINKING`   | Default Codex reasoning effort: `low`, `medium`, or `high`.         |
 | `GREPMIND_CONTEXT_LAYER_CODEX_SPEED`      | Reserved speed profile. Must be `fast`.                             |
 | `GREPMIND_CONTEXT_LAYER_CODEX_BIN`        | Optional path to the Codex CLI binary.                              |
-| `GREPMIND_CONTEXT_LAYER_TIMEOUT_MS`       | Subagent process timeout. Defaults to `180000`, max `600000`.       |
+| `GREPMIND_CONTEXT_LAYER_PROMPT_REFINER_TIMEOUT_MS` | Prompt-refiner timeout. Defaults to `45000`, max `120000`. |
+| `GREPMIND_CONTEXT_LAYER_TIMEOUT_MS`       | Research subagent process timeout. Defaults to `180000`, max `600000`. |
 | `GREPMIND_CONTEXT_LAYER_MAX_OUTPUT_BYTES` | Response byte limit before truncation. Defaults to `400000`.        |
+| `GREPMIND_CONTEXT_LAYER_REFINEMENT_TTL_MS` | In-memory refinement session TTL. Defaults to 30 minutes, max 24 hours. |
+| `GREPMIND_CONTEXT_LAYER_MAX_REFINEMENT_SESSIONS` | Max in-memory refinement sessions. Defaults to `100`.       |
 | `GREPMIND_CONTEXT_LAYER_LOG`              | Set to `1` to log safe context-layer counters to stderr.            |
 
 The server also loads `.env` through `dotenv/config`.

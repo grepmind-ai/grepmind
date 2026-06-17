@@ -8,7 +8,16 @@ export type ContextLayerCounter =
   | 'context_layer_subagent_timeout'
   | 'context_layer_output_truncated'
   | 'context_layer_recursion_blocked'
-  | 'context_layer_profile_missing';
+  | 'context_layer_profile_missing'
+  | 'context_layer_prompt_refiner_started'
+  | 'context_layer_prompt_refiner_completed'
+  | 'context_layer_prompt_refiner_failed'
+  | 'context_layer_prompt_refiner_timeout'
+  | 'context_layer_agent_questions_returned'
+  | 'context_layer_refinement_session_created'
+  | 'context_layer_refinement_session_resumed'
+  | 'context_layer_refinement_session_expired'
+  | 'context_layer_refinement_session_completed';
 
 const counters = new Map<ContextLayerCounter, number>();
 
@@ -34,6 +43,10 @@ export function hashWorkspacePath(workspacePath: string): string {
   return createHash('sha256').update(workspacePath).digest('hex').slice(0, 16);
 }
 
+export function hashRefinementSessionId(sessionId: string): string {
+  return createHash('sha256').update(sessionId).digest('hex').slice(0, 16);
+}
+
 export function getContextLayerCounters(): Record<ContextLayerCounter, number> {
   return {
     context_layer_requested: counters.get('context_layer_requested') ?? 0,
@@ -51,5 +64,23 @@ export function getContextLayerCounters(): Record<ContextLayerCounter, number> {
       counters.get('context_layer_recursion_blocked') ?? 0,
     context_layer_profile_missing:
       counters.get('context_layer_profile_missing') ?? 0,
+    context_layer_prompt_refiner_started:
+      counters.get('context_layer_prompt_refiner_started') ?? 0,
+    context_layer_prompt_refiner_completed:
+      counters.get('context_layer_prompt_refiner_completed') ?? 0,
+    context_layer_prompt_refiner_failed:
+      counters.get('context_layer_prompt_refiner_failed') ?? 0,
+    context_layer_prompt_refiner_timeout:
+      counters.get('context_layer_prompt_refiner_timeout') ?? 0,
+    context_layer_agent_questions_returned:
+      counters.get('context_layer_agent_questions_returned') ?? 0,
+    context_layer_refinement_session_created:
+      counters.get('context_layer_refinement_session_created') ?? 0,
+    context_layer_refinement_session_resumed:
+      counters.get('context_layer_refinement_session_resumed') ?? 0,
+    context_layer_refinement_session_expired:
+      counters.get('context_layer_refinement_session_expired') ?? 0,
+    context_layer_refinement_session_completed:
+      counters.get('context_layer_refinement_session_completed') ?? 0,
   };
 }
