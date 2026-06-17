@@ -1,11 +1,13 @@
 import { ContextLayerError } from './context-layer-errors.js';
 import type { ContextLayerErrorCode } from './context-layer-errors.js';
 import {
+  CONTEXT_LAYER_AGGREGATION_THINKING,
+  CONTEXT_LAYER_FILE_SUMMARY_THINKING,
+  CONTEXT_LAYER_POLISH_THINKING,
+  CONTEXT_LAYER_PROMPT_REFINER_THINKING,
   DEFAULT_CONTEXT_LAYER_CODEX_MODEL,
-  DEFAULT_CONTEXT_LAYER_CODEX_SPEED,
   DEFAULT_CONTEXT_LAYER_CODEX_THINKING,
   type ContextLayerRuntimeProvider,
-  type ContextLayerSpeed,
   type ContextLayerThinking,
 } from './context-layer-model-config.js';
 import type { RefinementSession } from './context-layer-refinement-session.js';
@@ -19,12 +21,18 @@ export interface ContextLayerSuccessResult {
     model_provider: ContextLayerRuntimeProvider;
     model_name: string;
     model_thinking: ContextLayerThinking;
-    model_speed: ContextLayerSpeed;
+    prompt_refiner_model_thinking: ContextLayerThinking;
+    file_summary_model_thinking: ContextLayerThinking;
+    aggregation_model_thinking: ContextLayerThinking;
+    polish_model_thinking: ContextLayerThinking;
     max_search_calls: number;
     handler_search_calls: number;
     remaining_search_calls: number;
     handler_exact_patterns: string[];
     handler_search_warnings: string[];
+    context_layer_iterations: number;
+    sufficient: boolean;
+    suggested_context_queries: string[];
     context_pack_path?: string;
     prompt_refiner_runtime_duration_ms: number;
     research_runtime_duration_ms: number;
@@ -33,6 +41,7 @@ export interface ContextLayerSuccessResult {
     fanout_failed_count: number;
     fanout_runtime_duration_ms: number;
     aggregation_runtime_duration_ms: number;
+    polish_runtime_duration_ms: number;
     runtime_duration_ms: number;
     truncated: boolean;
     timeout: boolean;
@@ -47,6 +56,7 @@ export interface ContextLayerAgentQuestionsResult {
     refinement_session: string;
     refined_query_draft: string;
     questions: PromptRefinerQuestion[];
+    prompt_refiner_model_thinking: ContextLayerThinking;
     prompt_refiner_runtime_duration_ms: number;
     runtime_duration_ms: number;
     truncated: false;
@@ -65,10 +75,14 @@ export interface ContextLayerErrorResult {
     model_provider?: ContextLayerRuntimeProvider;
     model_name?: string;
     model_thinking?: ContextLayerThinking;
-    model_speed?: ContextLayerSpeed;
+    prompt_refiner_model_thinking?: ContextLayerThinking;
+    file_summary_model_thinking?: ContextLayerThinking;
+    aggregation_model_thinking?: ContextLayerThinking;
+    polish_model_thinking?: ContextLayerThinking;
     max_search_calls?: number;
     prompt_refiner_runtime_duration_ms?: number;
     research_runtime_duration_ms?: number;
+    polish_runtime_duration_ms?: number;
     runtime_duration_ms: number;
     truncated: false;
     timeout: boolean;
@@ -97,6 +111,7 @@ export function toAgentQuestionsResult(input: {
       refinement_session: input.session.id,
       refined_query_draft: input.session.refinedQueryDraft,
       questions: input.session.questions,
+      prompt_refiner_model_thinking: CONTEXT_LAYER_PROMPT_REFINER_THINKING,
       prompt_refiner_runtime_duration_ms: input.refinerDurationMs,
       runtime_duration_ms: input.runtimeDurationMs,
       truncated: false,
@@ -113,13 +128,13 @@ export function toErrorResult(
           provider?: ContextLayerRuntimeProvider;
           name?: string;
           thinking?: ContextLayerThinking;
-          speed?: ContextLayerSpeed;
         }
       | undefined;
     maxSearchCalls: number;
     refinementSession: string | undefined;
     promptRefinerRuntimeDurationMs: number | undefined;
     researchRuntimeDurationMs: number | undefined;
+    polishRuntimeDurationMs: number | undefined;
     runtimeDurationMs: number;
   },
 ): ContextLayerErrorResult {
@@ -139,11 +154,15 @@ export function toErrorResult(
       model_name: context.model?.name ?? DEFAULT_CONTEXT_LAYER_CODEX_MODEL,
       model_thinking:
         context.model?.thinking ?? DEFAULT_CONTEXT_LAYER_CODEX_THINKING,
-      model_speed: context.model?.speed ?? DEFAULT_CONTEXT_LAYER_CODEX_SPEED,
+      prompt_refiner_model_thinking: CONTEXT_LAYER_PROMPT_REFINER_THINKING,
+      file_summary_model_thinking: CONTEXT_LAYER_FILE_SUMMARY_THINKING,
+      aggregation_model_thinking: CONTEXT_LAYER_AGGREGATION_THINKING,
+      polish_model_thinking: CONTEXT_LAYER_POLISH_THINKING,
       max_search_calls: context.maxSearchCalls,
       prompt_refiner_runtime_duration_ms:
         context.promptRefinerRuntimeDurationMs,
       research_runtime_duration_ms: context.researchRuntimeDurationMs,
+      polish_runtime_duration_ms: context.polishRuntimeDurationMs,
       runtime_duration_ms: context.runtimeDurationMs,
       truncated: false,
       timeout: error.timeout,

@@ -14,6 +14,8 @@ export type ContextLayerCounter =
   | 'context_layer_file_summary_timeout'
   | 'context_layer_aggregation_started'
   | 'context_layer_aggregation_completed'
+  | 'context_layer_polish_started'
+  | 'context_layer_polish_completed'
   | 'context_layer_output_truncated'
   | 'context_layer_recursion_blocked'
   | 'context_layer_profile_missing'
@@ -82,6 +84,10 @@ export function getContextLayerCounters(): Record<ContextLayerCounter, number> {
       counters.get('context_layer_aggregation_started') ?? 0,
     context_layer_aggregation_completed:
       counters.get('context_layer_aggregation_completed') ?? 0,
+    context_layer_polish_started:
+      counters.get('context_layer_polish_started') ?? 0,
+    context_layer_polish_completed:
+      counters.get('context_layer_polish_completed') ?? 0,
     context_layer_output_truncated:
       counters.get('context_layer_output_truncated') ?? 0,
     context_layer_recursion_blocked:

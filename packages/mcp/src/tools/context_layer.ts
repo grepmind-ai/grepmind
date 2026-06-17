@@ -13,7 +13,12 @@ import {
 import { ContextLayerError } from './context-layer-errors.js';
 import type { ContextLayerErrorCode } from './context-layer-errors.js';
 import {
+  CONTEXT_LAYER_AGGREGATION_THINKING,
+  CONTEXT_LAYER_FILE_SUMMARY_THINKING,
+  CONTEXT_LAYER_POLISH_THINKING,
+  CONTEXT_LAYER_PROMPT_REFINER_THINKING,
   resolveContextLayerModel,
+  type ContextLayerThinking,
   type ResolvedContextLayerModel,
 } from './context-layer-model-config.js';
 import {
@@ -23,12 +28,14 @@ import {
 } from './context-layer-observability.js';
 import { type ContextLayerFocus } from './context-layer-types.js';
 import { buildContextLayerAggregatePrompt } from './context-layer-aggregate-prompt.js';
+import { buildContextLayerPolishPrompt } from './context-layer-polish-prompt.js';
 import {
   buildFanoutTargets,
   resolveContextLayerFanoutConcurrency,
   resolveContextLayerFileMaxOutputBytes,
   resolveContextLayerFileTimeoutMs,
   runContextLayerFileSummaryFanout,
+  type ContextLayerFileSummaryResult,
 } from './context-layer-fanout-runner.js';
 import {
   createRefinementSession,
@@ -53,20 +60,12 @@ import { searchCode, type SearchResult } from './search-client.js';
 export const DEFAULT_MAX_FILES = 30;
 export const DEFAULT_MAX_SEARCH_CALLS = 8;
 export const DEFAULT_FOCUS = 'implementation';
+export const DEFAULT_CONTEXT_LAYER_MAX_ITERATIONS = 1;
 export const DEFAULT_CONTEXT_LAYER_TOOL_TIMEOUT_BUFFER_SEC = 30;
 
 export const contextLayerSchema = z
   .object({
     query: z.string().min(1).describe('Task or code question to research'),
-    model: z
-      .object({
-        provider: z.enum(['codex', 'claude']).optional(),
-        name: z.string().min(1).optional(),
-        thinking: z.enum(['low', 'medium', 'high']).optional(),
-        speed: z.literal('fast').optional(),
-      })
-      .strict()
-      .optional(),
     maxSearchCalls: z.number().int().min(1).max(20).optional(),
     focus: z
       .enum(['implementation', 'debugging', 'architecture', 'review'])
@@ -110,6 +109,26 @@ interface ContextLayerSearchPlan {
   warnings: string[];
 }
 
+interface ContextLayerIterationResult {
+  contextPackMarkdown: string;
+  contextPackPath?: string;
+  truncated: boolean;
+  timeout: false;
+  runtimeDurationMs: number;
+  fanoutRuntimeDurationMs: number;
+  aggregationRuntimeDurationMs: number;
+  fanoutFileCount: number;
+  fanoutCompletedCount: number;
+  fanoutFailedCount: number;
+  handlerSearchCalls: number;
+  remainingSearchCalls: number;
+  exactPatterns: string[];
+  searchWarnings: string[];
+  iterations: number;
+  sufficient: boolean;
+  suggestedContextQueries: string[];
+}
+
 export async function contextLayerTool(
   input: ContextLayerInput,
 ): Promise<ContextLayerResult> {
@@ -120,6 +139,8 @@ export async function contextLayerTool(
   let refinementSessionId = input.refinementSession;
   let promptRefinerRuntimeDurationMs: number | undefined;
   let researchRuntimeDurationMs: number | undefined;
+  let polishStarted = false;
+  let polishRuntimeDurationMs: number | undefined;
 
   incrementContextLayerCounter('context_layer_requested', { requestId });
 
@@ -141,13 +162,7 @@ export async function contextLayerTool(
       );
     }
 
-    model = resolveContextLayerModel(input.model);
-    if (model.provider === 'claude') {
-      throw new ContextLayerError(
-        'CLAUDE_RUNTIME_NOT_IMPLEMENTED',
-        'Claude context_layer runtime is not implemented yet. Use provider=codex.',
-      );
-    }
+    model = resolveContextLayerModel();
 
     const workspaceContext = await ensureMcpRuntimePrepared();
     const refinementState = resolveRefinementState({
@@ -191,8 +206,7 @@ export async function contextLayerTool(
     const refiner = await runPromptRefinerSubagent({
       workspacePath: workspaceContext.workspacePath,
       modelName: refinementState.model.name,
-      modelSpeed: refinementState.model.speed,
-      modelThinking: refinementState.model.thinking,
+      modelThinking: CONTEXT_LAYER_PROMPT_REFINER_THINKING,
       originalQuery: refinementState.originalQuery,
       additionalCallerContext: refinementState.additionalCallerContext,
       previousRefinedQueryDraft: refinementState.previousRefinedQueryDraft,
@@ -242,99 +256,101 @@ export async function contextLayerTool(
     const fileTimeoutMs = resolveContextLayerFileTimeoutMs();
     const fileMaxOutputBytes = resolveContextLayerFileMaxOutputBytes();
     const fanoutConcurrency = resolveContextLayerFanoutConcurrency();
-    const searchPlan = await prepareContextLayerSearch({
-      query: refiner.output.refinedQuery,
-      maxFiles: refinementState.maxFiles,
-      maxSearchCalls: refinementState.maxSearchCalls,
-    });
-    const fanoutTargets = buildFanoutTargets({
-      results: searchPlan.codeResults,
-      maxFiles: refinementState.maxFiles,
-    });
-    const fanout = await runContextLayerFileSummaryFanout({
+    const result = await runContextLayerResearchIterations({
       requestId,
-      workspacePath: workspaceContext.workspacePath,
-      query: refiner.output.refinedQuery,
-      originalQuery: refinementState.originalQuery,
-      focus: refinementState.focus,
-      targets: fanoutTargets,
-      modelName: refinementState.model.name,
-      modelSpeed: refinementState.model.speed,
-      modelThinking: refinementState.model.thinking,
-      concurrency: fanoutConcurrency,
-      timeoutMs: fileTimeoutMs,
-      maxOutputBytes: fileMaxOutputBytes,
-    });
-    const aggregationPrompt = buildContextLayerAggregatePrompt({
       workspacePath: workspaceContext.workspacePath,
       query: refiner.output.refinedQuery,
       originalQuery: refinementState.originalQuery,
       refinerAssumptions: refiner.output.assumptions,
       focus: refinementState.focus,
-      searchResults: searchPlan.codeResults,
-      docsResults: searchPlan.docsResults,
-      fileSummaries: fanout.summaries,
-      exactPatterns: searchPlan.exactPatterns,
-      searchWarnings: searchPlan.warnings,
+      maxFiles: refinementState.maxFiles,
+      maxSearchCalls: refinementState.maxSearchCalls,
+      modelName: refinementState.model.name,
+      fileSummaryModelThinking: CONTEXT_LAYER_FILE_SUMMARY_THINKING,
+      aggregationModelThinking: CONTEXT_LAYER_AGGREGATION_THINKING,
+      fanoutConcurrency,
+      aggregationTimeoutMs: timeoutMs,
+      aggregationMaxOutputBytes: maxOutputBytes,
+      fileTimeoutMs,
+      fileMaxOutputBytes,
+    });
+    researchRuntimeDurationMs =
+      result.fanoutRuntimeDurationMs + result.aggregationRuntimeDurationMs;
+    const polishPrompt = buildContextLayerPolishPrompt({
+      workspacePath: workspaceContext.workspacePath,
+      query: refiner.output.refinedQuery,
+      originalQuery: refinementState.originalQuery,
+      focus: refinementState.focus,
+      aggregationContextPack: result.contextPackMarkdown,
     });
 
-    incrementContextLayerCounter('context_layer_aggregation_started', {
+    incrementContextLayerCounter('context_layer_polish_started', {
       requestId,
       workspaceHash: hashWorkspacePath(workspaceContext.workspacePath),
-      fileCount: fanoutTargets.length,
       timeoutMs,
     });
-    const result = await runCodexSubagent({
+    polishStarted = true;
+    const polished = await runCodexSubagent({
       workspacePath: workspaceContext.workspacePath,
-      prompt: aggregationPrompt,
+      prompt: polishPrompt,
       modelName: refinementState.model.name,
-      modelSpeed: refinementState.model.speed,
-      modelThinking: refinementState.model.thinking,
+      modelThinking: CONTEXT_LAYER_POLISH_THINKING,
       timeoutMs,
       maxOutputBytes,
     });
-    researchRuntimeDurationMs =
-      fanout.runtimeDurationMs + result.runtimeDurationMs;
-
-    if (result.truncated) {
-      incrementContextLayerCounter('context_layer_output_truncated', {
-        requestId,
-        durationMs: result.runtimeDurationMs,
-      });
-    }
-    incrementContextLayerCounter('context_layer_aggregation_completed', {
+    polishRuntimeDurationMs = polished.runtimeDurationMs;
+    const polishedSufficiency = parseSufficiency(polished.contextPackMarkdown);
+    incrementContextLayerCounter('context_layer_polish_completed', {
       requestId,
-      durationMs: result.runtimeDurationMs,
+      durationMs: polished.runtimeDurationMs,
+      truncated: polished.truncated,
     });
 
+    researchRuntimeDurationMs =
+      researchRuntimeDurationMs + polished.runtimeDurationMs;
+
+    if (result.truncated || polished.truncated) {
+      incrementContextLayerCounter('context_layer_output_truncated', {
+        requestId,
+        durationMs: result.runtimeDurationMs + polished.runtimeDurationMs,
+      });
+    }
     return {
-      content: [{ type: 'text', text: result.contextPackMarkdown }],
+      content: [
+        {
+          type: 'text',
+          text: appendContextLayerDebugLog(polished.contextPackMarkdown, result),
+        },
+      ],
       _meta: {
         result_kind: 'context_pack',
         model_provider: refinementState.model.provider,
         model_name: refinementState.model.name,
         model_thinking: refinementState.model.thinking,
-        model_speed: refinementState.model.speed,
+        prompt_refiner_model_thinking: CONTEXT_LAYER_PROMPT_REFINER_THINKING,
+        file_summary_model_thinking: CONTEXT_LAYER_FILE_SUMMARY_THINKING,
+        aggregation_model_thinking: CONTEXT_LAYER_AGGREGATION_THINKING,
+        polish_model_thinking: CONTEXT_LAYER_POLISH_THINKING,
         max_search_calls: refinementState.maxSearchCalls,
-        handler_search_calls: searchPlan.handlerSearchCalls,
-        remaining_search_calls: searchPlan.remainingSearchCalls,
-        handler_exact_patterns: searchPlan.exactPatterns,
-        handler_search_warnings: searchPlan.warnings,
-        context_pack_path: result.contextPackPath,
+        handler_search_calls: result.handlerSearchCalls,
+        remaining_search_calls: result.remainingSearchCalls,
+        handler_exact_patterns: result.exactPatterns,
+        handler_search_warnings: result.searchWarnings,
+        context_layer_iterations: result.iterations,
+        sufficient: polishedSufficiency.sufficient,
+        suggested_context_queries: polishedSufficiency.suggestedContextQueries,
+        context_pack_path: polished.contextPackPath ?? result.contextPackPath,
         prompt_refiner_runtime_duration_ms: refiner.runtimeDurationMs,
         research_runtime_duration_ms: researchRuntimeDurationMs,
-        fanout_file_count: fanoutTargets.length,
-        fanout_completed_count: fanout.summaries.filter(
-          (summary) => 'summaryMarkdown' in summary,
-        ).length,
-        fanout_failed_count: fanout.summaries.filter(
-          (summary) => !('summaryMarkdown' in summary),
-        ).length,
-        fanout_runtime_duration_ms: fanout.runtimeDurationMs,
-        aggregation_runtime_duration_ms: result.runtimeDurationMs,
+        fanout_file_count: result.fanoutFileCount,
+        fanout_completed_count: result.fanoutCompletedCount,
+        fanout_failed_count: result.fanoutFailedCount,
+        fanout_runtime_duration_ms: result.fanoutRuntimeDurationMs,
+        aggregation_runtime_duration_ms: result.aggregationRuntimeDurationMs,
+        polish_runtime_duration_ms: polished.runtimeDurationMs,
         runtime_duration_ms: Date.now() - startedAt,
-        truncated: result.truncated,
-        timeout: result.timeout,
+        truncated: result.truncated || polished.truncated,
+        timeout: result.timeout || polished.timeout,
       },
     };
   } catch (error) {
@@ -342,11 +358,13 @@ export async function contextLayerTool(
       error,
       requestId,
       startedAt,
-      model: model ?? input.model,
+      model,
       maxSearchCalls,
       refinementSessionId,
       promptRefinerRuntimeDurationMs,
       researchRuntimeDurationMs,
+      polishStarted,
+      polishRuntimeDurationMs,
     });
   }
 }
@@ -360,6 +378,8 @@ function handleContextLayerError(input: {
   refinementSessionId: string | undefined;
   promptRefinerRuntimeDurationMs: number | undefined;
   researchRuntimeDurationMs: number | undefined;
+  polishStarted: boolean;
+  polishRuntimeDurationMs: number | undefined;
 }): ContextLayerResult {
   const normalized = normalizeContextLayerError(input.error);
   recordContextLayerErrorCounter({
@@ -380,6 +400,11 @@ function handleContextLayerError(input: {
     researchRuntimeDurationMs:
       input.researchRuntimeDurationMs ??
       (isResearchRuntimeError(normalized.code)
+        ? normalized.runtimeDurationMs
+        : undefined),
+    polishRuntimeDurationMs:
+      input.polishRuntimeDurationMs ??
+      (input.polishStarted && isResearchRuntimeError(normalized.code)
         ? normalized.runtimeDurationMs
         : undefined),
     runtimeDurationMs: Date.now() - input.startedAt,
@@ -537,6 +562,112 @@ function additionalCallerContextForResume(
   return trimmed;
 }
 
+async function runContextLayerResearchIterations(input: {
+  requestId: string;
+  workspacePath: string;
+  query: string;
+  originalQuery?: string;
+  refinerAssumptions?: string[];
+  focus: ContextLayerFocus;
+  maxFiles: number;
+  maxSearchCalls: number;
+  modelName: string;
+  fileSummaryModelThinking: ContextLayerThinking;
+  aggregationModelThinking: ContextLayerThinking;
+  fanoutConcurrency: number;
+  aggregationTimeoutMs: number;
+  aggregationMaxOutputBytes: number;
+  fileTimeoutMs: number;
+  fileMaxOutputBytes: number;
+}): Promise<ContextLayerIterationResult> {
+  const iteration = 1;
+  const searchPlan = await prepareContextLayerSearch({
+    query: input.query,
+    maxFiles: input.maxFiles,
+    maxSearchCalls: input.maxSearchCalls,
+  });
+  const fanoutTargets = buildFanoutTargets({
+    results: searchPlan.codeResults,
+    maxFiles: input.maxFiles,
+  });
+  const fanout = await runContextLayerFileSummaryFanout({
+    requestId: input.requestId,
+    workspacePath: input.workspacePath,
+    query: input.query,
+    originalQuery: input.originalQuery,
+    focus: input.focus,
+    targets: fanoutTargets,
+    modelName: input.modelName,
+    modelThinking: input.fileSummaryModelThinking,
+    concurrency: input.fanoutConcurrency,
+    timeoutMs: input.fileTimeoutMs,
+    maxOutputBytes: input.fileMaxOutputBytes,
+  });
+
+  const aggregationPrompt = buildContextLayerAggregatePrompt({
+    workspacePath: input.workspacePath,
+    query: input.query,
+    originalQuery: input.originalQuery,
+    refinerAssumptions: input.refinerAssumptions,
+    focus: input.focus,
+    searchResults: searchPlan.codeResults,
+    docsResults: searchPlan.docsResults,
+    fileSummaries: fanout.summaries,
+    exactPatterns: searchPlan.exactPatterns,
+    searchWarnings: searchPlan.warnings,
+    currentIteration: iteration,
+    maxIterations: DEFAULT_CONTEXT_LAYER_MAX_ITERATIONS,
+  });
+
+  incrementContextLayerCounter('context_layer_aggregation_started', {
+    requestId: input.requestId,
+    workspaceHash: hashWorkspacePath(input.workspacePath),
+    fileCount: fanoutTargets.length,
+    timeoutMs: input.aggregationTimeoutMs,
+    iteration,
+  });
+  const result = await runCodexSubagent({
+    workspacePath: input.workspacePath,
+    prompt: aggregationPrompt,
+    modelName: input.modelName,
+    modelThinking: input.aggregationModelThinking,
+    timeoutMs: input.aggregationTimeoutMs,
+    maxOutputBytes: input.aggregationMaxOutputBytes,
+  });
+
+  incrementContextLayerCounter('context_layer_aggregation_completed', {
+    requestId: input.requestId,
+    durationMs: result.runtimeDurationMs,
+    iteration,
+  });
+
+  const sufficiency = parseSufficiency(result.contextPackMarkdown);
+
+  return {
+    contextPackMarkdown: result.contextPackMarkdown,
+    contextPackPath: result.contextPackPath,
+    truncated: result.truncated,
+    timeout: false,
+    runtimeDurationMs: result.runtimeDurationMs,
+    fanoutRuntimeDurationMs: fanout.runtimeDurationMs,
+    aggregationRuntimeDurationMs: result.runtimeDurationMs,
+    fanoutFileCount: fanoutTargets.length,
+    fanoutCompletedCount: fanout.summaries.filter(
+      (summary) => 'summaryMarkdown' in summary,
+    ).length,
+    fanoutFailedCount: fanout.summaries.filter(
+      (summary) => !('summaryMarkdown' in summary),
+    ).length,
+    handlerSearchCalls: searchPlan.handlerSearchCalls,
+    remainingSearchCalls: searchPlan.remainingSearchCalls,
+    exactPatterns: searchPlan.exactPatterns,
+    searchWarnings: searchPlan.warnings,
+    iterations: iteration,
+    sufficient: sufficiency.sufficient,
+    suggestedContextQueries: sufficiency.suggestedContextQueries,
+  };
+}
+
 async function prepareContextLayerSearch(input: {
   query: string;
   maxFiles: number;
@@ -562,7 +693,7 @@ async function prepareContextLayerSearch(input: {
     handlerSearchCalls += 1;
   } else {
     warnings.push(
-      'Docs pre-search skipped because maxSearchCalls budget was exhausted.',
+      'Docs pre-search skipped because handler retrieval budget was exhausted.',
     );
   }
 
@@ -731,6 +862,96 @@ const COMMON_EXACT_PATTERN_STOPWORDS = new Set([
   'storage',
 ]);
 
+function parseSufficiency(contextPackMarkdown: string): {
+  sufficient: boolean;
+  suggestedContextQueries: string[];
+} {
+  const content = extractContextPackSection(
+    contextPackMarkdown,
+    '## Sufficiency',
+  );
+  const enoughMatch =
+    /(^|\n)\s*-?\s*Enough to answer:\s*(yes|no)\b/im.exec(content);
+  const suggestedBlockMatch =
+    /(^|\n)\s*-?\s*Suggested next context queries:\s*([\s\S]*)$/im.exec(
+      content,
+    );
+  const suggestedBlock = suggestedBlockMatch?.[2] ?? '';
+
+  return {
+    sufficient: enoughMatch?.[2]?.toLowerCase() === 'yes',
+    suggestedContextQueries: extractSuggestedContextQueries(suggestedBlock),
+  };
+}
+
+function appendContextLayerDebugLog(
+  contextPackMarkdown: string,
+  result: ContextLayerIterationResult,
+): string {
+  const debugLine =
+    `- Debug log: iterations=${result.iterations}; ` +
+    `fanout agents=${result.fanoutFileCount}; ` +
+    `aggregation agents=${result.iterations}; ` +
+    'polish agents=1; ' +
+    `completed=${result.fanoutCompletedCount}; ` +
+    `failed=${result.fanoutFailedCount}.`;
+  const codeContextHeading = '\n\n## Code Context';
+  const index = contextPackMarkdown.indexOf(codeContextHeading);
+  if (index < 0) {
+    return `${contextPackMarkdown.trimEnd()}\n${debugLine}`;
+  }
+
+  return `${contextPackMarkdown.slice(0, index).trimEnd()}\n${debugLine}${contextPackMarkdown.slice(index)}`;
+}
+
+function extractContextPackSection(markdown: string, heading: string): string {
+  const lines = markdown.split(/\r?\n/);
+  const start = lines.findIndex((line) => line.trim() === heading);
+  if (start < 0) {
+    return '';
+  }
+
+  const sectionLines: string[] = [];
+  for (const line of lines.slice(start + 1)) {
+    if (/^##\s+/.test(line.trim())) {
+      break;
+    }
+    sectionLines.push(line);
+  }
+  return sectionLines.join('\n').trim();
+}
+
+function extractSuggestedContextQueries(block: string): string[] {
+  const lines = block
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const queries: string[] = [];
+
+  for (const line of lines) {
+    const item = line
+      .replace(/^[-*]\s+/, '')
+      .replace(/^\d+[.)]\s+/, '')
+      .replace(/^["'`]+|["'`]+$/g, '')
+      .trim();
+    if (/^(None\.?|No(ne)?\.?)$/i.test(item)) {
+      continue;
+    }
+    if (!item || item.includes(':') && queries.length > 0) {
+      continue;
+    }
+    if (/^(Missing context|Stop reason):/i.test(item)) {
+      continue;
+    }
+    queries.push(item);
+    if (queries.length >= 3) {
+      break;
+    }
+  }
+
+  return queries;
+}
+
 function normalizeContextLayerError(error: unknown): ContextLayerError {
   if (error instanceof ContextLayerError) {
     return error;
@@ -771,7 +992,8 @@ export function defaultContextLayerToolTimeoutSec(): number {
   return (
     Math.ceil(resolvePromptRefinerTimeoutMs() / 1000) +
     fanoutBatches * Math.ceil(resolveContextLayerFileTimeoutMs() / 1000) +
-    Math.ceil(resolveContextLayerTimeoutMs() / 1000) +
+    (DEFAULT_CONTEXT_LAYER_MAX_ITERATIONS + 1) *
+      Math.ceil(resolveContextLayerTimeoutMs() / 1000) +
     DEFAULT_CONTEXT_LAYER_TOOL_TIMEOUT_BUFFER_SEC
   );
 }

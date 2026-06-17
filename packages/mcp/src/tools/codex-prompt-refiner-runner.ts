@@ -7,7 +7,6 @@ import {
 import { ContextLayerError } from './context-layer-errors.js';
 import {
   toCodexReasoningEffort,
-  type ContextLayerSpeed,
   type ContextLayerThinking,
 } from './context-layer-model-config.js';
 import { buildContextLayerPromptRefinerPrompt } from './context-layer-prompt-refiner.js';
@@ -24,7 +23,6 @@ export const MAX_PROMPT_REFINER_TIMEOUT_MS = 120_000;
 
 interface PromptRefinerRunInput extends ContextLayerPromptRefinerInput {
   modelName: string;
-  modelSpeed: ContextLayerSpeed;
   modelThinking: ContextLayerThinking;
   timeoutMs: number;
 }
@@ -46,7 +44,6 @@ export async function runPromptRefinerSubagent(
   const args = buildPromptRefinerExecArgs({
     workspacePath: input.workspacePath,
     modelName: input.modelName,
-    modelSpeed: input.modelSpeed,
     modelThinking: input.modelThinking,
   });
   const processResult = await runCodexProcess({
@@ -129,7 +126,6 @@ export function resolvePromptRefinerTimeoutMs(): number {
 function buildPromptRefinerExecArgs(input: {
   workspacePath: string;
   modelName: string;
-  modelSpeed: ContextLayerSpeed;
   modelThinking: ContextLayerThinking;
 }): string[] {
   return [
@@ -145,9 +141,11 @@ function buildPromptRefinerExecArgs(input: {
       toCodexReasoningEffort(input.modelThinking),
     )}`,
     '--config',
-    `service_tier=${JSON.stringify(input.modelSpeed)}`,
+    'mcp_servers.grepmind.enabled=false',
     '--config',
-    'features.fast_mode=true',
+    'mcp_servers.node_repl.enabled=false',
+    '--config',
+    'mcp_servers.playwright.enabled=false',
     '--cd',
     input.workspacePath,
     '--sandbox',

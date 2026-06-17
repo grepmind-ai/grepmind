@@ -1,6 +1,9 @@
+import path from 'node:path';
+import { readFile, realpath } from 'node:fs/promises';
 import { runCodexSubagent } from './codex-subagent-runner.js';
 import {
   buildContextLayerFileSummaryPrompt,
+  type ContextLayerSourceFileContext,
   type ContextLayerFileSummaryPromptInput,
 } from './context-layer-file-summary-prompt.js';
 import {
@@ -8,10 +11,7 @@ import {
   summarizeFileSummaryForLimit,
 } from './context-layer-file-summary-output.js';
 import { ContextLayerError } from './context-layer-errors.js';
-import type {
-  ContextLayerSpeed,
-  ContextLayerThinking,
-} from './context-layer-model-config.js';
+import type { ContextLayerThinking } from './context-layer-model-config.js';
 import {
   incrementContextLayerCounter,
   type ContextLayerCounter,
@@ -25,6 +25,9 @@ export const DEFAULT_CONTEXT_LAYER_FILE_TIMEOUT_MS = 90_000;
 export const MAX_CONTEXT_LAYER_FILE_TIMEOUT_MS = 300_000;
 export const DEFAULT_CONTEXT_LAYER_FILE_MAX_OUTPUT_BYTES = 40_000;
 export const MIN_CONTEXT_LAYER_FILE_MAX_OUTPUT_BYTES = 4_000;
+export const DEFAULT_CONTEXT_LAYER_SOURCE_FILE_MIN_SCORE = 0.5;
+export const DEFAULT_CONTEXT_LAYER_SOURCE_FILE_MAX_BYTES = 200_000;
+export const MIN_CONTEXT_LAYER_SOURCE_FILE_MAX_BYTES = 8_000;
 
 export interface ContextLayerFanoutTarget {
   path: string;
@@ -63,7 +66,6 @@ export async function runContextLayerFileSummaryFanout(input: {
   focus: ContextLayerFocus;
   targets: ContextLayerFanoutTarget[];
   modelName: string;
-  modelSpeed: ContextLayerSpeed;
   modelThinking: ContextLayerThinking;
   concurrency: number;
   timeoutMs: number;
@@ -156,6 +158,30 @@ export function resolveContextLayerFileMaxOutputBytes(): number {
   });
 }
 
+export function resolveContextLayerSourceFileMaxBytes(): number {
+  return resolveIntegerEnv({
+    name: 'GREPMIND_CONTEXT_LAYER_SOURCE_FILE_MAX_BYTES',
+    defaultValue: DEFAULT_CONTEXT_LAYER_SOURCE_FILE_MAX_BYTES,
+    min: MIN_CONTEXT_LAYER_SOURCE_FILE_MAX_BYTES,
+  });
+}
+
+export function resolveContextLayerSourceFileMinScore(): number {
+  const raw = process.env.GREPMIND_CONTEXT_LAYER_SOURCE_FILE_MIN_SCORE?.trim();
+  if (!raw) {
+    return DEFAULT_CONTEXT_LAYER_SOURCE_FILE_MIN_SCORE;
+  }
+
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value < 0 || value > 1) {
+    throw new ContextLayerError(
+      'CODEX_SUBAGENT_FAILED',
+      'GREPMIND_CONTEXT_LAYER_SOURCE_FILE_MIN_SCORE must be a number between 0 and 1.',
+    );
+  }
+  return value;
+}
+
 async function runOneFileSummary(
   input: Omit<
     Parameters<typeof runContextLayerFileSummaryFanout>[0],
@@ -176,12 +202,12 @@ async function runOneFileSummary(
       focus: input.focus,
       result: target.primaryResult,
       relatedResults: target.relatedResults,
+      sourceFile: await readSourceFileForTarget(input.workspacePath, target),
     };
     const result = await runCodexSubagent({
       workspacePath: input.workspacePath,
       prompt: buildContextLayerFileSummaryPrompt(promptInput),
       modelName: input.modelName,
-      modelSpeed: input.modelSpeed,
       modelThinking: input.modelThinking,
       timeoutMs: input.timeoutMs,
       maxOutputBytes: input.maxOutputBytes,
@@ -226,6 +252,53 @@ async function runOneFileSummary(
       timeout: normalized.timeout,
     };
   }
+}
+
+async function readSourceFileForTarget(
+  workspacePath: string,
+  target: ContextLayerFanoutTarget,
+): Promise<ContextLayerSourceFileContext | undefined> {
+  if (target.score < resolveContextLayerSourceFileMinScore()) {
+    return undefined;
+  }
+
+  try {
+    const workspaceRoot = await realpath(path.resolve(workspacePath));
+    const candidatePath = path.resolve(workspaceRoot, target.path);
+    const realCandidatePath = await realpath(candidatePath);
+    if (!isInsideWorkspace(workspaceRoot, realCandidatePath)) {
+      return undefined;
+    }
+
+    const maxBytes = resolveContextLayerSourceFileMaxBytes();
+    const buffer = await readFile(realCandidatePath);
+    if (isProbablyBinary(buffer)) {
+      return undefined;
+    }
+
+    const truncated = buffer.byteLength > maxBytes;
+    const contentBuffer = truncated ? buffer.subarray(0, maxBytes) : buffer;
+    return {
+      path: target.path,
+      content: contentBuffer.toString('utf8'),
+      truncated,
+      byteLength: buffer.byteLength,
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+function isInsideWorkspace(workspaceRoot: string, filePath: string): boolean {
+  const relative = path.relative(workspaceRoot, filePath);
+  return (
+    Boolean(relative) && !relative.startsWith('..') && !path.isAbsolute(relative)
+  );
+}
+
+function isProbablyBinary(buffer: Buffer): boolean {
+  const sample = buffer.subarray(0, Math.min(buffer.byteLength, 4096));
+  return sample.includes(0);
 }
 
 async function runWithConcurrency<T, R>(

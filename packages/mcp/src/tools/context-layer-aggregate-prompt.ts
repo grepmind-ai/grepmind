@@ -22,6 +22,8 @@ export interface ContextLayerAggregatePromptInput {
   fileSummaries: ContextLayerFileSummaryRecord[];
   exactPatterns: string[];
   searchWarnings: string[];
+  currentIteration: number;
+  maxIterations: number;
 }
 
 export function buildContextLayerAggregatePrompt(
@@ -36,7 +38,8 @@ aggregating primary code_search hits and per-file summaries.
 Instruction:
 - Prepare context for the main coding agent.
 - Use the provided search hits and file summaries as the primary evidence.
-- Use a small targeted Grepmind code_search call when a key missing anchor needs verification.
+- Do not call Grepmind MCP tools, code_search, context_layer, or any nested agents.
+- If a key missing anchor needs verification, mark it as a Gap instead of searching.
 - Mark inference explicitly when a relationship is inferred rather than directly proven.
 - Include failed, timed-out, or truncated file summaries as gaps.
 - Put likely/probably/appears-to style claims in an "Inferences:" line.
@@ -49,6 +52,7 @@ Focus:
 ${input.focus}
 
 Search context:
+- Context iteration: ${input.currentIteration} of ${input.maxIterations}
 - Handler exact search patterns: ${formatExactPatterns(input.exactPatterns)}
 - Handler search warnings: ${formatSearchWarnings(input.searchWarnings)}
 
@@ -75,7 +79,7 @@ ${formatFileSummaries(input.fileSummaries)}
 
 Aggregation protocol:
 1. Answer the user's actual question in Answer.
-2. Before finalizing, identify the top 1-3 claims that determine the answer. For each claim without direct file:line support, run one targeted Grepmind code_search with exact.pattern, path, and contextLines when it would verify a key missing anchor. Move unverified claims to Inferences or Gaps.
+2. Before finalizing, identify the top 1-3 claims that determine the answer. Move claims without direct provided file:line support to Inferences or Gaps.
 3. Prefer Required Snippets and line anchors from successful relevant file summaries.
 4. Treat summaries marked "relevant: no" as weak matches: mention them only when their exclusion is important.
 5. Use primary search hits to preserve original score/order and to mention relevant weak, failed, timed-out, or truncated files as gaps.
@@ -83,6 +87,7 @@ Aggregation protocol:
 7. Include docs context only if Docs code_search hits prove docs. Otherwise write exactly "No relevant docs found".
 8. Every important claim must have a nearby file:line anchor or be marked "Inference:".
 9. Failed, timed-out, or truncated file summaries are not fatal, but their missing coverage must be visible in Evidence Quality when relevant.
+10. In Sufficiency, decide whether this context is enough for the calling agent to answer the original query. If not enough and another iteration remains, suggest 1-3 precise next context queries. If this is the last iteration, set "Enough to answer: yes" only when the remaining gaps are acceptable; otherwise set "Enough to answer: no" and explain the residual gap.
 
 Required output:
 Normal successful research must return a context_pack.
@@ -117,6 +122,13 @@ rereading Code Context first, while avoiding repeated snippets.
 - Confidence: high|medium|low; one sentence explaining why. Confidence must be
   "medium" or "low" when important failed/timed-out/truncated summaries remain
   unresolved.
+
+## Sufficiency
+
+- Enough to answer: yes|no
+- Missing context: concise list or "None."
+- Suggested next context queries: "None."
+- Stop reason: why the provided context is sufficient or which residual gap remains.
 
 ## Code Context
 

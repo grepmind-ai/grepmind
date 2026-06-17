@@ -149,24 +149,35 @@ ready, the MCP handler performs a bounded retrieval pass: semantic code search,
 docs search when the search budget allows it, and a small number of exact local
 `rg`-backed searches for code-like identifiers discovered from the query and top
 hits. It then runs read-only Codex CLI file-summary subagents and a final
-read-only aggregation subagent in the startup workspace.
+read-only aggregation subagent in the startup workspace. Before returning the
+answer, it runs one more read-only Codex polish verifier over the aggregation
+draft. The polish verifier inspects real repository files, proves, fills,
+corrects, or downgrades decision-critical claims, and returns the final
+`context_pack`.
 
-The aggregation subagent can still call Grepmind `code_search` for targeted
-verification, including optional exact local `rg` signal through `exact`,
-`globs`, and `contextLines`. The final result is a curated map of code, docs,
-flow, evidence quality, risks, and suggested edit surfaces. The prompt-refiner
-is instructed not to inspect the repository and runs with a dedicated Codex
-profile.
+The aggregation subagent returns a `Sufficiency` decision and may suggest
+precise next queries, but the MCP handler does not automatically run another
+retrieval/fanout/aggregation iteration. The final polish verifier still checks
+the one aggregation draft before the answer is returned.
+
+The MCP handler performs targeted Grepmind `code_search` retrieval before
+launching subagents, including optional exact local `rg` signal through
+`exact`, `globs`, and `contextLines`. Subagents receive that gathered context
+and are instructed not to call Grepmind MCP tools themselves. The final result
+is a curated map of code, docs, flow, sufficiency, evidence quality, risks, and
+suggested edit surfaces. The prompt-refiner is instructed not to inspect the
+repository and runs with a dedicated Codex profile.
+
+All context-layer Codex subagents use the fixed `gpt-5.5` model. The first
+prompt-refiner subagent and final polish verifier subagent use medium reasoning
+effort; intermediate file-summary fanout and aggregation subagents use low
+reasoning effort.
 
 Input fields:
 
 | Field               | Type                                                            | Description                                        |
 | ------------------- | --------------------------------------------------------------- | -------------------------------------------------- |
 | `query`             | `string`                                                        | Task or code question to research.                 |
-| `model.provider`    | `"codex" \| "claude"`                                           | Optional provider. MVP supports `codex` only.      |
-| `model.name`        | `string`                                                        | Optional Codex model name. Defaults to `fast`.     |
-| `model.thinking`    | `"low" \| "medium" \| "high"`                                   | Optional Codex reasoning effort. Defaults `low`.   |
-| `model.speed`       | `"fast"`                                                        | Reserved speed profile.                            |
 | `maxSearchCalls`    | `number`                                                        | Optional handler retrieval budget. Defaults to `8`. |
 | `focus`             | `"implementation" \| "debugging" \| "architecture" \| "review"` | Optional task focus. Defaults to `implementation`. |
 | `refinementSession` | `string`                                                        | Continue a prompt-refinement session.              |
@@ -177,12 +188,6 @@ Example tool input:
 ```json
 {
   "query": "trace where user input is validated before saving settings",
-  "model": {
-    "provider": "codex",
-    "name": "fast",
-    "thinking": "low",
-    "speed": "fast"
-  },
   "maxSearchCalls": 8,
   "focus": "implementation"
 }
@@ -236,6 +241,8 @@ Expected output headings:
 
 ## Evidence Quality
 
+## Sufficiency
+
 ## Code Context
 
 ## Docs Context
@@ -250,29 +257,29 @@ Requirements and safety:
 - `$CODEX_HOME/grepmind-context-layer-refiner.config.toml` must be configured
   as a valid profile for prompt refinement.
 - `$CODEX_HOME/grepmind-context-layer-subagent.config.toml` must exist.
-- The subagent profile or project `.codex/config.toml` must keep Grepmind MCP
-  available so the subagent can call `code_search`.
-- Before launching the prompt-refiner, the runner verifies
-  `codex mcp list --json` can load the refiner profile.
-- Before launching the LLM subagent, the runner checks the profile file directly
-  and verifies `codex mcp list --json` exposes an enabled `grepmind` server for
-  the startup workspace.
+- Context-layer subagents must not call Grepmind MCP tools. The MCP handler
+  performs retrieval before launching subagents and passes the gathered context
+  into their prompts.
+- Before launching the LLM subagent, the runner checks the profile file directly.
 - The runner starts Codex with `--sandbox read-only`, `--ephemeral`,
   `--ask-for-approval never`, and `GREPMIND_CONTEXT_LAYER_SUBAGENT=1`.
-- `context_layer` is hidden inside a context-layer subagent process, while
-  `code_search` remains available.
+- The runner disables Grepmind MCP for subagent Codex processes with
+  `mcp_servers.grepmind.enabled=false` so a subagent cannot call back into
+  `code_search` or `context_layer`.
+- Subagent prompts explicitly forbid Grepmind MCP calls, including `code_search`
+  and `context_layer`, to avoid nested retrieval loops.
 - Safety constraints are enforced by the Codex runner/profile instead of being
   repeated as task text inside context-layer prompts.
 - The returned `context_pack` is validated before the MCP response is sent. It
   must contain exactly the documented headings in order, with non-empty sections.
   `Evidence Quality` must include proven anchors, inferences, gaps, failed or
   truncated summaries, and an explicit `Confidence: high|medium|low` line.
+  `Sufficiency` must include `Enough to answer: yes|no`, missing context, and
+  suggested next context queries. The handler appends a short debug log there
+  with iteration, fanout-agent, aggregation-agent, and polish-agent counts.
   Evidence snippets from `code_search` are embedded in the relevant sections.
   Gaps and suggested edit surfaces are embedded beside the related code, docs,
   flow, or evidence quality items.
-
-If `model.provider` is `claude`, the tool returns
-`CLAUDE_RUNTIME_NOT_IMPLEMENTED` until a Claude runtime is implemented.
 
 ### `grepmind_agent_status`
 
@@ -293,14 +300,12 @@ Returns JSON diagnostics for the current MCP workspace:
 | `GREPMIND_AGENT_DATA_DIR`                          | Agent data directory. Defaults to `~/.grepmind-agent`.                  |
 | `GREPMIND_AGENT_HOSTNAME`                          | Grepmind hostname used when startup needs to run OAuth login.           |
 | `GREPMIND_MCP_STARTUP_TIMEOUT_MS`                  | Startup timeout for auth/runtime preparation. Defaults to `120000`.     |
-| `GREPMIND_CONTEXT_LAYER_PROVIDER`                  | Default context-layer provider. MVP supports `codex`.                   |
-| `GREPMIND_CONTEXT_LAYER_CODEX_MODEL`               | Default Codex model name for `context_layer`. Defaults to `fast`.       |
-| `GREPMIND_CONTEXT_LAYER_CODEX_THINKING`            | Default Codex reasoning effort: `low`, `medium`, or `high`.             |
-| `GREPMIND_CONTEXT_LAYER_CODEX_SPEED`               | Reserved speed profile. Must be `fast`.                                 |
 | `GREPMIND_CONTEXT_LAYER_CODEX_BIN`                 | Optional path to the Codex CLI binary.                                  |
 | `GREPMIND_CONTEXT_LAYER_PROMPT_REFINER_TIMEOUT_MS` | Prompt-refiner timeout. Defaults to `45000`, max `120000`.              |
-| `GREPMIND_CONTEXT_LAYER_TIMEOUT_MS`                | Research subagent process timeout. Defaults to `180000`, max `600000`.  |
+| `GREPMIND_CONTEXT_LAYER_TIMEOUT_MS`                | Research subagent process timeout. Defaults to `300000`, max `600000`.  |
 | `GREPMIND_CONTEXT_LAYER_MAX_OUTPUT_BYTES`          | Response byte limit before truncation. Defaults to `400000`.            |
+| `GREPMIND_CONTEXT_LAYER_SOURCE_FILE_MIN_SCORE`     | Minimum fanout score for sending disk file content. Defaults to `0.5`.  |
+| `GREPMIND_CONTEXT_LAYER_SOURCE_FILE_MAX_BYTES`     | Max disk file bytes sent to one file-summary subagent. Defaults `200000`. |
 | `GREPMIND_CONTEXT_LAYER_REFINEMENT_TTL_MS`         | In-memory refinement session TTL. Defaults to 30 minutes, max 24 hours. |
 | `GREPMIND_CONTEXT_LAYER_MAX_REFINEMENT_SESSIONS`   | Max in-memory refinement sessions. Defaults to `100`.                   |
 | `GREPMIND_CONTEXT_LAYER_LOG`                       | Set to `1` to log safe context-layer counters to stderr.                |

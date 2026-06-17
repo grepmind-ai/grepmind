@@ -8,6 +8,14 @@ export interface ContextLayerFileSummaryPromptInput {
   focus: ContextLayerFocus;
   result: SearchResult;
   relatedResults: SearchResult[];
+  sourceFile?: ContextLayerSourceFileContext;
+}
+
+export interface ContextLayerSourceFileContext {
+  path: string;
+  content: string;
+  truncated: boolean;
+  byteLength: number;
 }
 
 export function buildContextLayerFileSummaryPrompt(
@@ -21,10 +29,10 @@ can build a repository-level context_pack.
 
 Instruction:
 - Prepare context for this file only.
-- Use Grepmind code_search line anchors as evidence.
-- Mark claims that code_search cannot verify as "Inference:".
-- Mark cross-file control flow or data flow as "Inference:" unless code_search shows both sides.
-- If this file is likely central to the query and the primary preview lacks the necessary lines, make one targeted exact.pattern search in this file before deciding relevance.
+- Use only the provided search hit, same-file related hits, and disk file content as evidence.
+- Do not call Grepmind MCP tools, code_search, context_layer, or any nested agents.
+- Mark claims that the provided evidence cannot verify as "Inference:".
+- Mark cross-file control flow or data flow as "Inference:" unless the provided evidence shows both sides.
 - Return decision-useful context and avoid generic file descriptions.
 
 Workspace:
@@ -45,11 +53,14 @@ ${formatSearchResult(input.result)}
 Related same-file results:
 ${formatRelatedResults(input.relatedResults)}
 
+Disk file content:
+${formatSourceFile(input.sourceFile)}
+
 Research protocol:
 1. Use the primary result as the entry point.
-2. If the preview is insufficient, make targeted code_search calls with exact.pattern, path, globs, and contextLines for symbols in this same file.
-3. You may make a small number of code_search calls for directly connected symbols in nearby files only when the relationship is necessary to explain this file.
-4. Prefer exact anchors and short evidence snippets.
+2. When disk file content is provided, use it to understand the full file before judging relevance.
+3. If the preview and disk content are insufficient, record the missing coverage as a Gap instead of searching.
+4. Prefer exact anchors and short evidence snippets from the provided material.
 5. Decide whether the file is relevant to the refined query.
 6. For a relevant file, include only the necessary code snippets, line anchors, and a short explanation of why each snippet matters.
 7. In Explanation for relevant files, explicitly label "Verified:", "Inference:", and "Gaps:".
@@ -117,4 +128,29 @@ function formatRelatedResults(results: SearchResult[]): string {
   }
 
   return results.map(formatSearchResult).join('\n\n---\n\n');
+}
+
+function formatSourceFile(
+  sourceFile: ContextLayerSourceFileContext | undefined,
+): string {
+  if (sourceFile == null) {
+    return 'Not provided.';
+  }
+
+  const truncated = sourceFile.truncated ? 'yes' : 'no';
+  const fence = markdownFenceFor(sourceFile.content);
+  return `Path: ${sourceFile.path}
+Bytes: ${sourceFile.byteLength}
+Truncated: ${truncated}
+${fence}
+${sourceFile.content}
+${fence}`;
+}
+
+function markdownFenceFor(content: string): string {
+  let fence = '```';
+  while (content.includes(fence)) {
+    fence += '`';
+  }
+  return fence;
 }

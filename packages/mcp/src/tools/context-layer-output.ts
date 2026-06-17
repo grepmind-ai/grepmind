@@ -8,6 +8,7 @@ export const REQUIRED_CONTEXT_PACK_HEADINGS = [
   '# context_pack',
   '## Answer',
   '## Evidence Quality',
+  '## Sufficiency',
   '## Code Context',
   '## Docs Context',
   '## Flow',
@@ -67,6 +68,7 @@ export function summarizeContextPackForLimit(input: {
   const weights = new Map<RequiredContextPackHeading, number>([
     ['## Answer', 1],
     ['## Evidence Quality', 2],
+    ['## Sufficiency', 2],
     ['## Code Context', 3],
     ['## Docs Context', 2],
     ['## Flow', 2],
@@ -200,6 +202,7 @@ function parseContextPackMarkdown(
     }
   }
   validateEvidenceQuality(sections, options);
+  validateSufficiency(sections, options);
 
   return { sections };
 }
@@ -240,6 +243,43 @@ function validateEvidenceQuality(
   if (!hasConfidence) {
     throwMalformedContextPack(
       'Evidence Quality must include "Confidence: high|medium|low"',
+      options,
+    );
+  }
+}
+
+function validateSufficiency(
+  sections: ParsedContextPackSection[],
+  options?: { runtimeDurationMs?: number; stderrTail?: string },
+): void {
+  const sufficiency = sections.find(
+    (section) => section.heading === '## Sufficiency',
+  );
+  if (sufficiency == null) {
+    throwMalformedContextPack('missing required "## Sufficiency" section', options);
+  }
+
+  const requiredLabels = [
+    'Enough to answer:',
+    'Missing context:',
+    'Suggested next context queries:',
+  ];
+  for (const label of requiredLabels) {
+    if (!sufficiency.content.includes(label)) {
+      throwMalformedContextPack(
+        `Sufficiency must include "${label}"`,
+        options,
+      );
+    }
+  }
+
+  const hasEnough =
+    /(^|\n)\s*-?\s*Enough to answer:\s*(yes|no)\b/im.test(
+      sufficiency.content,
+    );
+  if (!hasEnough) {
+    throwMalformedContextPack(
+      'Sufficiency must include "Enough to answer: yes|no"',
       options,
     );
   }
