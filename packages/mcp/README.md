@@ -157,18 +157,18 @@ and runs with a dedicated Codex profile.
 
 Input fields:
 
-| Field            | Type                                                            | Description                                        |
-| ---------------- | --------------------------------------------------------------- | -------------------------------------------------- |
-| `query`          | `string`                                                        | Task or code question to research.                 |
-| `model.provider` | `"codex" \| "claude"`                                           | Optional provider. MVP supports `codex` only.      |
-| `model.name`     | `string`                                                        | Optional Codex model name. Defaults to `fast`.     |
-| `model.thinking` | `"low" \| "medium" \| "high"`                                   | Optional Codex reasoning effort. Defaults `low`.   |
-| `model.speed`    | `"fast"`                                                        | Reserved speed profile.                            |
-| `maxFiles`       | `number`                                                        | Optional deep-inspection limit. Defaults to `30`.  |
-| `maxSearchCalls` | `number`                                                        | Optional search-call budget. Defaults to `8`.      |
-| `focus`          | `"implementation" \| "debugging" \| "architecture" \| "review"` | Optional task focus. Defaults to `implementation`. |
-| `refinementSession` | `string`                                                     | Continue a prompt-refinement session.              |
-| `agentAnswers`   | `{ questionId: string, answer: string }[]`                      | Answers from the calling agent for a session.      |
+| Field               | Type                                                            | Description                                        |
+| ------------------- | --------------------------------------------------------------- | -------------------------------------------------- |
+| `query`             | `string`                                                        | Task or code question to research.                 |
+| `model.provider`    | `"codex" \| "claude"`                                           | Optional provider. MVP supports `codex` only.      |
+| `model.name`        | `string`                                                        | Optional Codex model name. Defaults to `fast`.     |
+| `model.thinking`    | `"low" \| "medium" \| "high"`                                   | Optional Codex reasoning effort. Defaults `low`.   |
+| `model.speed`       | `"fast"`                                                        | Reserved speed profile.                            |
+| `maxFiles`          | `number`                                                        | Optional deep-inspection limit. Defaults to `30`.  |
+| `maxSearchCalls`    | `number`                                                        | Optional search-call budget. Defaults to `8`.      |
+| `focus`             | `"implementation" \| "debugging" \| "architecture" \| "review"` | Optional task focus. Defaults to `implementation`. |
+| `refinementSession` | `string`                                                        | Continue a prompt-refinement session.              |
+| `agentAnswers`      | `{ questionId: string, answer: string }[]`                      | Answers from the calling agent for a session.      |
 
 Example tool input:
 
@@ -192,7 +192,7 @@ normal non-error `agent_questions` result:
 ```md
 # agent_questions
 
-Refinement session: clr_...
+Refinement session: clr\_...
 
 ## Refined Query Draft
 
@@ -231,7 +231,7 @@ Expected output headings:
 ```md
 # context_pack
 
-## Short Answer
+## Answer
 
 ## Code Context
 
@@ -285,22 +285,22 @@ Returns JSON diagnostics for the current MCP workspace:
 
 ## Environment Variables
 
-| Variable                                  | Description                                                         |
-| ----------------------------------------- | ------------------------------------------------------------------- |
-| `GREPMIND_AGENT_DATA_DIR`                 | Agent data directory. Defaults to `~/.grepmind-agent`.              |
-| `GREPMIND_AGENT_HOSTNAME`                 | Grepmind hostname used when startup needs to run OAuth login.       |
-| `GREPMIND_MCP_STARTUP_TIMEOUT_MS`         | Startup timeout for auth/runtime preparation. Defaults to `120000`. |
-| `GREPMIND_CONTEXT_LAYER_PROVIDER`         | Default context-layer provider. MVP supports `codex`.               |
-| `GREPMIND_CONTEXT_LAYER_CODEX_MODEL`      | Default Codex model name for `context_layer`. Defaults to `fast`.   |
-| `GREPMIND_CONTEXT_LAYER_CODEX_THINKING`   | Default Codex reasoning effort: `low`, `medium`, or `high`.         |
-| `GREPMIND_CONTEXT_LAYER_CODEX_SPEED`      | Reserved speed profile. Must be `fast`.                             |
-| `GREPMIND_CONTEXT_LAYER_CODEX_BIN`        | Optional path to the Codex CLI binary.                              |
-| `GREPMIND_CONTEXT_LAYER_PROMPT_REFINER_TIMEOUT_MS` | Prompt-refiner timeout. Defaults to `45000`, max `120000`. |
-| `GREPMIND_CONTEXT_LAYER_TIMEOUT_MS`       | Research subagent process timeout. Defaults to `180000`, max `600000`. |
-| `GREPMIND_CONTEXT_LAYER_MAX_OUTPUT_BYTES` | Response byte limit before truncation. Defaults to `400000`.        |
-| `GREPMIND_CONTEXT_LAYER_REFINEMENT_TTL_MS` | In-memory refinement session TTL. Defaults to 30 minutes, max 24 hours. |
-| `GREPMIND_CONTEXT_LAYER_MAX_REFINEMENT_SESSIONS` | Max in-memory refinement sessions. Defaults to `100`.       |
-| `GREPMIND_CONTEXT_LAYER_LOG`              | Set to `1` to log safe context-layer counters to stderr.            |
+| Variable                                           | Description                                                             |
+| -------------------------------------------------- | ----------------------------------------------------------------------- |
+| `GREPMIND_AGENT_DATA_DIR`                          | Agent data directory. Defaults to `~/.grepmind-agent`.                  |
+| `GREPMIND_AGENT_HOSTNAME`                          | Grepmind hostname used when startup needs to run OAuth login.           |
+| `GREPMIND_MCP_STARTUP_TIMEOUT_MS`                  | Startup timeout for auth/runtime preparation. Defaults to `120000`.     |
+| `GREPMIND_CONTEXT_LAYER_PROVIDER`                  | Default context-layer provider. MVP supports `codex`.                   |
+| `GREPMIND_CONTEXT_LAYER_CODEX_MODEL`               | Default Codex model name for `context_layer`. Defaults to `fast`.       |
+| `GREPMIND_CONTEXT_LAYER_CODEX_THINKING`            | Default Codex reasoning effort: `low`, `medium`, or `high`.             |
+| `GREPMIND_CONTEXT_LAYER_CODEX_SPEED`               | Reserved speed profile. Must be `fast`.                                 |
+| `GREPMIND_CONTEXT_LAYER_CODEX_BIN`                 | Optional path to the Codex CLI binary.                                  |
+| `GREPMIND_CONTEXT_LAYER_PROMPT_REFINER_TIMEOUT_MS` | Prompt-refiner timeout. Defaults to `45000`, max `120000`.              |
+| `GREPMIND_CONTEXT_LAYER_TIMEOUT_MS`                | Research subagent process timeout. Defaults to `180000`, max `600000`.  |
+| `GREPMIND_CONTEXT_LAYER_MAX_OUTPUT_BYTES`          | Response byte limit before truncation. Defaults to `400000`.            |
+| `GREPMIND_CONTEXT_LAYER_REFINEMENT_TTL_MS`         | In-memory refinement session TTL. Defaults to 30 minutes, max 24 hours. |
+| `GREPMIND_CONTEXT_LAYER_MAX_REFINEMENT_SESSIONS`   | Max in-memory refinement sessions. Defaults to `100`.                   |
+| `GREPMIND_CONTEXT_LAYER_LOG`                       | Set to `1` to log safe context-layer counters to stderr.                |
 
 The server also loads `.env` through `dotenv/config`.
 

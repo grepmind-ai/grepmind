@@ -33,6 +33,15 @@ export interface CodexSubagentRunInput {
   modelThinking: ContextLayerThinking;
   timeoutMs: number;
   maxOutputBytes: number;
+  normalizeOutput?: (
+    raw: string,
+    context: { runtimeDurationMs: number; stderrTail: string },
+  ) => string;
+  truncateOutput?: (input: {
+    output: string;
+    maxOutputBytes: number;
+    runtimeDurationMs: number;
+  }) => string;
 }
 
 export interface CodexSubagentRunResult {
@@ -99,16 +108,17 @@ export async function runCodexSubagent(
     {
       runtimeDurationMs,
       stderrTail: processResult.stderrTail,
+      normalizeOutput: input.normalizeOutput,
     },
   );
   const outputBytes = Buffer.byteLength(contextPackMarkdown, 'utf8');
   if (outputBytes > input.maxOutputBytes) {
     return {
-      contextPackMarkdown: truncateContextPack(
-        contextPackMarkdown,
-        input.maxOutputBytes,
+      contextPackMarkdown: (input.truncateOutput ?? truncateContextPack)({
+        output: contextPackMarkdown,
+        maxOutputBytes: input.maxOutputBytes,
         runtimeDurationMs,
-      ),
+      }),
       runtimeDurationMs,
       truncated: true,
       timeout: false,
@@ -277,7 +287,14 @@ function runCodexProcess(input: {
 
 function readLastMessageFromStdout(
   stdoutTail: string,
-  context: { runtimeDurationMs: number; stderrTail: string },
+  context: {
+    runtimeDurationMs: number;
+    stderrTail: string;
+    normalizeOutput?: (
+      raw: string,
+      context: { runtimeDurationMs: number; stderrTail: string },
+    ) => string;
+  },
 ): string {
   const lines = stdoutTail.split(/\r?\n/).filter(Boolean);
   for (let index = lines.length - 1; index >= 0; index -= 1) {
@@ -295,7 +312,10 @@ function readLastMessageFromStdout(
         event.item?.type === 'agent_message' &&
         typeof event.item.text === 'string'
       ) {
-        return normalizeContextPackMarkdown(event.item.text, context);
+        return (context.normalizeOutput ?? normalizeContextPackMarkdown)(
+          event.item.text,
+          context,
+        );
       }
     } catch {
       // Ignore non-event JSON fragments from Codex diagnostics.
@@ -308,15 +328,15 @@ function readLastMessageFromStdout(
   );
 }
 
-function truncateContextPack(
-  contextPackMarkdown: string,
-  maxOutputBytes: number,
-  runtimeDurationMs: number,
-): string {
+function truncateContextPack(input: {
+  output: string;
+  maxOutputBytes: number;
+  runtimeDurationMs: number;
+}): string {
   return summarizeContextPackForLimit({
-    contextPackMarkdown,
-    maxOutputBytes,
-    runtimeDurationMs,
+    contextPackMarkdown: input.output,
+    maxOutputBytes: input.maxOutputBytes,
+    runtimeDurationMs: input.runtimeDurationMs,
   });
 }
 

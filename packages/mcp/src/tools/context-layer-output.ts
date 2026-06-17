@@ -6,7 +6,7 @@ import { ContextLayerError } from './context-layer-errors.js';
 
 export const REQUIRED_CONTEXT_PACK_HEADINGS = [
   '# context_pack',
-  '## Short Answer',
+  '## Answer',
   '## Code Context',
   '## Docs Context',
   '## Flow',
@@ -64,7 +64,7 @@ export function summarizeContextPackForLimit(input: {
     (section) => section.heading !== '# context_pack',
   );
   const weights = new Map<RequiredContextPackHeading, number>([
-    ['## Short Answer', 1],
+    ['## Answer', 1],
     ['## Code Context', 3],
     ['## Docs Context', 2],
     ['## Flow', 2],
@@ -167,7 +167,7 @@ function parseContextPackMarkdown(
     .trim();
   if (h1Content) {
     throwMalformedContextPack(
-      'do not put prose between "# context_pack" and "## Short Answer"',
+      'do not put prose between "# context_pack" and "## Answer"',
       options,
     );
   }

@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { ContextLayerError } from './context-layer-errors.js';
 import type { ResolvedContextLayerModel } from './context-layer-model-config.js';
-import type { ContextLayerFocus } from './context-layer-prompt.js';
+import type { ContextLayerFocus } from './context-layer-types.js';
 import type { PromptRefinerQuestion } from './prompt-refiner-output.js';
 
 export interface RefinementAgentAnswer {
@@ -217,11 +217,7 @@ function resolveRefinementTtlMs(): number {
     return DEFAULT_REFINEMENT_TTL_MS;
   }
   const value = Number(raw);
-  if (
-    !Number.isInteger(value) ||
-    value <= 0 ||
-    value > MAX_REFINEMENT_TTL_MS
-  ) {
+  if (!Number.isInteger(value) || value <= 0 || value > MAX_REFINEMENT_TTL_MS) {
     throw new ContextLayerError(
       'CODEX_SUBAGENT_FAILED',
       `GREPMIND_CONTEXT_LAYER_REFINEMENT_TTL_MS must be a positive integer no greater than ${MAX_REFINEMENT_TTL_MS}.`,

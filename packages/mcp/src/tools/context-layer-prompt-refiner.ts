@@ -1,4 +1,4 @@
-import type { ContextLayerFocus } from './context-layer-prompt.js';
+import type { ContextLayerFocus } from './context-layer-types.js';
 
 export interface ContextLayerPromptRefinerInput {
   workspacePath: string;
@@ -112,7 +112,9 @@ function formatPreviousState(input: ContextLayerPromptRefinerInput): string {
 
   const parts: string[] = [];
   if (input.previousRefinedQueryDraft) {
-    parts.push(`Previous refined query draft:\n${input.previousRefinedQueryDraft}`);
+    parts.push(
+      `Previous refined query draft:\n${input.previousRefinedQueryDraft}`,
+    );
   }
   if (input.previousQuestions != null && input.previousQuestions.length > 0) {
     parts.push(

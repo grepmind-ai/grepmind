@@ -24,6 +24,11 @@ export interface ContextLayerSuccessResult {
     context_pack_path?: string;
     prompt_refiner_runtime_duration_ms: number;
     research_runtime_duration_ms: number;
+    fanout_file_count: number;
+    fanout_completed_count: number;
+    fanout_failed_count: number;
+    fanout_runtime_duration_ms: number;
+    aggregation_runtime_duration_ms: number;
     runtime_duration_ms: number;
     truncated: boolean;
     timeout: boolean;

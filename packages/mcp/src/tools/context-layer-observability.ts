@@ -6,6 +6,14 @@ export type ContextLayerCounter =
   | 'context_layer_subagent_completed'
   | 'context_layer_subagent_failed'
   | 'context_layer_subagent_timeout'
+  | 'context_layer_fanout_started'
+  | 'context_layer_fanout_completed'
+  | 'context_layer_file_summary_started'
+  | 'context_layer_file_summary_completed'
+  | 'context_layer_file_summary_failed'
+  | 'context_layer_file_summary_timeout'
+  | 'context_layer_aggregation_started'
+  | 'context_layer_aggregation_completed'
   | 'context_layer_output_truncated'
   | 'context_layer_recursion_blocked'
   | 'context_layer_profile_missing'
@@ -58,6 +66,22 @@ export function getContextLayerCounters(): Record<ContextLayerCounter, number> {
       counters.get('context_layer_subagent_failed') ?? 0,
     context_layer_subagent_timeout:
       counters.get('context_layer_subagent_timeout') ?? 0,
+    context_layer_fanout_started:
+      counters.get('context_layer_fanout_started') ?? 0,
+    context_layer_fanout_completed:
+      counters.get('context_layer_fanout_completed') ?? 0,
+    context_layer_file_summary_started:
+      counters.get('context_layer_file_summary_started') ?? 0,
+    context_layer_file_summary_completed:
+      counters.get('context_layer_file_summary_completed') ?? 0,
+    context_layer_file_summary_failed:
+      counters.get('context_layer_file_summary_failed') ?? 0,
+    context_layer_file_summary_timeout:
+      counters.get('context_layer_file_summary_timeout') ?? 0,
+    context_layer_aggregation_started:
+      counters.get('context_layer_aggregation_started') ?? 0,
+    context_layer_aggregation_completed:
+      counters.get('context_layer_aggregation_completed') ?? 0,
     context_layer_output_truncated:
       counters.get('context_layer_output_truncated') ?? 0,
     context_layer_recursion_blocked:

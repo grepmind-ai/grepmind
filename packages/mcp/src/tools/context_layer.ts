@@ -21,10 +21,15 @@ import {
   hashWorkspacePath,
   incrementContextLayerCounter,
 } from './context-layer-observability.js';
+import { type ContextLayerFocus } from './context-layer-types.js';
+import { buildContextLayerAggregatePrompt } from './context-layer-aggregate-prompt.js';
 import {
-  buildContextLayerPrompt,
-  type ContextLayerFocus,
-} from './context-layer-prompt.js';
+  buildFanoutTargets,
+  resolveContextLayerFanoutConcurrency,
+  resolveContextLayerFileMaxOutputBytes,
+  resolveContextLayerFileTimeoutMs,
+  runContextLayerFileSummaryFanout,
+} from './context-layer-fanout-runner.js';
 import {
   createRefinementSession,
   deleteRefinementSession,
@@ -43,6 +48,7 @@ import type {
   PromptRefinerOutput,
   PromptRefinerQuestion,
 } from './prompt-refiner-output.js';
+import { searchCode } from './search-client.js';
 
 export const DEFAULT_MAX_FILES = 30;
 export const DEFAULT_MAX_SEARCH_CALLS = 8;
@@ -143,7 +149,8 @@ export async function contextLayerTool(
       requestId,
     });
     maxSearchCalls = refinementState.maxSearchCalls;
-    refinementSessionId = refinementState.session?.id ?? input.refinementSession;
+    refinementSessionId =
+      refinementState.session?.id ?? input.refinementSession;
 
     if (
       refinementState.session != null &&
@@ -216,15 +223,49 @@ export async function contextLayerTool(
 
     deleteRefinementSession(refinementState.session?.id);
     if (refinementState.session != null) {
-      incrementContextLayerCounter('context_layer_refinement_session_completed', {
-        requestId,
-        sessionHash: hashRefinementSessionId(refinementState.session.id),
-      });
+      incrementContextLayerCounter(
+        'context_layer_refinement_session_completed',
+        {
+          requestId,
+          sessionHash: hashRefinementSessionId(refinementState.session.id),
+        },
+      );
     }
 
     const timeoutMs = resolveContextLayerTimeoutMs();
     const maxOutputBytes = resolveContextLayerMaxOutputBytes();
-    const prompt = buildContextLayerPrompt({
+    const fileTimeoutMs = resolveContextLayerFileTimeoutMs();
+    const fileMaxOutputBytes = resolveContextLayerFileMaxOutputBytes();
+    const fanoutConcurrency = resolveContextLayerFanoutConcurrency();
+    const primarySearchResults = await searchCodeForContextLayer({
+      query: refiner.output.refinedQuery,
+      target: 'code',
+      limit: Math.min(refinementState.maxFiles * 3, 100),
+    });
+    const docsSearchResults = await searchCodeForContextLayer({
+      query: refiner.output.refinedQuery,
+      target: 'docs',
+      limit: Math.min(refinementState.maxFiles, 20),
+    });
+    const fanoutTargets = buildFanoutTargets({
+      results: primarySearchResults,
+      maxFiles: refinementState.maxFiles,
+    });
+    const fanout = await runContextLayerFileSummaryFanout({
+      requestId,
+      workspacePath: workspaceContext.workspacePath,
+      query: refiner.output.refinedQuery,
+      originalQuery: refinementState.originalQuery,
+      focus: refinementState.focus,
+      targets: fanoutTargets,
+      modelName: refinementState.model.name,
+      modelSpeed: refinementState.model.speed,
+      modelThinking: refinementState.model.thinking,
+      concurrency: fanoutConcurrency,
+      timeoutMs: fileTimeoutMs,
+      maxOutputBytes: fileMaxOutputBytes,
+    });
+    const aggregationPrompt = buildContextLayerAggregatePrompt({
       workspacePath: workspaceContext.workspacePath,
       query: refiner.output.refinedQuery,
       originalQuery: refinementState.originalQuery,
@@ -232,24 +273,28 @@ export async function contextLayerTool(
       maxFiles: refinementState.maxFiles,
       maxSearchCalls: refinementState.maxSearchCalls,
       focus: refinementState.focus,
+      searchResults: primarySearchResults,
+      docsResults: docsSearchResults,
+      fileSummaries: fanout.summaries,
     });
 
-    incrementContextLayerCounter('context_layer_subagent_started', {
+    incrementContextLayerCounter('context_layer_aggregation_started', {
       requestId,
       workspaceHash: hashWorkspacePath(workspaceContext.workspacePath),
-      maxSearchCalls: refinementState.maxSearchCalls,
+      fileCount: fanoutTargets.length,
       timeoutMs,
     });
     const result = await runCodexSubagent({
       workspacePath: workspaceContext.workspacePath,
-      prompt,
+      prompt: aggregationPrompt,
       modelName: refinementState.model.name,
       modelSpeed: refinementState.model.speed,
       modelThinking: refinementState.model.thinking,
       timeoutMs,
       maxOutputBytes,
     });
-    researchRuntimeDurationMs = result.runtimeDurationMs;
+    researchRuntimeDurationMs =
+      fanout.runtimeDurationMs + result.runtimeDurationMs;
 
     if (result.truncated) {
       incrementContextLayerCounter('context_layer_output_truncated', {
@@ -257,7 +302,7 @@ export async function contextLayerTool(
         durationMs: result.runtimeDurationMs,
       });
     }
-    incrementContextLayerCounter('context_layer_subagent_completed', {
+    incrementContextLayerCounter('context_layer_aggregation_completed', {
       requestId,
       durationMs: result.runtimeDurationMs,
     });
@@ -273,7 +318,16 @@ export async function contextLayerTool(
         max_search_calls: refinementState.maxSearchCalls,
         context_pack_path: result.contextPackPath,
         prompt_refiner_runtime_duration_ms: refiner.runtimeDurationMs,
-        research_runtime_duration_ms: result.runtimeDurationMs,
+        research_runtime_duration_ms: researchRuntimeDurationMs,
+        fanout_file_count: fanoutTargets.length,
+        fanout_completed_count: fanout.summaries.filter(
+          (summary) => 'summaryMarkdown' in summary,
+        ).length,
+        fanout_failed_count: fanout.summaries.filter(
+          (summary) => !('summaryMarkdown' in summary),
+        ).length,
+        fanout_runtime_duration_ms: fanout.runtimeDurationMs,
+        aggregation_runtime_duration_ms: result.runtimeDurationMs,
         runtime_duration_ms: Date.now() - startedAt,
         truncated: result.truncated,
         timeout: result.timeout,
@@ -375,8 +429,7 @@ function resolveRefinementState(input: {
   requestId: string;
 }): RefinementState {
   const maxFiles = input.input.maxFiles ?? DEFAULT_MAX_FILES;
-  const maxSearchCalls =
-    input.input.maxSearchCalls ?? DEFAULT_MAX_SEARCH_CALLS;
+  const maxSearchCalls = input.input.maxSearchCalls ?? DEFAULT_MAX_SEARCH_CALLS;
   const focus = (input.input.focus ?? DEFAULT_FOCUS) as ContextLayerFocus;
 
   if (input.input.refinementSession == null) {
@@ -480,6 +533,26 @@ function additionalCallerContextForResume(
   return trimmed;
 }
 
+async function searchCodeForContextLayer(input: {
+  query: string;
+  target: 'code' | 'docs';
+  limit: number;
+}): Promise<Awaited<ReturnType<typeof searchCode>>['results']> {
+  try {
+    const response = await searchCode({
+      query: input.query,
+      target: input.target,
+      limit: input.limit,
+    });
+    return response.results;
+  } catch (error) {
+    throw new ContextLayerError(
+      'CODE_SEARCH_UNAVAILABLE',
+      error instanceof Error ? error.message : String(error),
+    );
+  }
+}
+
 function normalizeContextLayerError(error: unknown): ContextLayerError {
   if (error instanceof ContextLayerError) {
     return error;
@@ -515,8 +588,11 @@ function isResearchRuntimeError(code: ContextLayerErrorCode): boolean {
 }
 
 export function defaultContextLayerToolTimeoutSec(): number {
+  const fanoutConcurrency = resolveContextLayerFanoutConcurrency();
+  const fanoutBatches = Math.ceil(DEFAULT_MAX_FILES / fanoutConcurrency);
   return (
     Math.ceil(resolvePromptRefinerTimeoutMs() / 1000) +
+    fanoutBatches * Math.ceil(resolveContextLayerFileTimeoutMs() / 1000) +
     Math.ceil(resolveContextLayerTimeoutMs() / 1000) +
     DEFAULT_CONTEXT_LAYER_TOOL_TIMEOUT_BUFFER_SEC
   );
