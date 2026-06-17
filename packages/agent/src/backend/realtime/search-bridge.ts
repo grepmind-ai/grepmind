@@ -166,6 +166,26 @@ export function normalizeSearchResponsePayload(
   const totalResults = normalizeNonNegativeInteger(
     (meta as { totalResults?: unknown }).totalResults,
   );
+  const semanticResults = normalizeOptionalNonNegativeInteger(
+    (meta as { semanticResults?: unknown }).semanticResults,
+  );
+  const rgResults = normalizeOptionalNonNegativeInteger(
+    (meta as { rgResults?: unknown }).rgResults,
+  );
+  const rgTruncated =
+    typeof (meta as { rgTruncated?: unknown }).rgTruncated === 'boolean'
+      ? (meta as { rgTruncated: boolean }).rgTruncated
+      : undefined;
+  const rgSource =
+    (meta as { rgSource?: unknown }).rgSource === 'working_tree'
+      ? 'working_tree'
+      : undefined;
+  const rgWarning = normalizeOptionalString(
+    (meta as { rgWarning?: unknown }).rgWarning,
+  );
+  const semanticWarning = normalizeOptionalString(
+    (meta as { semanticWarning?: unknown }).semanticWarning,
+  );
   if (
     bindingId == null ||
     revisionId == null ||
@@ -185,6 +205,12 @@ export function normalizeSearchResponsePayload(
         revisionId,
         durationMs,
         totalResults,
+        semanticResults,
+        rgResults,
+        rgTruncated,
+        rgSource,
+        rgWarning,
+        semanticWarning,
       },
     },
   };
@@ -413,6 +439,14 @@ function normalizeNullableString(value: unknown): string | null {
   return typeof value === 'string' ? value : null;
 }
 
+function normalizeOptionalString(value: unknown): string | undefined {
+  if (value == null) {
+    return undefined;
+  }
+
+  return typeof value === 'string' ? value : undefined;
+}
+
 function normalizeSearchTarget(value: unknown): SearchTarget | null {
   return value === 'code' || value === 'docs' ? value : null;
 }
@@ -425,6 +459,17 @@ function normalizePositiveInteger(value: unknown): number | null {
 function normalizeNonNegativeInteger(value: unknown): number | null {
   const parsed = typeof value === 'number' ? value : Number(value);
   return Number.isInteger(parsed) && parsed >= 0 ? parsed : null;
+}
+
+function normalizeOptionalNonNegativeInteger(
+  value: unknown,
+): number | undefined {
+  if (value == null) {
+    return undefined;
+  }
+
+  const parsed = normalizeNonNegativeInteger(value);
+  return parsed ?? undefined;
 }
 
 function normalizeFiniteNumber(value: unknown): number | null {

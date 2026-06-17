@@ -11,13 +11,18 @@ import { ensureMcpRuntimePrepared } from '../runtime-context.js';
 
 const DEFAULT_SEARCH_LIMIT = 10;
 const MAX_SEARCH_LIMIT = 100;
+const MAX_EXACT_PATTERN_LENGTH = 500;
+const MAX_GLOB_COUNT = 20;
+const MAX_GLOB_LENGTH = 200;
+const MAX_CONTEXT_LINES = 10;
 
 export const codeSearchSchema = z
   .object({
     query: z
       .string()
+      .min(1)
       .describe(
-        'Describe what the code does in natural language (e.g., "validate user input", "handle HTTP errors")',
+        'Describe the code or docs you need. Add exact.pattern when you know an identifier, string, route, config key, error text, import path, function name, or regex anchor.',
       ),
     target: z
       .enum(['code', 'docs'])
@@ -37,7 +42,7 @@ export const codeSearchSchema = z
       .min(0)
       .max(1)
       .optional()
-      .describe('Min similarity 0-1 (default: 0.5). Lower = more results'),
+      .describe('Min semantic score 0-1 (default: 0.5). Lower = more results'),
     path: z
       .string()
       .optional()
@@ -46,6 +51,28 @@ export const codeSearchSchema = z
       .array(z.string())
       .optional()
       .describe('Filter docs by tags (e.g., ["architecture", "guide"])'),
+    exact: z
+      .object({
+        pattern: z.string().min(1).max(MAX_EXACT_PATTERN_LENGTH),
+        regex: z.boolean().optional(),
+        caseSensitive: z.boolean().optional(),
+      })
+      .optional()
+      .describe(
+        'Optional exact local rg signal. Use pattern for identifiers, strings, routes, config keys, imports, error text, or regex anchors.',
+      ),
+    globs: z
+      .array(z.string().min(1).max(MAX_GLOB_LENGTH))
+      .max(MAX_GLOB_COUNT)
+      .optional()
+      .describe('Optional local rg glob scopes. Not raw rg flags.'),
+    contextLines: z
+      .number()
+      .int()
+      .min(0)
+      .max(MAX_CONTEXT_LINES)
+      .optional()
+      .describe('Local rg context lines around exact matches (default: 2, max: 10)'),
     compact: z
       .boolean()
       .optional()
@@ -64,7 +91,7 @@ function formatCompactResult(r: SearchResult, index: number): string {
   const tagsInfo = r.tags?.length ? ` [${r.tags.join(', ')}]` : '';
 
   const lines = [
-    `## ${index + 1}. ${nameInfo}${typeInfo}${tagsInfo} (similarity: ${r.score.toFixed(2)})`,
+    `## ${index + 1}. ${nameInfo}${typeInfo}${tagsInfo} (score: ${r.score.toFixed(2)})`,
     `   ${r.symbol.relativePath}:${r.symbol.startLine}`,
   ];
   if (signatureLine) {
@@ -79,7 +106,7 @@ function formatFullResult(r: SearchResult, index: number): string {
   const typeInfo = r.symbol.type === 'file' ? '' : ` [${r.symbol.type}]`;
   const nameInfo = r.symbol.name ? ` ${r.symbol.name}` : '';
 
-  let text = `## ${index + 1}. ${location}${typeInfo}${nameInfo} (similarity: ${r.score.toFixed(2)})\n`;
+  let text = `## ${index + 1}. ${location}${typeInfo}${nameInfo} (score: ${r.score.toFixed(2)})\n`;
 
   if (r.tags?.length) {
     text += `\n**Tags:** ${r.tags.join(', ')}\n`;
@@ -122,14 +149,16 @@ export async function codeSearchTool(input: CodeSearchInput): Promise<{
 }> {
   try {
     await ensureMcpRuntimePrepared();
-    const { results } = await searchCode({
+    const { results, meta } = await searchCode({
       query: input.query,
-      mode: 'semantic',
       target: input.target,
       limit: input.limit ?? DEFAULT_SEARCH_LIMIT,
       threshold: input.threshold ?? 0.5,
       path: input.path,
       tags: input.tags,
+      exact: input.exact,
+      globs: input.globs,
+      contextLines: input.contextLines,
     });
 
     if (results.length === 0) {
@@ -137,9 +166,10 @@ export async function codeSearchTool(input: CodeSearchInput): Promise<{
         content: [
           {
             type: 'text',
-            text: 'No local agent HEAD results found matching the description. Try rephrasing or lowering threshold.',
+            text: 'No local agent HEAD results found. Try rephrasing, lowering threshold, adjusting path/tags, or adding exact.pattern when you know a concrete identifier or string.',
           },
         ],
+        _meta: toResponseMeta('', results.length, input.limit, meta),
       };
     }
 
@@ -152,11 +182,7 @@ export async function codeSearchTool(input: CodeSearchInput): Promise<{
 
     return {
       content: [{ type: 'text', text: responseText }],
-      _meta: {
-        tokens_approx: estimateTokens(responseText),
-        truncated: results.length >= requestedLimit,
-        returned_results: results.length,
-      },
+      _meta: toResponseMeta(responseText, results.length, requestedLimit, meta),
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Search failed';
@@ -165,4 +191,31 @@ export async function codeSearchTool(input: CodeSearchInput): Promise<{
       isError: true,
     };
   }
+}
+
+function toResponseMeta(
+  responseText: string,
+  returnedResults: number,
+  requestedLimit: number | undefined,
+  runtimeMeta: {
+    semanticResults?: number;
+    rgResults?: number;
+    rgTruncated?: boolean;
+    rgSource?: 'working_tree';
+    rgWarning?: string;
+    semanticWarning?: string;
+  },
+): ResponseMeta {
+  const limit = requestedLimit ?? DEFAULT_SEARCH_LIMIT;
+  return {
+    tokens_approx: estimateTokens(responseText),
+    truncated: returnedResults >= limit,
+    returned_results: returnedResults,
+    semantic_results: runtimeMeta.semanticResults,
+    rg_results: runtimeMeta.rgResults,
+    rg_truncated: runtimeMeta.rgTruncated,
+    rg_source: runtimeMeta.rgSource,
+    rg_warning: runtimeMeta.rgWarning,
+    semantic_warning: runtimeMeta.semanticWarning,
+  };
 }

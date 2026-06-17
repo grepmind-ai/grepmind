@@ -140,13 +140,16 @@ Use `isRuntimeUnavailableError(error)` to handle missing or stopped runtimes.
 The package exports protocol types for runtime operations, including:
 
 - `AgentRuntimePingResult`
+- `AgentRuntimeCapabilities`
 - `AgentStatusSnapshot`
 - `LocalProjectRecord`
 - `RegisterProjectRpcParams`
 - `SyncProjectRpcParams`
 - `CleanProjectRpcParams`
+- `SearchExactQuery`
 - `SearchHeadRpcParams`
 - `SearchHeadRpcResult`
+- `SearchResponseMeta`
 - `SearchResultItem`
 - `SearchTarget`
 

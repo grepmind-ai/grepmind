@@ -41,6 +41,10 @@ export async function searchHeadCommand(args: ParsedArgs): Promise<void> {
   const limit = getOptionalIntegerFlagStrict(args, 'limit');
   const threshold = getOptionalNumberFlagStrict(args, 'threshold');
   const rerank = hasBooleanFlag(args, 'no-rerank') ? false : undefined;
+  const exactPattern = getStringFlag(args, 'exact');
+  const path = getStringFlag(args, 'path');
+  const glob = getStringFlag(args, 'glob');
+  const contextLines = getOptionalIntegerFlagStrict(args, 'context-lines');
 
   const result = await executeSocketPreferredCommand(args, {
     rpc: (client) =>
@@ -52,6 +56,18 @@ export async function searchHeadCommand(args: ParsedArgs): Promise<void> {
         limit,
         threshold,
         rerank,
+        exact: exactPattern
+          ? {
+              pattern: exactPattern,
+              regex: hasBooleanFlag(args, 'regex') ? true : undefined,
+              caseSensitive: hasBooleanFlag(args, 'case-sensitive')
+                ? true
+                : undefined,
+            }
+          : undefined,
+        path,
+        globs: glob ? [glob] : undefined,
+        contextLines,
       }),
   });
 
@@ -88,6 +104,24 @@ function formatSearchHeadTextOutput(result: SearchHeadRpcResult): string {
   lines.push(`revisionId: ${result.scope.revisionId}`);
   lines.push(`durationMs: ${result.meta.durationMs}`);
   lines.push(`totalResults: ${result.meta.totalResults}`);
+  if (result.meta.semanticResults != null) {
+    lines.push(`semanticResults: ${result.meta.semanticResults}`);
+  }
+  if (result.meta.rgResults != null) {
+    lines.push(`rgResults: ${result.meta.rgResults}`);
+  }
+  if (result.meta.rgSource) {
+    lines.push(`rgSource: ${result.meta.rgSource}`);
+  }
+  if (result.meta.rgTruncated != null) {
+    lines.push(`rgTruncated: ${String(result.meta.rgTruncated)}`);
+  }
+  if (result.meta.semanticWarning) {
+    lines.push(`semanticWarning: ${result.meta.semanticWarning}`);
+  }
+  if (result.meta.rgWarning) {
+    lines.push(`rgWarning: ${result.meta.rgWarning}`);
+  }
   lines.push('');
 
   return `${lines.join('\n')}\n`;

@@ -6,13 +6,25 @@ import type {
   SearchTarget,
 } from '../backend/contracts/index.js';
 import type { LocalProjectRecord } from '../db/schema.js';
+import type { SearchExactQuery } from '../runtime/rpc/protocol.js';
 import { ProjectRevisionAttachmentRepository } from '../repositories/project-revision-attachment-repository.js';
 import { LocalHeadService } from './local-head-service.js';
+import {
+  DEFAULT_RG_TIMEOUT_MS,
+  LocalRgSearchError,
+  LocalRgSearchService,
+  type LocalRgSearchResult,
+} from './local-rg-search-service.js';
 import type { ProjectRegistryService } from './project-registry-service.js';
+import { mergeSearchResults } from './search-result-merge.js';
 
 const DEFAULT_SEARCH_HEAD_TIMEOUT_MS = 30_000;
 const SEARCH_HEAD_REPAIR_TIMEOUT_RESERVE_MS = 5_000;
 const SEARCH_HEAD_REPAIR_POLL_INTERVAL_MS = 1_000;
+const DEFAULT_SEARCH_HEAD_LIMIT = 10;
+const DEFAULT_RG_CONTEXT_LINES = 2;
+const MAX_RG_CONTEXT_LINES = 10;
+const MIN_SEARCH_SIGNAL_BUDGET_MS = 500;
 
 export interface SearchHeadCommandInput {
   bindingId?: number;
@@ -23,6 +35,10 @@ export interface SearchHeadCommandInput {
   threshold?: number;
   rerank?: boolean;
   tags?: string[];
+  exact?: SearchExactQuery;
+  path?: string;
+  globs?: string[];
+  contextLines?: number;
 }
 
 export interface SearchHeadResult extends SearchResponsePayload {
@@ -54,6 +70,7 @@ export interface SearchHeadServiceOptions {
     ): Promise<SearchResponsePayload>;
   };
   localHeadService?: LocalHeadService;
+  localRgSearchService?: LocalRgSearchService;
 }
 
 export interface SearchHeadRepairExpectedHead {
@@ -144,20 +161,26 @@ export class SearchHeadChangedError extends Error {
 
 export class SearchHeadService {
   private readonly localHeadService: LocalHeadService;
+  private readonly localRgSearchService: LocalRgSearchService;
 
   constructor(private readonly options: SearchHeadServiceOptions) {
     this.localHeadService = options.localHeadService ?? new LocalHeadService();
+    this.localRgSearchService =
+      options.localRgSearchService ?? new LocalRgSearchService();
   }
 
   async searchByLocalHead(
     input: SearchHeadCommandInput,
     options: { timeoutMs?: number } = {},
   ): Promise<SearchHeadResult> {
+    const startedAt = Date.now();
     const query = normalizeQuery(input.query);
     const target = normalizeTarget(input.target);
+    const effectiveTarget = target ?? 'code';
     const limit = normalizeLimit(input.limit);
     const threshold = normalizeThreshold(input.threshold);
     const tags = normalizeTags(input.tags);
+    const contextLines = normalizeContextLines(input.contextLines);
     const project = await this.resolveProject(input);
     const observedHead = await this.localHeadService.readObservedHead(
       project.workspacePath,
@@ -177,31 +200,158 @@ export class SearchHeadService {
       options.timeoutMs,
     );
 
-    const response = await this.options.searchTransport.search(
-      {
-        requestId: randomUUID(),
-        bindingId: project.bindingId,
-        revisionId,
-        query,
-        target,
-        limit,
-        threshold,
-        rerank: input.rerank ?? true,
-        tags,
-      },
-      options,
-    );
+    const requestId = randomUUID();
+    const semanticPayload: SearchRequestPayload = {
+      requestId,
+      bindingId: project.bindingId,
+      revisionId,
+      query,
+      target,
+      limit,
+      threshold,
+      rerank: input.rerank ?? true,
+      tags,
+    };
+    if (input.exact == null) {
+      const response = await this.options.searchTransport.search(
+        semanticPayload,
+        options,
+      );
 
-    return {
-      ...response,
-      scope: {
+      return withScope(response, {
+        bindingId: project.bindingId,
+        workspacePath: project.workspacePath,
+        branch: observedHead.branch,
+        headCommitSha: observedHead.headCommitSha,
+        revisionId,
+      });
+    }
+
+    const rgSkippedWarning =
+      tags != null && tags.length > 0
+        ? 'Local exact rg search is skipped when docs tags are provided; tags are semantic metadata.'
+        : undefined;
+    const rgEligible = rgSkippedWarning == null;
+    const remainingMs = getRemainingSearchBudgetMs(startedAt, options.timeoutMs);
+    if (remainingMs < MIN_SEARCH_SIGNAL_BUDGET_MS) {
+      throw new Error(
+        'search-head timeout budget was exhausted before search could run for the resolved local HEAD',
+      );
+    }
+
+    const signalOptions = { timeoutMs: remainingMs };
+    const rgTimeoutMs = Math.min(DEFAULT_RG_TIMEOUT_MS, remainingMs);
+    const semanticPromise = guardSearchSignal(() =>
+      this.options.searchTransport.search(semanticPayload, signalOptions),
+    );
+    const rgPromise = rgEligible
+      ? guardSearchSignal(() =>
+          this.localRgSearchService.search({
+            workspacePath: project.workspacePath,
+            branch: observedHead.branch,
+            target: effectiveTarget,
+            exact: input.exact!,
+            path: input.path,
+            globs: input.globs,
+            contextLines,
+            limit: limit ?? DEFAULT_SEARCH_HEAD_LIMIT,
+            timeoutMs: rgTimeoutMs,
+          }),
+        )
+      : Promise.resolve<GuardedSearchSignal<LocalRgSearchResult> | null>(null);
+
+    const [semanticResult, rgResult] = await Promise.all([
+      semanticPromise,
+      rgPromise,
+    ]);
+
+    if (rgResult && !rgResult.ok && isFatalLocalRgError(rgResult.error)) {
+      throw rgResult.error;
+    }
+
+    const rgWarning = createRgWarning(rgResult, rgSkippedWarning);
+    const rgItems = rgResult?.ok ? rgResult.value.items : [];
+    const rgWasUsed = rgEligible && rgResult?.ok === true;
+
+    if (!semanticResult.ok) {
+      if (rgItems.length === 0) {
+        throw chooseSearchHeadError({
+          rgResult,
+          semanticError: semanticResult.error,
+        });
+      }
+
+      const items = rgItems.slice(0, limit ?? DEFAULT_SEARCH_HEAD_LIMIT);
+      return withScope(
+        {
+          requestId,
+          items,
+          meta: {
+            bindingId: project.bindingId,
+            revisionId,
+            durationMs: Date.now() - startedAt,
+            totalResults: items.length,
+            semanticResults: 0,
+            rgResults: rgResult?.ok ? rgResult.value.stats.matchCount : 0,
+            rgTruncated: rgResult?.ok
+              ? rgResult.value.stats.truncated
+              : undefined,
+            rgSource: rgWasUsed ? 'working_tree' : undefined,
+            rgWarning,
+            semanticWarning: createSearchWarning(semanticResult.error),
+          },
+        },
+        {
+          bindingId: project.bindingId,
+          workspacePath: project.workspacePath,
+          branch: observedHead.branch,
+          headCommitSha: observedHead.headCommitSha,
+          revisionId,
+        },
+      );
+    }
+
+    const mergedItems = mergeSearchResults({
+      semanticItems: semanticResult.value.items,
+      rgItems,
+      limit: limit ?? DEFAULT_SEARCH_HEAD_LIMIT,
+      contextLines,
+    });
+    if (
+      semanticResult.value.items.length === 0 &&
+      rgResult &&
+      !rgResult.ok &&
+      isExactSearchUserFixableError(rgResult.error)
+    ) {
+      throw createNoUsableExactSearchError(rgResult.error);
+    }
+
+    return withScope(
+      {
+        requestId: semanticResult.value.requestId,
+        items: mergedItems,
+        meta: {
+          bindingId: project.bindingId,
+          revisionId,
+          durationMs: Date.now() - startedAt,
+          totalResults: mergedItems.length,
+          semanticResults: semanticResult.value.items.length,
+          rgResults: rgResult?.ok ? rgResult.value.stats.matchCount : 0,
+          rgTruncated: rgResult?.ok
+            ? rgResult.value.stats.truncated
+            : undefined,
+          rgSource: rgWasUsed ? 'working_tree' : undefined,
+          rgWarning,
+        },
+      },
+      {
         bindingId: project.bindingId,
         workspacePath: project.workspacePath,
         branch: observedHead.branch,
         headCommitSha: observedHead.headCommitSha,
         revisionId,
       },
-    };
+    );
   }
 
   private async resolveRevisionForObservedHead(
@@ -332,6 +482,113 @@ export class SearchHeadService {
   }
 }
 
+type GuardedSearchSignal<T> =
+  | {
+      ok: true;
+      value: T;
+    }
+  | {
+      ok: false;
+      error: unknown;
+    };
+
+async function guardSearchSignal<T>(
+  task: () => Promise<T>,
+): Promise<GuardedSearchSignal<T>> {
+  try {
+    return {
+      ok: true,
+      value: await task(),
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      error,
+    };
+  }
+}
+
+function withScope(
+  response: SearchResponsePayload,
+  scope: SearchHeadResult['scope'],
+): SearchHeadResult {
+  return {
+    ...response,
+    scope,
+  };
+}
+
+function createRgWarning(
+  rgResult: GuardedSearchSignal<LocalRgSearchResult> | null,
+  skippedWarning: string | undefined,
+): string | undefined {
+  if (skippedWarning) {
+    return skippedWarning;
+  }
+  if (!rgResult) {
+    return undefined;
+  }
+  if (rgResult.ok) {
+    return rgResult.value.warning;
+  }
+
+  return createSearchWarning(rgResult.error);
+}
+
+function createSearchWarning(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function isFatalLocalRgError(error: unknown): boolean {
+  return (
+    error instanceof LocalRgSearchError &&
+    (error.code === 'RG_PATH_OUTSIDE_WORKSPACE' ||
+      error.code === 'RG_WORKSPACE_NOT_FOUND' ||
+      error.code === 'RG_INVALID_INPUT')
+  );
+}
+
+function chooseSearchHeadError(input: {
+  semanticError: unknown;
+  rgResult: GuardedSearchSignal<LocalRgSearchResult> | null;
+}): unknown {
+  if (input.rgResult && !input.rgResult.ok) {
+    if (isInvalidRegexError(input.rgResult.error)) {
+      return input.rgResult.error;
+    }
+  }
+
+  return input.semanticError;
+}
+
+function isInvalidRegexError(error: unknown): boolean {
+  return (
+    error instanceof LocalRgSearchError && error.code === 'RG_INVALID_REGEX'
+  );
+}
+
+function isExactSearchUserFixableError(error: unknown): boolean {
+  return (
+    error instanceof LocalRgSearchError &&
+    (error.code === 'RG_INVALID_REGEX' || error.code === 'RG_NOT_FOUND')
+  );
+}
+
+function createNoUsableExactSearchError(error: unknown): Error {
+  if (error instanceof LocalRgSearchError) {
+    if (error.code === 'RG_NOT_FOUND') {
+      return new LocalRgSearchError(
+        'RG_NOT_FOUND',
+        'Local exact code_search requires ripgrep (rg) in PATH because semantic search returned no usable results.',
+      );
+    }
+
+    return error;
+  }
+
+  return error instanceof Error ? error : new Error(String(error));
+}
+
 function normalizeQuery(query: string): string {
   const normalized = query.trim();
   if (!normalized) {
@@ -376,6 +633,23 @@ function normalizeThreshold(threshold: number | undefined): number | undefined {
   return threshold;
 }
 
+function normalizeContextLines(contextLines: number | undefined): number {
+  if (contextLines == null) {
+    return DEFAULT_RG_CONTEXT_LINES;
+  }
+  if (
+    !Number.isInteger(contextLines) ||
+    contextLines < 0 ||
+    contextLines > MAX_RG_CONTEXT_LINES
+  ) {
+    throw new Error(
+      `--context-lines must be an integer between 0 and ${MAX_RG_CONTEXT_LINES}`,
+    );
+  }
+
+  return contextLines;
+}
+
 function normalizeTags(tags: string[] | undefined): string[] | undefined {
   if (tags == null) {
     return undefined;
@@ -399,6 +673,14 @@ function createRepairDeadlineMs(timeoutMs: number | undefined): number {
     requestTimeoutMs - SEARCH_HEAD_REPAIR_TIMEOUT_RESERVE_MS,
   );
   return Date.now() + repairBudgetMs;
+}
+
+function getRemainingSearchBudgetMs(
+  startedAt: number,
+  timeoutMs: number | undefined,
+): number {
+  const requestTimeoutMs = timeoutMs ?? DEFAULT_SEARCH_HEAD_TIMEOUT_MS;
+  return Math.max(0, startedAt + requestTimeoutMs - Date.now());
 }
 
 async function delay(ms: number): Promise<void> {

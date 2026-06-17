@@ -2,9 +2,15 @@ import {
   AGENT_RUNTIME_PROTOCOL_VERSION,
   type AgentRpcMethod,
   type AgentRpcMethodMap,
+  type SearchExactQuery,
   type SearchTarget,
 } from '../rpc/protocol.js';
 import { AgentRpcRequestError } from './rpc-errors.js';
+
+const MAX_EXACT_PATTERN_LENGTH = 500;
+const MAX_GLOB_COUNT = 20;
+const MAX_GLOB_LENGTH = 200;
+const MAX_CONTEXT_LINES = 10;
 
 export function validateRequestId(requestId: unknown): void {
   if (typeof requestId !== 'string' || requestId.trim().length === 0) {
@@ -192,6 +198,15 @@ export function normalizeSearchHeadParams(
     threshold: optionalThreshold(record.threshold, 'threshold'),
     rerank: optionalBoolean(record.rerank, 'rerank'),
     tags: optionalStringArray(record.tags, 'tags'),
+    exact: optionalSearchExactQuery(record.exact, 'exact'),
+    path: optionalNonEmptyString(record.path, 'path'),
+    globs: optionalLimitedStringArray(
+      record.globs,
+      'globs',
+      MAX_GLOB_COUNT,
+      MAX_GLOB_LENGTH,
+    ),
+    contextLines: optionalContextLines(record.contextLines, 'contextLines'),
   };
 }
 
@@ -326,6 +341,29 @@ function optionalBoolean(value: unknown, label: string): boolean | undefined {
   return value;
 }
 
+function optionalContextLines(
+  value: unknown,
+  label: string,
+): number | undefined {
+  if (value == null) {
+    return undefined;
+  }
+  if (
+    typeof value !== 'number' ||
+    !Number.isInteger(value) ||
+    value < 0 ||
+    value > MAX_CONTEXT_LINES
+  ) {
+    throw new AgentRpcRequestError({
+      code: 'INVALID_REQUEST',
+      message: `${label} must be an integer between 0 and ${MAX_CONTEXT_LINES}`,
+      retryable: false,
+    });
+  }
+
+  return value;
+}
+
 function optionalSearchTarget(
   value: unknown,
   label: string,
@@ -392,4 +430,72 @@ function optionalStringArray(
     requiredNonEmptyString(entry, `${label}[${index}]`),
   );
   return [...new Set(normalized)];
+}
+
+function optionalLimitedStringArray(
+  value: unknown,
+  label: string,
+  maxCount: number,
+  maxLength: number,
+): string[] | undefined {
+  if (value == null) {
+    return undefined;
+  }
+  if (!Array.isArray(value)) {
+    throw new AgentRpcRequestError({
+      code: 'INVALID_REQUEST',
+      message: `${label} must be an array`,
+      retryable: false,
+    });
+  }
+  if (value.length > maxCount) {
+    throw new AgentRpcRequestError({
+      code: 'INVALID_REQUEST',
+      message: `${label} must contain at most ${maxCount} entries`,
+      retryable: false,
+    });
+  }
+
+  const normalized = value.map((entry, index) => {
+    const item = requiredNonEmptyString(entry, `${label}[${index}]`);
+    if (item.length > maxLength) {
+      throw new AgentRpcRequestError({
+        code: 'INVALID_REQUEST',
+        message: `${label}[${index}] must be at most ${maxLength} characters`,
+        retryable: false,
+      });
+    }
+
+    return item;
+  });
+
+  return [...new Set(normalized)];
+}
+
+function optionalSearchExactQuery(
+  value: unknown,
+  label: string,
+): SearchExactQuery | undefined {
+  if (value == null) {
+    return undefined;
+  }
+
+  const record = requireRecord(value, label);
+  const pattern = requiredNonEmptyString(record.pattern, `${label}.pattern`);
+  if (pattern.length > MAX_EXACT_PATTERN_LENGTH) {
+    throw new AgentRpcRequestError({
+      code: 'INVALID_REQUEST',
+      message: `${label}.pattern must be at most ${MAX_EXACT_PATTERN_LENGTH} characters`,
+      retryable: false,
+    });
+  }
+
+  return {
+    pattern,
+    regex: optionalBoolean(record.regex, `${label}.regex`),
+    caseSensitive: optionalBoolean(
+      record.caseSensitive,
+      `${label}.caseSensitive`,
+    ),
+  };
 }

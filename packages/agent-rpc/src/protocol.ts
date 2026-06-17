@@ -37,6 +37,10 @@ export interface AgentRuntimeMeta {
   token: string;
 }
 
+export interface AgentRuntimeCapabilities {
+  searchHeadExact?: boolean;
+}
+
 export interface AgentRuntimePingResult {
   protocolVersion: number;
   instanceId: string;
@@ -44,6 +48,7 @@ export interface AgentRuntimePingResult {
   pid: number;
   dataDir: string;
   runtimeLogPath?: string;
+  capabilities?: AgentRuntimeCapabilities;
 }
 
 export interface EmbeddingProfileDescriptor {
@@ -219,15 +224,29 @@ export interface SearchResultItem {
   tags: string[];
 }
 
+export interface SearchResponseMeta {
+  bindingId: number;
+  revisionId: number;
+  durationMs: number;
+  totalResults: number;
+  semanticResults?: number;
+  rgResults?: number;
+  rgTruncated?: boolean;
+  rgSource?: 'working_tree';
+  rgWarning?: string;
+  semanticWarning?: string;
+}
+
 export interface SearchResponsePayload {
   requestId: string;
   items: SearchResultItem[];
-  meta: {
-    bindingId: number;
-    revisionId: number;
-    durationMs: number;
-    totalResults: number;
-  };
+  meta: SearchResponseMeta;
+}
+
+export interface SearchExactQuery {
+  pattern: string;
+  regex?: boolean;
+  caseSensitive?: boolean;
 }
 
 export interface RegisterProjectRpcParams {
@@ -270,6 +289,10 @@ export interface SearchHeadRpcParams {
   threshold?: number;
   rerank?: boolean;
   tags?: string[];
+  exact?: SearchExactQuery;
+  path?: string;
+  globs?: string[];
+  contextLines?: number;
 }
 
 export interface SearchHeadRpcResult extends SearchResponsePayload {

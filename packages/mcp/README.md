@@ -83,19 +83,25 @@ Workspace registration happens only during startup. Tool calls do not choose rep
 
 ### `code_search`
 
-Finds code or documentation in the startup workspace by describing what it does in natural language.
+Finds code or documentation in the startup workspace. Use `query` to describe
+intent in natural language. When you know a concrete identifier, string, route,
+config key, error text, import path, function name, or regex anchor, add
+`exact.pattern` as an additional local signal.
 
 Input fields:
 
-| Field       | Type               | Description                                                       |
-| ----------- | ------------------ | ----------------------------------------------------------------- |
-| `query`     | `string`           | Natural-language search query.                                    |
-| `target`    | `"code" \| "docs"` | Optional target. Defaults to `code`.                              |
-| `limit`     | `number`           | Optional maximum result count. Defaults to `10`.                  |
-| `threshold` | `number`           | Optional similarity threshold from `0` to `1`. Defaults to `0.5`. |
-| `path`      | `string`           | Optional relative path prefix filter, such as `src/api`.          |
-| `tags`      | `string[]`         | Optional docs tag filter.                                         |
-| `compact`   | `boolean`          | Optional compact output without full previews.                    |
+| Field          | Type               | Description                                                       |
+| -------------- | ------------------ | ----------------------------------------------------------------- |
+| `query`        | `string`           | Natural-language search query.                                    |
+| `target`       | `"code" \| "docs"` | Optional target. Defaults to `code`.                              |
+| `limit`        | `number`           | Optional maximum result count. Defaults to `10`.                  |
+| `threshold`    | `number`           | Optional semantic threshold from `0` to `1`. Defaults to `0.5`.   |
+| `path`         | `string`           | Optional relative path prefix filter, such as `src/api`.          |
+| `tags`         | `string[]`         | Optional docs tag filter.                                         |
+| `exact`        | `object`           | Optional local exact search signal for `rg`: `pattern`, `regex`, `caseSensitive`. |
+| `globs`        | `string[]`         | Optional local `rg` glob scopes. Not raw `rg` flags.              |
+| `contextLines` | `number`           | Optional local `rg` context lines. Defaults to `2`, maximum `10`. |
+| `compact`      | `boolean`          | Optional compact output without full previews.                    |
 
 `workspacePath` is not accepted. The repository scope always comes from the server-side `bindingId` resolved during MCP startup.
 
@@ -103,12 +109,24 @@ Example tool input:
 
 ```json
 {
-  "query": "validate user input before saving settings",
+  "query": "where repository settings are validated before save",
+  "exact": {
+    "pattern": "safeParse|z\\.object|validate",
+    "regex": true
+  },
   "target": "code",
-  "limit": 5,
-  "path": "src"
+  "path": "packages/app/src",
+  "limit": 20
 }
 ```
+
+Exact search is handled by the local agent runtime with system `rg` after the
+current workspace HEAD has been resolved to an indexed revision. The backend
+receives the semantic query only; it does not receive `exact.pattern`, `globs`,
+local working tree context, or local `rg` matches. When `tags` are provided,
+local `rg` is skipped because tags are semantic/docs chunk metadata. Exact
+search is case-insensitive by default; set `exact.caseSensitive` to `true` for a
+case-sensitive local `rg` signal.
 
 ### `grepmind_agent_status`
 

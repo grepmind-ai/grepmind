@@ -6,6 +6,7 @@ import {
   SearchHeadNotReadyError,
   SearchHeadService,
 } from '../../services/search-head-service.js';
+import { LocalRgSearchError } from '../../services/local-rg-search-service.js';
 import {
   AgentRpcIdempotencyConflictError,
   AgentRpcIdempotencyStore,
@@ -266,6 +267,9 @@ export class AgentRuntimeRequestDispatcher {
       pid: meta.pid,
       dataDir: this.options.dataDir,
       runtimeLogPath: meta.runtimeLogPath,
+      capabilities: {
+        searchHeadExact: true,
+      },
     };
   }
 
@@ -387,6 +391,18 @@ export function toRpcError(error: unknown): AgentRpcError {
       message: error.message,
       retryable: error.retryable,
       details: error.details,
+    };
+  }
+  if (error instanceof LocalRgSearchError) {
+    return {
+      code: error.code,
+      message: error.message,
+      retryable: error.retryable,
+      details: error.stderrPreview
+        ? {
+            stderrPreview: error.stderrPreview,
+          }
+        : undefined,
     };
   }
   if (error instanceof Error) {
