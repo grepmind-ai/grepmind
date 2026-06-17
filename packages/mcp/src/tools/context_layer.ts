@@ -143,6 +143,7 @@ export async function contextLayerTool(
       dataDir: workspaceContext.dataDir,
       prompt,
       modelName: model.name,
+      modelSpeed: model.speed,
       modelThinking: model.thinking,
       timeoutMs,
       maxOutputBytes,

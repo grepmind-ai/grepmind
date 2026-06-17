@@ -19,7 +19,7 @@ export interface ResolvedContextLayerModel {
 }
 
 export const DEFAULT_CONTEXT_LAYER_MODEL_PROVIDER = 'codex';
-export const DEFAULT_CONTEXT_LAYER_CODEX_MODEL = 'fast';
+export const DEFAULT_CONTEXT_LAYER_CODEX_MODEL = 'gpt-5.5';
 export const DEFAULT_CONTEXT_LAYER_CODEX_THINKING = 'low';
 export const DEFAULT_CONTEXT_LAYER_CODEX_SPEED = 'fast';
 

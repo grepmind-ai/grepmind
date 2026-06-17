@@ -7,6 +7,7 @@ import { formatDiagnosticTail } from './context-layer-diagnostics.js';
 import { ContextLayerError } from './context-layer-errors.js';
 import {
   toCodexReasoningEffort,
+  type ContextLayerSpeed,
   type ContextLayerThinking,
 } from './context-layer-model-config.js';
 import {
@@ -29,6 +30,7 @@ export interface CodexSubagentRunInput {
   dataDir: string;
   prompt: string;
   modelName: string;
+  modelSpeed: ContextLayerSpeed;
   modelThinking: ContextLayerThinking;
   timeoutMs: number;
   maxOutputBytes: number;
@@ -56,6 +58,7 @@ export async function runCodexSubagent(
     workspacePath: input.workspacePath,
     outputPath,
     modelName: input.modelName,
+    modelSpeed: input.modelSpeed,
     modelThinking: input.modelThinking,
   });
   const processResult = await runCodexProcess({
@@ -158,9 +161,10 @@ export function buildCodexExecArgs(input: {
   workspacePath: string;
   outputPath: string;
   modelName: string;
+  modelSpeed: ContextLayerSpeed;
   modelThinking: ContextLayerThinking;
 }): string[] {
-  return [
+  const args = [
     '--ask-for-approval',
     'never',
     'exec',
@@ -172,6 +176,10 @@ export function buildCodexExecArgs(input: {
     `model_reasoning_effort=${JSON.stringify(
       toCodexReasoningEffort(input.modelThinking),
     )}`,
+    '--config',
+    `service_tier=${JSON.stringify(input.modelSpeed)}`,
+    '--config',
+    'features.fast_mode=true',
     '--cd',
     input.workspacePath,
     '--sandbox',
@@ -183,6 +191,8 @@ export function buildCodexExecArgs(input: {
     input.outputPath,
     '-',
   ];
+
+  return args;
 }
 
 async function createRunDir(dataDir: string): Promise<string> {
