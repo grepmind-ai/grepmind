@@ -5,6 +5,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { startMcpRuntimePreparation } from './runtime-context.js';
 import { agentStatusSchema, agentStatusTool } from './tools/agent_status.js';
 import { codeSearchSchema, codeSearchTool } from './tools/code_search.js';
+import { contextLayerSchema, contextLayerTool } from './tools/context_layer.js';
 import { parseMcpCliArgs, resolveWorkspaceRoot } from './workspace.js';
 
 async function main(): Promise<void> {
@@ -17,7 +18,7 @@ async function main(): Promise<void> {
     'code_search',
     {
       description:
-        'Code search — find code by describing what it does in natural language',
+        'Code and docs search over the current workspace. Describe intent in query. Optionally add exact.pattern for identifiers, strings, routes, config keys, error text, imports, or regex anchors that should appear in relevant files.',
       inputSchema: codeSearchSchema,
     },
     codeSearchTool,
@@ -32,6 +33,18 @@ async function main(): Promise<void> {
     },
     agentStatusTool,
   );
+
+  if (process.env.GREPMIND_CONTEXT_LAYER_SUBAGENT !== '1') {
+    server.registerTool(
+      'context_layer',
+      {
+        description:
+          'Prepare a read-only multi-file and multi-doc context_pack for a coding agent using Grepmind code_search and a Codex CLI subagent. Use code_search for fast targeted semantic or exact search; use context_layer for architecture traces, cross-file flows, risks, and suggested next edits before complex changes.',
+        inputSchema: contextLayerSchema,
+      },
+      contextLayerTool,
+    );
+  }
 
   parseMcpCliArgs(process.argv.slice(2));
   const workspacePath = await resolveWorkspaceRoot();

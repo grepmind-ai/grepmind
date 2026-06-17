@@ -33,6 +33,8 @@ Grepmind helps agents:
 
 - **Semantic code search:** find relevant code and docs from natural-language
   queries.
+- **Context packs:** prepare read-only multi-file and multi-doc maps for coding
+  agents before complex edits.
 - **Continuous codebase sync:** keep local search context aligned with fresh
   commits and active branches.
 - **Project-local MCP:** bind each agent session to the Git workspace it starts
@@ -96,6 +98,9 @@ After setup, ask your coding agent to use Grepmind explicitly:
 Use Grepmind code_search to find where user input is validated before saving
 settings. Return the files and line ranges before proposing a code change.
 ```
+
+When you know a concrete identifier or string, ask the agent to include it as
+`exact.pattern` so Grepmind can combine semantic search with local `rg` matches.
 
 ## Install
 

@@ -66,15 +66,23 @@ export interface SearchRequestPayload {
   tags?: string[];
 }
 
+export interface SearchResponseMeta {
+  bindingId: number;
+  revisionId: number;
+  durationMs: number;
+  totalResults: number;
+  semanticResults?: number;
+  rgResults?: number;
+  rgTruncated?: boolean;
+  rgSource?: 'working_tree';
+  rgWarning?: string;
+  semanticWarning?: string;
+}
+
 export interface SearchResponsePayload {
   requestId: string;
   items: SearchResultItem[];
-  meta: {
-    bindingId: number;
-    revisionId: number;
-    durationMs: number;
-    totalResults: number;
-  };
+  meta: SearchResponseMeta;
 }
 
 export interface SearchErrorPayload {

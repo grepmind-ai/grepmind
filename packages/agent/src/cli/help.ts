@@ -21,7 +21,7 @@ export function printHelp(): void {
       '  projects [--data-dir <dir>]',
       '  sync [--binding-id <id>] [--data-dir <dir>]',
       '  status|state [--binding-id <id>] [--branch <branch>] [--commit-sha <sha>] [--limit <n>] [--data-dir <dir>]',
-      '  search-head --query <text> [--binding-id <id>] [--workspace <path>] [--target code|docs] [--limit <n>] [--threshold <0-1>] [--no-rerank] [--json] [--data-dir <dir>]',
+      '  search-head --query <text> [--binding-id <id>] [--workspace <path>] [--target code|docs] [--limit <n>] [--threshold <0-1>] [--exact <pattern>] [--regex] [--case-sensitive] [--path <path>] [--glob <glob>] [--context-lines <n>] [--no-rerank] [--json] [--data-dir <dir>]',
       '  unbind|remove --binding-id <id> [--data-dir <dir>]',
       '  clean --workspace <path> [--data-dir <dir>]',
       '  clean --all|-a [--data-dir <dir>]',

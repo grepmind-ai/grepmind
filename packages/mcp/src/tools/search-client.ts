@@ -2,6 +2,8 @@ import path from 'node:path';
 import {
   AgentRuntimeClientError,
   isRuntimeUnavailableError,
+  type AgentRuntimeClient,
+  type SearchExactQuery,
   type SearchHeadRpcResult,
   type SearchResultItem,
 } from '@grepmind/agent-rpc';
@@ -30,12 +32,30 @@ export interface SearchResult {
 
 export interface SearchResponse {
   results: SearchResult[];
+  meta: RuntimeSearchMeta;
+}
+
+export interface RuntimeSearchMeta {
+  semanticResults?: number;
+  rgResults?: number;
+  rgTruncated?: boolean;
+  rgSource?: 'working_tree';
+  rgWarning?: string;
+  semanticWarning?: string;
+  totalResults?: number;
+  durationMs?: number;
 }
 
 export interface ResponseMeta {
   tokens_approx: number;
   truncated?: boolean;
   returned_results?: number;
+  semantic_results?: number;
+  rg_results?: number;
+  rg_truncated?: boolean;
+  rg_source?: 'working_tree';
+  rg_warning?: string;
+  semantic_warning?: string;
   [key: string]: unknown;
 }
 
@@ -48,24 +68,27 @@ const FILTER_OVERFETCH_MULTIPLIER = 5;
 const MIN_FILTER_OVERFETCH_LIMIT = 50;
 const MAX_FILTER_OVERFETCH_LIMIT = 200;
 
+let searchHeadExactCapabilityPromise: Promise<boolean> | null = null;
+
 export async function searchCode(params: {
   query: string;
-  mode: 'semantic' | 'text';
   target?: 'code' | 'docs';
   limit?: number;
   threshold?: number;
   path?: string;
   tags?: string[];
+  exact?: SearchExactQuery;
+  globs?: string[];
+  contextLines?: number;
 }): Promise<SearchResponse> {
-  if (params.mode !== 'semantic') {
-    throw new Error(
-      'Local agent MCP search supports semantic mode only. Use code_search.',
-    );
-  }
-
   const workspaceContext = getMcpWorkspaceContext();
 
   try {
+    const client = getReadyAgentRuntimeClient();
+    if (params.exact != null) {
+      await requireSearchHeadExactCapability(client);
+    }
+
     const requestedLimit = params.limit ?? DEFAULT_SEARCH_LIMIT;
     const searchLimit = shouldOverfetch(params)
       ? Math.min(
@@ -76,7 +99,7 @@ export async function searchCode(params: {
           MAX_FILTER_OVERFETCH_LIMIT,
         )
       : requestedLimit;
-    const response = await getReadyAgentRuntimeClient().searchHead({
+    const response = await client.searchHead({
       bindingId: workspaceContext.bindingId,
       query: params.query,
       target: params.target ?? 'code',
@@ -84,6 +107,10 @@ export async function searchCode(params: {
       threshold: params.threshold,
       rerank: true,
       tags: normalizeTags(params.tags),
+      exact: params.exact,
+      path: params.path,
+      globs: params.globs,
+      contextLines: params.contextLines,
     });
 
     return toSearchResponse(response, {
@@ -93,6 +120,34 @@ export async function searchCode(params: {
     });
   } catch (error) {
     throw normalizeAgentSearchError(error, workspaceContext);
+  }
+}
+
+async function requireSearchHeadExactCapability(
+  client: AgentRuntimeClient,
+): Promise<void> {
+  if (!searchHeadExactCapabilityPromise) {
+    searchHeadExactCapabilityPromise = client
+      .ping()
+      .then((result) => {
+        const supported = result.capabilities?.searchHeadExact === true;
+        if (!supported) {
+          searchHeadExactCapabilityPromise = null;
+        }
+
+        return supported;
+      })
+      .catch((error) => {
+        searchHeadExactCapabilityPromise = null;
+        throw error;
+      });
+  }
+
+  const supported = await searchHeadExactCapabilityPromise;
+  if (!supported) {
+    throw new Error(
+      'This Grepmind agent runtime does not support exact code_search. Restart or upgrade the Grepmind agent runtime, then retry.',
+    );
   }
 }
 
@@ -110,6 +165,16 @@ function toSearchResponse(
       .filter((item) => matchesTagsFilter(item, filters.tags))
       .slice(0, filters.limit)
       .map(toSearchResult),
+    meta: {
+      semanticResults: response.meta.semanticResults,
+      rgResults: response.meta.rgResults,
+      rgTruncated: response.meta.rgTruncated,
+      rgSource: response.meta.rgSource,
+      rgWarning: response.meta.rgWarning,
+      semanticWarning: response.meta.semanticWarning,
+      totalResults: response.meta.totalResults,
+      durationMs: response.meta.durationMs,
+    },
   };
 }
 
