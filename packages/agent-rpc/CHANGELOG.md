@@ -1,5 +1,11 @@
 # @grepmind/agent-rpc
 
+## 0.3.0
+
+### Minor Changes
+
+- ee2a8d2: Add exact local rg search to code_search and introduce Codex-powered context_layer context packs
+
 ## 0.2.4
 
 ### Patch Changes
