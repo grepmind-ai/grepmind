@@ -1,5 +1,17 @@
 # @grepmind/mcp
 
+## 0.2.0
+
+### Minor Changes
+
+- ee2a8d2: Add exact local rg search to code_search and introduce Codex-powered context_layer context packs
+
+### Patch Changes
+
+- Updated dependencies [ee2a8d2]
+  - @grepmind/agent-rpc@0.3.0
+  - @grepmind/agent@0.2.0
+
 ## 0.1.11
 
 ### Patch Changes
