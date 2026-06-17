@@ -141,9 +141,9 @@ case-sensitive local `rg` signal.
 
 Runs a read-only Codex CLI subagent in the startup workspace and asks it to
 prepare a markdown `context_pack`. The subagent can call Grepmind `code_search`
-itself, inspect local files with read-only commands such as `rg`, `sed`, and
-`nl`, and then return a curated map of code, docs, flow, evidence, risks, and
-suggested next edits.
+itself, including optional exact local `rg` signal through `exact`, `globs`, and
+`contextLines`, and then return a curated map of code, docs, flow, evidence,
+risks, and suggested edit surfaces.
 
 `context_layer` is not a search mode and does not run `code_search` before the
 subagent starts. Retrieval remains inside the subagent's reasoning loop.
@@ -189,12 +189,6 @@ Expected output headings:
 ## Docs Context
 
 ## Flow
-
-## Evidence
-
-## Risks And Gaps
-
-## Suggested Next Edits
 ```
 
 Requirements and safety:
@@ -211,11 +205,15 @@ Requirements and safety:
   `--ask-for-approval never`, and `GREPMIND_CONTEXT_LAYER_SUBAGENT=1`.
 - `context_layer` is hidden inside a context-layer subagent process, while
   `code_search` remains available.
-- The subagent is instructed not to edit files, run tests, run `tsc`, install
-  dependencies, start dev servers, kill processes, or run destructive git
-  operations.
+- The subagent is instructed to use only `code_search` for repository research,
+  not direct shell/filesystem inspection, and not to edit files, run tests, run
+  `tsc`, install dependencies, start dev servers, kill processes, or run
+  destructive git operations.
 - The returned `context_pack` is validated before the MCP response is sent. It
   must contain exactly the documented headings in order, with non-empty sections.
+  Evidence snippets from `code_search` are embedded in the relevant sections
+  instead of a separate heading. Gaps and suggested edit surfaces are embedded
+  beside the related code, docs, or flow items.
 
 If `model.provider` is `claude`, the tool returns
 `CLAUDE_RUNTIME_NOT_IMPLEMENTED` until a Claude runtime is implemented.

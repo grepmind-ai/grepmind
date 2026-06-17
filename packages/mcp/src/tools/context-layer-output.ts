@@ -10,9 +10,6 @@ export const REQUIRED_CONTEXT_PACK_HEADINGS = [
   '## Code Context',
   '## Docs Context',
   '## Flow',
-  '## Evidence',
-  '## Risks And Gaps',
-  '## Suggested Next Edits',
 ] as const;
 
 type RequiredContextPackHeading =
@@ -72,9 +69,6 @@ export function summarizeContextPackForLimit(input: {
     ['## Code Context', 3],
     ['## Docs Context', 2],
     ['## Flow', 2],
-    ['## Evidence', 3],
-    ['## Risks And Gaps', 2],
-    ['## Suggested Next Edits', 2],
   ]);
   const renderOverhead = byteLength(
     renderContextPack(
@@ -131,6 +125,13 @@ function parseContextPackMarkdown(
       `Codex context_layer subagent returned an empty output message. ${formatDiagnosticTail(options?.stderrTail)}`,
       { runtimeDurationMs: options?.runtimeDurationMs },
     );
+  }
+
+  const subagentError = parseSubagentError(text);
+  if (subagentError) {
+    throw new ContextLayerError(subagentError.code, subagentError.message, {
+      runtimeDurationMs: options?.runtimeDurationMs,
+    });
   }
 
   const lines = text.split('\n');
@@ -237,6 +238,26 @@ function collectMarkdownHeadings(lines: string[]): Array<{
   }
 
   return headings;
+}
+
+function parseSubagentError(text: string): {
+  code: 'CODE_SEARCH_UNAVAILABLE';
+  message: string;
+} | null {
+  const lines = text
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (lines[0] !== 'ERROR: CODE_SEARCH_UNAVAILABLE') {
+    return null;
+  }
+
+  return {
+    code: 'CODE_SEARCH_UNAVAILABLE',
+    message:
+      lines.slice(1).join(' ').trim() ||
+      'Grepmind code_search is unavailable or index is not ready.',
+  };
 }
 
 function requireContextPackHeading(

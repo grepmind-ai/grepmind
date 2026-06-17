@@ -6,6 +6,7 @@ export type ContextLayerErrorCode =
   | 'CODEX_SUBAGENT_FAILED'
   | 'CODEX_SUBAGENT_EMPTY_OUTPUT'
   | 'CODEX_SUBAGENT_OUTPUT_TOO_LARGE'
+  | 'CODE_SEARCH_UNAVAILABLE'
   | 'CONTEXT_LAYER_RECURSION_BLOCKED';
 
 export class ContextLayerError extends Error {
