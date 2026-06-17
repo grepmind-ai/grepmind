@@ -43,6 +43,12 @@ export const codeSearchSchema = z
       .max(1)
       .optional()
       .describe('Min semantic score 0-1 (default: 0.5). Lower = more results'),
+    rerank: z
+      .boolean()
+      .optional()
+      .describe(
+        'Whether to rerank semantic search results. Default false; enable only when reranked ordering is explicitly useful.',
+      ),
     path: z
       .string()
       .optional()
@@ -156,6 +162,7 @@ export async function codeSearchTool(input: CodeSearchInput): Promise<{
       target: input.target,
       limit: input.limit ?? DEFAULT_SEARCH_LIMIT,
       threshold: input.threshold ?? 0.5,
+      rerank: input.rerank ?? false,
       path: input.path,
       tags: input.tags,
       exact: input.exact,

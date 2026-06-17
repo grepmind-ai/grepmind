@@ -109,6 +109,7 @@ Input fields:
 | `target`       | `"code" \| "docs"` | Optional target. Defaults to `code`.                                              |
 | `limit`        | `number`           | Optional maximum result count. Defaults to `10`.                                  |
 | `threshold`    | `number`           | Optional semantic threshold from `0` to `1`. Defaults to `0.5`.                   |
+| `rerank`       | `boolean`          | Optional semantic reranking. Defaults to `false`.                                 |
 | `path`         | `string`           | Optional relative path prefix filter, such as `src/api`.                          |
 | `tags`         | `string[]`         | Optional docs tag filter.                                                         |
 | `exact`        | `object`           | Optional local exact search signal for `rg`: `pattern`, `regex`, `caseSensitive`. |

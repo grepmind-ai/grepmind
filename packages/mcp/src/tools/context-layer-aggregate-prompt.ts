@@ -39,6 +39,7 @@ Repository rules:
 - Do not start dev servers.
 - Do not kill processes.
 - Use only the provided search hits and file summaries unless a small targeted Grepmind code_search call is necessary to verify a key missing anchor.
+- Do not set code_search.rerank unless reranked ordering is necessary for a specific follow-up search; the default must remain disabled.
 - Do not run shell commands or direct filesystem inspection commands such as rg, grep, sed, nl, cat, find, ls, or git.
 - Do not call context_layer or any other recursive context_layer tool.
 - Do not solve the coding task. Prepare context only.

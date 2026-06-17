@@ -75,6 +75,7 @@ export async function searchCode(params: {
   target?: 'code' | 'docs';
   limit?: number;
   threshold?: number;
+  rerank?: boolean;
   path?: string;
   tags?: string[];
   exact?: SearchExactQuery;
@@ -105,7 +106,7 @@ export async function searchCode(params: {
       target: params.target ?? 'code',
       limit: searchLimit,
       threshold: params.threshold,
-      rerank: true,
+      rerank: params.rerank ?? false,
       tags: normalizeTags(params.tags),
       exact: params.exact,
       path: params.path,

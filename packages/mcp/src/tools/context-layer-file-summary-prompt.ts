@@ -25,6 +25,7 @@ Repository rules:
 - Do not start dev servers.
 - Do not kill processes.
 - Use only Grepmind code_search for repository research. Do not use any other MCP tool.
+- Do not set code_search.rerank unless reranked ordering is necessary for a specific follow-up search; the default must remain disabled.
 - Do not run shell commands or direct filesystem inspection commands such as rg, grep, sed, nl, cat, find, ls, or git.
 - Do not call context_layer or any other recursive context_layer tool.
 - Do not solve the coding task. Prepare context only.
