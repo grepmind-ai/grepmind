@@ -7,6 +7,7 @@ import { ContextLayerError } from './context-layer-errors.js';
 export const REQUIRED_CONTEXT_PACK_HEADINGS = [
   '# context_pack',
   '## Answer',
+  '## Evidence Quality',
   '## Code Context',
   '## Docs Context',
   '## Flow',
@@ -65,6 +66,7 @@ export function summarizeContextPackForLimit(input: {
   );
   const weights = new Map<RequiredContextPackHeading, number>([
     ['## Answer', 1],
+    ['## Evidence Quality', 2],
     ['## Code Context', 3],
     ['## Docs Context', 2],
     ['## Flow', 2],
@@ -197,8 +199,50 @@ function parseContextPackMarkdown(
       );
     }
   }
+  validateEvidenceQuality(sections, options);
 
   return { sections };
+}
+
+function validateEvidenceQuality(
+  sections: ParsedContextPackSection[],
+  options?: { runtimeDurationMs?: number; stderrTail?: string },
+): void {
+  const evidence = sections.find(
+    (section) => section.heading === '## Evidence Quality',
+  );
+  if (evidence == null) {
+    throwMalformedContextPack(
+      'missing required "## Evidence Quality" section',
+      options,
+    );
+  }
+
+  const requiredLabels = [
+    'Proven anchors:',
+    'Inferences:',
+    'Gaps:',
+    'Failed or truncated summaries:',
+  ];
+  for (const label of requiredLabels) {
+    if (!evidence.content.includes(label)) {
+      throwMalformedContextPack(
+        `Evidence Quality must include "${label}"`,
+        options,
+      );
+    }
+  }
+
+  const hasConfidence =
+    /(^|\n)\s*-?\s*Confidence:\s*(high|medium|low)\b/im.test(
+      evidence.content,
+    );
+  if (!hasConfidence) {
+    throwMalformedContextPack(
+      'Evidence Quality must include "Confidence: high|medium|low"',
+      options,
+    );
+  }
 }
 
 function collectMarkdownHeadings(lines: string[]): Array<{

@@ -16,35 +16,31 @@ export interface ContextLayerAggregatePromptInput {
   query: string;
   originalQuery?: string;
   refinerAssumptions?: string[];
-  maxFiles: number;
-  maxSearchCalls: number;
   focus: ContextLayerFocus;
   searchResults: SearchResult[];
   docsResults: SearchResult[];
   fileSummaries: ContextLayerFileSummaryRecord[];
+  exactPatterns: string[];
+  searchWarnings: string[];
 }
 
 export function buildContextLayerAggregatePrompt(
   input: ContextLayerAggregatePromptInput,
 ): string {
-  return `You are a senior read-only context aggregation subagent for Grepmind.
+  return `You are a senior context aggregation subagent for Grepmind.
 
 Goal:
 Prepare one repository-level context_pack for the main coding agent by
 aggregating primary code_search hits and per-file summaries.
 
-Repository rules:
-- Do not edit files.
-- Do not run test, tsc, install, git reset, git push, git checkout, git rebase.
-- Do not start dev servers.
-- Do not kill processes.
-- Use only the provided search hits and file summaries unless a small targeted Grepmind code_search call is necessary to verify a key missing anchor.
-- Do not set code_search.rerank unless reranked ordering is necessary for a specific follow-up search; the default must remain disabled.
-- Do not run shell commands or direct filesystem inspection commands such as rg, grep, sed, nl, cat, find, ls, or git.
-- Do not call context_layer or any other recursive context_layer tool.
-- Do not solve the coding task. Prepare context only.
+Instruction:
+- Prepare context for the main coding agent.
+- Use the provided search hits and file summaries as the primary evidence.
+- Use a small targeted Grepmind code_search call when a key missing anchor needs verification.
 - Mark inference explicitly when a relationship is inferred rather than directly proven.
-- If a file summary failed or timed out, include that as a gap instead of pretending the file was inspected.
+- Include failed, timed-out, or truncated file summaries as gaps.
+- Put likely/probably/appears-to style claims in an "Inferences:" line.
+- Use medium or low confidence when important failed, timed-out, or truncated summaries remain unresolved.
 
 Workspace:
 ${input.workspacePath}
@@ -52,9 +48,9 @@ ${input.workspacePath}
 Focus:
 ${input.focus}
 
-Limits:
-- Max files covered deeply: ${input.maxFiles}.
-- Original max code_search calls budget: ${input.maxSearchCalls}.
+Search context:
+- Handler exact search patterns: ${formatExactPatterns(input.exactPatterns)}
+- Handler search warnings: ${formatSearchWarnings(input.searchWarnings)}
 
 Refined user query:
 ${input.query}
@@ -71,37 +67,56 @@ ${formatSearchResults(input.searchResults)}
 Docs code_search hits:
 ${formatSearchResults(input.docsResults)}
 
+Critical missing or low-confidence coverage:
+${formatCriticalCoverage(input.fileSummaries)}
+
 Per-file summaries:
 ${formatFileSummaries(input.fileSummaries)}
 
 Aggregation protocol:
 1. Answer the user's actual question in Answer.
-2. Prefer Required Snippets and line anchors from successful relevant file summaries.
-3. Treat summaries marked "relevant: no" as weak matches: mention them only when their exclusion is important.
-4. Use primary search hits to preserve original score/order and to mention relevant weak or failed files as gaps.
-5. Deduplicate repeated facts and repeated paths.
-6. Include docs context only if Docs code_search hits prove docs. Otherwise write exactly "No relevant docs found".
-7. Every important claim should have a nearby file:line anchor or be marked "Inference:".
-8. Failed or timed-out file summaries are not fatal, but their missing coverage must be visible where relevant.
+2. Before finalizing, identify the top 1-3 claims that determine the answer. For each claim without direct file:line support, run one targeted Grepmind code_search with exact.pattern, path, and contextLines when it would verify a key missing anchor. Move unverified claims to Inferences or Gaps.
+3. Prefer Required Snippets and line anchors from successful relevant file summaries.
+4. Treat summaries marked "relevant: no" as weak matches: mention them only when their exclusion is important.
+5. Use primary search hits to preserve original score/order and to mention relevant weak, failed, timed-out, or truncated files as gaps.
+6. Deduplicate repeated facts and repeated paths.
+7. Include docs context only if Docs code_search hits prove docs. Otherwise write exactly "No relevant docs found".
+8. Every important claim must have a nearby file:line anchor or be marked "Inference:".
+9. Failed, timed-out, or truncated file summaries are not fatal, but their missing coverage must be visible in Evidence Quality when relevant.
 
 Required output:
 Normal successful research must return a context_pack.
 
 Return markdown with exactly these headings, in exactly this order.
-Do not include prose before "# context_pack".
-Do not include prose between "# context_pack" and "## Answer".
-Do not add any other markdown headings.
+Start with "# context_pack".
+Place "## Answer" immediately after "# context_pack".
+Use only the listed headings.
 Every section must contain concise content.
-Use bullets and numbered lists inside sections. Do not use markdown headings inside sections.
+Use bullets and numbered lists inside sections.
 
 # context_pack
 
 ## Answer
 
-Compact but complete answer to the user query. Include the main mechanism, the
-important files or symbols, the confidence level, and meaningful gaps. Do not
-be terse: use enough detail that the main agent can understand the result
-without rereading Code Context first, but avoid repeating every snippet.
+Compact but complete answer to the user query. Use these labels inside the
+section:
+- Proven: claims backed by nearby file:line anchors.
+- Inferences: relationships that are reasoned from anchors but not directly
+  proven, or "None."
+- Gaps: missing files, failed summaries, unclear call paths, or "None."
+
+Use enough detail that the main agent can understand the result without
+rereading Code Context first, while avoiding repeated snippets.
+
+## Evidence Quality
+
+- Proven anchors: concise count/list of the strongest file:line anchors.
+- Inferences: concise list or "None."
+- Gaps: missing or unverified coverage, especially failed/timed-out/truncated summaries.
+- Failed or truncated summaries: list path and reason, or "None."
+- Confidence: high|medium|low; one sentence explaining why. Confidence must be
+  "medium" or "low" when important failed/timed-out/truncated summaries remain
+  unresolved.
 
 ## Code Context
 
@@ -179,4 +194,48 @@ function formatRefinerAssumptions(assumptions: string[] | undefined): string {
     return '- None.';
   }
   return assumptions.map((assumption) => `- ${assumption}`).join('\n');
+}
+
+function formatExactPatterns(patterns: string[]): string {
+  if (patterns.length === 0) {
+    return 'None.';
+  }
+  return patterns.map((pattern) => `\`${pattern}\``).join(', ');
+}
+
+function formatSearchWarnings(warnings: string[]): string {
+  if (warnings.length === 0) {
+    return 'None.';
+  }
+  return warnings.map((warning) => `- ${warning}`).join('\n');
+}
+
+function formatCriticalCoverage(
+  summaries: ContextLayerFileSummaryRecord[],
+): string {
+  const risky = summaries
+    .filter(
+      (summary) =>
+        summary.summaryMarkdown == null ||
+        summary.truncated === true ||
+        summary.timeout === true,
+    )
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 10);
+
+  if (risky.length === 0) {
+    return '- None.';
+  }
+
+  return risky
+    .map((summary) => {
+      const reason =
+        summary.summaryMarkdown == null
+          ? summary.timeout === true
+            ? 'timeout'
+            : `failed: ${summary.error ?? 'unknown error'}`
+          : 'truncated';
+      return `- \`${summary.path}\` score=${summary.score.toFixed(2)}; ${reason}`;
+    })
+    .join('\n');
 }

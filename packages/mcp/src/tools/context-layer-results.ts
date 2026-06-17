@@ -21,6 +21,10 @@ export interface ContextLayerSuccessResult {
     model_thinking: ContextLayerThinking;
     model_speed: ContextLayerSpeed;
     max_search_calls: number;
+    handler_search_calls: number;
+    remaining_search_calls: number;
+    handler_exact_patterns: string[];
+    handler_search_warnings: string[];
     context_pack_path?: string;
     prompt_refiner_runtime_duration_ms: number;
     research_runtime_duration_ms: number;

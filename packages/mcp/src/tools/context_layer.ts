@@ -48,7 +48,7 @@ import type {
   PromptRefinerOutput,
   PromptRefinerQuestion,
 } from './prompt-refiner-output.js';
-import { searchCode } from './search-client.js';
+import { searchCode, type SearchResult } from './search-client.js';
 
 export const DEFAULT_MAX_FILES = 30;
 export const DEFAULT_MAX_SEARCH_CALLS = 8;
@@ -67,7 +67,6 @@ export const contextLayerSchema = z
       })
       .strict()
       .optional(),
-    maxFiles: z.number().int().min(1).max(80).optional(),
     maxSearchCalls: z.number().int().min(1).max(20).optional(),
     focus: z
       .enum(['implementation', 'debugging', 'architecture', 'review'])
@@ -100,6 +99,15 @@ interface RefinementState {
   previousRefinedQueryDraft?: string;
   previousQuestions?: PromptRefinerQuestion[];
   agentAnswers?: RefinementAgentAnswer[];
+}
+
+interface ContextLayerSearchPlan {
+  codeResults: SearchResult[];
+  docsResults: SearchResult[];
+  handlerSearchCalls: number;
+  remainingSearchCalls: number;
+  exactPatterns: string[];
+  warnings: string[];
 }
 
 export async function contextLayerTool(
@@ -190,9 +198,6 @@ export async function contextLayerTool(
       previousRefinedQueryDraft: refinementState.previousRefinedQueryDraft,
       previousQuestions: refinementState.previousQuestions,
       agentAnswers: refinementState.agentAnswers,
-      focus: refinementState.focus,
-      maxFiles: refinementState.maxFiles,
-      maxSearchCalls: refinementState.maxSearchCalls,
       timeoutMs: refinerTimeoutMs,
     });
     promptRefinerRuntimeDurationMs = refiner.runtimeDurationMs;
@@ -237,18 +242,13 @@ export async function contextLayerTool(
     const fileTimeoutMs = resolveContextLayerFileTimeoutMs();
     const fileMaxOutputBytes = resolveContextLayerFileMaxOutputBytes();
     const fanoutConcurrency = resolveContextLayerFanoutConcurrency();
-    const primarySearchResults = await searchCodeForContextLayer({
+    const searchPlan = await prepareContextLayerSearch({
       query: refiner.output.refinedQuery,
-      target: 'code',
-      limit: Math.min(refinementState.maxFiles * 3, 100),
-    });
-    const docsSearchResults = await searchCodeForContextLayer({
-      query: refiner.output.refinedQuery,
-      target: 'docs',
-      limit: Math.min(refinementState.maxFiles, 20),
+      maxFiles: refinementState.maxFiles,
+      maxSearchCalls: refinementState.maxSearchCalls,
     });
     const fanoutTargets = buildFanoutTargets({
-      results: primarySearchResults,
+      results: searchPlan.codeResults,
       maxFiles: refinementState.maxFiles,
     });
     const fanout = await runContextLayerFileSummaryFanout({
@@ -270,12 +270,12 @@ export async function contextLayerTool(
       query: refiner.output.refinedQuery,
       originalQuery: refinementState.originalQuery,
       refinerAssumptions: refiner.output.assumptions,
-      maxFiles: refinementState.maxFiles,
-      maxSearchCalls: refinementState.maxSearchCalls,
       focus: refinementState.focus,
-      searchResults: primarySearchResults,
-      docsResults: docsSearchResults,
+      searchResults: searchPlan.codeResults,
+      docsResults: searchPlan.docsResults,
       fileSummaries: fanout.summaries,
+      exactPatterns: searchPlan.exactPatterns,
+      searchWarnings: searchPlan.warnings,
     });
 
     incrementContextLayerCounter('context_layer_aggregation_started', {
@@ -316,6 +316,10 @@ export async function contextLayerTool(
         model_thinking: refinementState.model.thinking,
         model_speed: refinementState.model.speed,
         max_search_calls: refinementState.maxSearchCalls,
+        handler_search_calls: searchPlan.handlerSearchCalls,
+        remaining_search_calls: searchPlan.remainingSearchCalls,
+        handler_exact_patterns: searchPlan.exactPatterns,
+        handler_search_warnings: searchPlan.warnings,
         context_pack_path: result.contextPackPath,
         prompt_refiner_runtime_duration_ms: refiner.runtimeDurationMs,
         research_runtime_duration_ms: researchRuntimeDurationMs,
@@ -428,7 +432,7 @@ function resolveRefinementState(input: {
   model: ResolvedContextLayerModel;
   requestId: string;
 }): RefinementState {
-  const maxFiles = input.input.maxFiles ?? DEFAULT_MAX_FILES;
+  const maxFiles = DEFAULT_MAX_FILES;
   const maxSearchCalls = input.input.maxSearchCalls ?? DEFAULT_MAX_SEARCH_CALLS;
   const focus = (input.input.focus ?? DEFAULT_FOCUS) as ContextLayerFocus;
 
@@ -533,16 +537,97 @@ function additionalCallerContextForResume(
   return trimmed;
 }
 
+async function prepareContextLayerSearch(input: {
+  query: string;
+  maxFiles: number;
+  maxSearchCalls: number;
+}): Promise<ContextLayerSearchPlan> {
+  let handlerSearchCalls = 0;
+  const warnings: string[] = [];
+
+  const semanticCodeResults = await searchCodeForContextLayer({
+    query: input.query,
+    target: 'code',
+    limit: Math.min(input.maxFiles * 3, 100),
+  });
+  handlerSearchCalls += 1;
+
+  let docsResults: SearchResult[] = [];
+  if (handlerSearchCalls < input.maxSearchCalls) {
+    docsResults = await searchCodeForContextLayer({
+      query: input.query,
+      target: 'docs',
+      limit: Math.min(input.maxFiles, 20),
+    });
+    handlerSearchCalls += 1;
+  } else {
+    warnings.push(
+      'Docs pre-search skipped because maxSearchCalls budget was exhausted.',
+    );
+  }
+
+  const exactBudget = Math.min(
+    4,
+    Math.max(0, input.maxSearchCalls - handlerSearchCalls - 1),
+  );
+  const exactPatterns = extractExactSearchPatterns({
+    query: input.query,
+    results: semanticCodeResults,
+    maxPatterns: exactBudget,
+  });
+  const exactResults: SearchResult[] = [];
+
+  for (const pattern of exactPatterns) {
+    try {
+      const results = await searchCodeForContextLayer({
+        query: `Exact verification for ${pattern} related to: ${input.query}`,
+        target: 'code',
+        limit: Math.min(input.maxFiles * 2, 50),
+        exact: {
+          pattern,
+          caseSensitive: true,
+        },
+        contextLines: 4,
+      });
+      handlerSearchCalls += 1;
+      exactResults.push(...results);
+    } catch (error) {
+      handlerSearchCalls += 1;
+      warnings.push(
+        `Exact pre-search for "${pattern}" failed: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  }
+
+  return {
+    codeResults: mergeSearchResults(semanticCodeResults, exactResults),
+    docsResults,
+    handlerSearchCalls,
+    remainingSearchCalls: Math.max(
+      0,
+      input.maxSearchCalls - handlerSearchCalls,
+    ),
+    exactPatterns,
+    warnings,
+  };
+}
+
 async function searchCodeForContextLayer(input: {
   query: string;
   target: 'code' | 'docs';
   limit: number;
+  exact?: { pattern: string; regex?: boolean; caseSensitive?: boolean };
+  contextLines?: number;
 }): Promise<Awaited<ReturnType<typeof searchCode>>['results']> {
   try {
     const response = await searchCode({
       query: input.query,
       target: input.target,
       limit: input.limit,
+      exact: input.exact,
+      contextLines: input.contextLines,
     });
     return response.results;
   } catch (error) {
@@ -552,6 +637,99 @@ async function searchCodeForContextLayer(input: {
     );
   }
 }
+
+function mergeSearchResults(...groups: SearchResult[][]): SearchResult[] {
+  const bySymbol = new Map<string, SearchResult>();
+  for (const result of groups.flat()) {
+    const key =
+      result.symbol.id ||
+      `${result.symbol.relativePath}:${result.symbol.startLine}:${result.symbol.endLine}:${result.symbol.name}`;
+    const existing = bySymbol.get(key);
+    if (existing == null || result.score > existing.score) {
+      bySymbol.set(key, result);
+    }
+  }
+
+  return [...bySymbol.values()].sort((a, b) => b.score - a.score);
+}
+
+function extractExactSearchPatterns(input: {
+  query: string;
+  results: SearchResult[];
+  maxPatterns: number;
+}): string[] {
+  if (input.maxPatterns <= 0) {
+    return [];
+  }
+
+  const candidates: string[] = [];
+  for (const match of input.query.matchAll(/`([^`\n]{2,120})`/g)) {
+    candidates.push(match[1] ?? '');
+  }
+  for (const match of input.query.matchAll(
+    /\b[A-Za-z_$][A-Za-z0-9_$./:-]{3,}\b/g,
+  )) {
+    candidates.push(match[0]);
+  }
+  for (const result of input.results.slice(0, 12)) {
+    candidates.push(result.symbol.name);
+    if (result.symbol.parentSymbol != null) {
+      candidates.push(result.symbol.parentSymbol);
+    }
+  }
+
+  const seen = new Set<string>();
+  const patterns: string[] = [];
+  for (const candidate of candidates) {
+    const normalized = normalizeExactPattern(candidate);
+    if (!isUsefulExactPattern(normalized) || seen.has(normalized)) {
+      continue;
+    }
+    seen.add(normalized);
+    patterns.push(normalized);
+    if (patterns.length >= input.maxPatterns) {
+      break;
+    }
+  }
+  return patterns;
+}
+
+function normalizeExactPattern(value: string): string {
+  return value.trim().replace(/^['"`]+|['"`]+$/g, '').trim();
+}
+
+function isUsefulExactPattern(pattern: string): boolean {
+  if (pattern.length < 4 || pattern.length > 120) {
+    return false;
+  }
+  if (COMMON_EXACT_PATTERN_STOPWORDS.has(pattern.toLowerCase())) {
+    return false;
+  }
+  return /[A-Z0-9_$./:-]/.test(pattern);
+}
+
+const COMMON_EXACT_PATTERN_STOPWORDS = new Set([
+  'architecture',
+  'artifact',
+  'artifacts',
+  'branch',
+  'calls',
+  'code',
+  'context',
+  'dedupe',
+  'deduplication',
+  'debugging',
+  'file',
+  'files',
+  'focus',
+  'implementation',
+  'ingestion',
+  'query',
+  'review',
+  'runtime',
+  'search',
+  'storage',
+]);
 
 function normalizeContextLayerError(error: unknown): ContextLayerError {
   if (error instanceof ContextLayerError) {

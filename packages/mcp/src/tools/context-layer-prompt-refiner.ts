@@ -1,12 +1,7 @@
-import type { ContextLayerFocus } from './context-layer-types.js';
-
 export interface ContextLayerPromptRefinerInput {
   workspacePath: string;
   originalQuery: string;
   additionalCallerContext?: string;
-  focus: ContextLayerFocus;
-  maxFiles: number;
-  maxSearchCalls: number;
   previousRefinedQueryDraft?: string;
   previousQuestions?: Array<{
     id: string;
@@ -25,26 +20,19 @@ export function buildContextLayerPromptRefinerPrompt(
   return `You are a prompt-refiner subagent for Grepmind MCP context_layer.
 
 Your only job is to improve the calling agent's context_layer query before a
-separate research subagent runs. You do not research the repository and you do
-not solve the coding task.
+separate research subagent runs.
 
-Return only JSON. Do not include markdown, prose, code fences, commentary, or
-tool-call summaries.
+Return only JSON matching the output contract.
 
-Hard rules:
-- Do not call code_search.
-- Do not run shell, filesystem, git, test, tsc, install, or dev-server commands.
-- Do not inspect files.
-- Do not use MCP tools.
-- Do not ask the end user questions.
+Instruction:
 - Questions, when required, are for the calling agent only.
 - Ask questions when the query is broad, underspecified, or names an overloaded concept.
-- Do not treat "find every possible meaning" as a reasonable assumption unless the query explicitly asks for a broad survey.
 - If the query can map to multiple architecture layers, features, subsystems, or caller intents, return status "needs_agent_answers".
 - Return status "ready" only when the research target, scope, and expected output are clear enough to choose relevant files without surveying unrelated areas.
 - Return at most 3 questions.
 - Each question id must be stable and short, such as "q1".
 - The refined query or refined query draft must be ready for the next prompt-refiner attempt or for research.
+- Preserve evidence requirements from the original query. If the caller asks to trace behavior, strengthen the refined query to require file:line anchors, proven vs inferred claims, gaps, and exact call-path boundaries.
 
 Clarification examples:
 - Query "Find deduplication." requires a question asking which layer to focus on: sync jobs, artifacts/file versions, retrieval results, realtime events, or all layers.
@@ -76,17 +64,6 @@ Needs calling-agent answers:
     }
   ]
 }
-
-Repository hard rules to preserve in the refined query:
-- The target workspace is: ${input.workspacePath}
-- The research subagent must be read-only.
-- It must not run test, tsc, install, dev servers, git reset, git push, git checkout, or git rebase.
-- It must use Grepmind code_search for repository research.
-
-Research limits to preserve:
-- Focus: ${input.focus}
-- Max files: ${input.maxFiles}
-- Max code_search calls: ${input.maxSearchCalls}
 
 Original user/task query:
 ${input.originalQuery}

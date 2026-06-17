@@ -144,17 +144,19 @@ case-sensitive local `rg` signal.
 
 ### `context_layer`
 
-Runs a prompt-refiner Codex CLI subagent first, then a read-only Codex CLI
-research subagent in the startup workspace after the refined query is ready. The
-research subagent can call Grepmind `code_search` itself, including optional
-exact local `rg` signal through `exact`, `globs`, and `contextLines`, and then
-return a curated map of code, docs, flow, evidence, risks, and suggested edit
-surfaces.
+Runs a prompt-refiner Codex CLI subagent first. After the refined query is
+ready, the MCP handler performs a bounded retrieval pass: semantic code search,
+docs search when the search budget allows it, and a small number of exact local
+`rg`-backed searches for code-like identifiers discovered from the query and top
+hits. It then runs read-only Codex CLI file-summary subagents and a final
+read-only aggregation subagent in the startup workspace.
 
-`context_layer` is not a search mode and does not run `code_search` before the
-research subagent starts. Retrieval remains inside the research subagent's
-reasoning loop. The prompt-refiner is instructed not to inspect the repository
-and runs with a dedicated Codex profile.
+The aggregation subagent can still call Grepmind `code_search` for targeted
+verification, including optional exact local `rg` signal through `exact`,
+`globs`, and `contextLines`. The final result is a curated map of code, docs,
+flow, evidence quality, risks, and suggested edit surfaces. The prompt-refiner
+is instructed not to inspect the repository and runs with a dedicated Codex
+profile.
 
 Input fields:
 
@@ -165,8 +167,7 @@ Input fields:
 | `model.name`        | `string`                                                        | Optional Codex model name. Defaults to `fast`.     |
 | `model.thinking`    | `"low" \| "medium" \| "high"`                                   | Optional Codex reasoning effort. Defaults `low`.   |
 | `model.speed`       | `"fast"`                                                        | Reserved speed profile.                            |
-| `maxFiles`          | `number`                                                        | Optional deep-inspection limit. Defaults to `30`.  |
-| `maxSearchCalls`    | `number`                                                        | Optional search-call budget. Defaults to `8`.      |
+| `maxSearchCalls`    | `number`                                                        | Optional handler retrieval budget. Defaults to `8`. |
 | `focus`             | `"implementation" \| "debugging" \| "architecture" \| "review"` | Optional task focus. Defaults to `implementation`. |
 | `refinementSession` | `string`                                                        | Continue a prompt-refinement session.              |
 | `agentAnswers`      | `{ questionId: string, answer: string }[]`                      | Answers from the calling agent for a session.      |
@@ -224,8 +225,7 @@ Repeat the tool call with the session key and answers from the calling agent:
 A repeated call with a valid `refinementSession` and no new `agentAnswers`
 returns the cached `agent_questions` result without running the refiner again.
 Refinement sessions are in-memory, expire after 30 minutes by default, and do
-not survive MCP process restarts. Once research starts, the `context_pack`
-format remains unchanged.
+not survive MCP process restarts.
 
 Expected output headings:
 
@@ -233,6 +233,8 @@ Expected output headings:
 # context_pack
 
 ## Answer
+
+## Evidence Quality
 
 ## Code Context
 
@@ -259,15 +261,15 @@ Requirements and safety:
   `--ask-for-approval never`, and `GREPMIND_CONTEXT_LAYER_SUBAGENT=1`.
 - `context_layer` is hidden inside a context-layer subagent process, while
   `code_search` remains available.
-- The subagent is instructed to use only `code_search` for repository research,
-  not direct shell/filesystem inspection, and not to edit files, run tests, run
-  `tsc`, install dependencies, start dev servers, kill processes, or run
-  destructive git operations.
+- Safety constraints are enforced by the Codex runner/profile instead of being
+  repeated as task text inside context-layer prompts.
 - The returned `context_pack` is validated before the MCP response is sent. It
   must contain exactly the documented headings in order, with non-empty sections.
-  Evidence snippets from `code_search` are embedded in the relevant sections
-  instead of a separate heading. Gaps and suggested edit surfaces are embedded
-  beside the related code, docs, or flow items.
+  `Evidence Quality` must include proven anchors, inferences, gaps, failed or
+  truncated summaries, and an explicit `Confidence: high|medium|low` line.
+  Evidence snippets from `code_search` are embedded in the relevant sections.
+  Gaps and suggested edit surfaces are embedded beside the related code, docs,
+  flow, or evidence quality items.
 
 If `model.provider` is `claude`, the tool returns
 `CLAUDE_RUNTIME_NOT_IMPLEMENTED` until a Claude runtime is implemented.

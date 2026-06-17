@@ -39,7 +39,7 @@ async function main(): Promise<void> {
       'context_layer',
       {
         description:
-          'Prepare a read-only multi-file and multi-doc context_pack for a coding agent using a mandatory Codex prompt-refiner stage followed by a Grepmind code_search research subagent. The tool may first return agent_questions with a refinementSession; answer them by calling context_layer again with refinementSession and agentAnswers.',
+          'Prepare a read-only multi-file and multi-doc context_pack with evidence quality for a coding agent using a mandatory Codex prompt-refiner stage, bounded Grepmind code_search retrieval, and read-only research subagents. The tool may first return agent_questions with a refinementSession; answer them by calling context_layer again with refinementSession and agentAnswers.',
         inputSchema: contextLayerSchema,
       },
       contextLayerTool,
