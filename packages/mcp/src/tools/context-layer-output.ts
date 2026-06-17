@@ -179,7 +179,10 @@ function parseContextPackMarkdown(
         .slice(match.lineIndex + 1, next?.lineIndex ?? lines.length)
         .join('\n')
         .trim();
-      return { heading: match.heading, content };
+      return {
+        heading: requireContextPackHeading(match.heading, options),
+        content,
+      };
     },
   );
 
@@ -234,6 +237,17 @@ function collectMarkdownHeadings(lines: string[]): Array<{
   }
 
   return headings;
+}
+
+function requireContextPackHeading(
+  heading: RequiredContextPackHeading | string,
+  options?: { runtimeDurationMs?: number; stderrTail?: string },
+): RequiredContextPackHeading {
+  if (REQUIRED_CONTEXT_PACK_HEADINGS.includes(heading as never)) {
+    return heading as RequiredContextPackHeading;
+  }
+
+  throwMalformedContextPack(`unexpected heading "${heading}"`, options);
 }
 
 function renderContextPack(sections: ParsedContextPackSection[]): string {

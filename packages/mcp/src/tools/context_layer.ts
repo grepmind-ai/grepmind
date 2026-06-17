@@ -54,6 +54,7 @@ export const contextLayerSchema = z
 export type ContextLayerInput = z.infer<typeof contextLayerSchema>;
 
 interface ContextLayerSuccessResult {
+  [key: string]: unknown;
   content: Array<{ type: 'text'; text: string }>;
   _meta: {
     model_provider: ContextLayerRuntimeProvider;
@@ -69,6 +70,7 @@ interface ContextLayerSuccessResult {
 }
 
 interface ContextLayerErrorResult {
+  [key: string]: unknown;
   content: Array<{ type: 'text'; text: string }>;
   isError: true;
   _meta: {
@@ -90,15 +92,7 @@ export async function contextLayerTool(
   const requestId = randomUUID();
   const startedAt = Date.now();
   const maxSearchCalls = input.maxSearchCalls ?? DEFAULT_MAX_SEARCH_CALLS;
-  let model:
-    | ReturnType<typeof resolveContextLayerModel>
-    | {
-        provider?: ContextLayerRuntimeProvider;
-        name?: string;
-        thinking?: ContextLayerThinking;
-        speed?: ContextLayerSpeed;
-      }
-    | undefined;
+  let model: ReturnType<typeof resolveContextLayerModel> | undefined;
 
   incrementContextLayerCounter('context_layer_requested', { requestId });
 
