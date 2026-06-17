@@ -182,8 +182,6 @@ export function buildCodexExecArgs(input: {
       toCodexReasoningEffort(input.modelThinking),
     )}`,
     '--config',
-    'mcp_servers.grepmind.enabled=false',
-    '--config',
     'mcp_servers.node_repl.enabled=false',
     '--config',
     'mcp_servers.playwright.enabled=false',

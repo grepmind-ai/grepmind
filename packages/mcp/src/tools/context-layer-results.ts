@@ -5,6 +5,7 @@ import {
   CONTEXT_LAYER_FILE_SUMMARY_THINKING,
   CONTEXT_LAYER_POLISH_THINKING,
   CONTEXT_LAYER_PROMPT_REFINER_THINKING,
+  CONTEXT_LAYER_RESEARCH_THINKING,
   DEFAULT_CONTEXT_LAYER_CODEX_MODEL,
   DEFAULT_CONTEXT_LAYER_CODEX_THINKING,
   type ContextLayerRuntimeProvider,
@@ -22,6 +23,7 @@ export interface ContextLayerSuccessResult {
     model_name: string;
     model_thinking: ContextLayerThinking;
     prompt_refiner_model_thinking: ContextLayerThinking;
+    research_model_thinking: ContextLayerThinking;
     file_summary_model_thinking: ContextLayerThinking;
     aggregation_model_thinking: ContextLayerThinking;
     polish_model_thinking: ContextLayerThinking;
@@ -76,6 +78,7 @@ export interface ContextLayerErrorResult {
     model_name?: string;
     model_thinking?: ContextLayerThinking;
     prompt_refiner_model_thinking?: ContextLayerThinking;
+    research_model_thinking?: ContextLayerThinking;
     file_summary_model_thinking?: ContextLayerThinking;
     aggregation_model_thinking?: ContextLayerThinking;
     polish_model_thinking?: ContextLayerThinking;
@@ -155,6 +158,7 @@ export function toErrorResult(
       model_thinking:
         context.model?.thinking ?? DEFAULT_CONTEXT_LAYER_CODEX_THINKING,
       prompt_refiner_model_thinking: CONTEXT_LAYER_PROMPT_REFINER_THINKING,
+      research_model_thinking: CONTEXT_LAYER_RESEARCH_THINKING,
       file_summary_model_thinking: CONTEXT_LAYER_FILE_SUMMARY_THINKING,
       aggregation_model_thinking: CONTEXT_LAYER_AGGREGATION_THINKING,
       polish_model_thinking: CONTEXT_LAYER_POLISH_THINKING,

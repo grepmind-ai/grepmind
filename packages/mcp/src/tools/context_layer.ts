@@ -13,10 +13,8 @@ import {
 import { ContextLayerError } from './context-layer-errors.js';
 import type { ContextLayerErrorCode } from './context-layer-errors.js';
 import {
-  CONTEXT_LAYER_AGGREGATION_THINKING,
-  CONTEXT_LAYER_FILE_SUMMARY_THINKING,
-  CONTEXT_LAYER_POLISH_THINKING,
   CONTEXT_LAYER_PROMPT_REFINER_THINKING,
+  CONTEXT_LAYER_RESEARCH_THINKING,
   resolveContextLayerModel,
   type ContextLayerThinking,
   type ResolvedContextLayerModel,
@@ -27,16 +25,7 @@ import {
   incrementContextLayerCounter,
 } from './context-layer-observability.js';
 import { type ContextLayerFocus } from './context-layer-types.js';
-import { buildContextLayerAggregatePrompt } from './context-layer-aggregate-prompt.js';
-import { buildContextLayerPolishPrompt } from './context-layer-polish-prompt.js';
-import {
-  buildFanoutTargets,
-  resolveContextLayerFanoutConcurrency,
-  resolveContextLayerFileMaxOutputBytes,
-  resolveContextLayerFileTimeoutMs,
-  runContextLayerFileSummaryFanout,
-  type ContextLayerFileSummaryResult,
-} from './context-layer-fanout-runner.js';
+import { buildContextLayerResearchPrompt } from './context-layer-research-prompt.js';
 import {
   createRefinementSession,
   deleteRefinementSession,
@@ -55,18 +44,22 @@ import type {
   PromptRefinerOutput,
   PromptRefinerQuestion,
 } from './prompt-refiner-output.js';
-import { searchCode, type SearchResult } from './search-client.js';
 
 export const DEFAULT_MAX_FILES = 30;
 export const DEFAULT_MAX_SEARCH_CALLS = 8;
 export const DEFAULT_FOCUS = 'implementation';
-export const DEFAULT_CONTEXT_LAYER_MAX_ITERATIONS = 1;
 export const DEFAULT_CONTEXT_LAYER_TOOL_TIMEOUT_BUFFER_SEC = 30;
 
 export const contextLayerSchema = z
   .object({
     query: z.string().min(1).describe('Task or code question to research'),
-    maxSearchCalls: z.number().int().min(1).max(20).optional(),
+    maxSearchCalls: z
+      .number()
+      .int()
+      .min(1)
+      .max(20)
+      .optional()
+      .describe('Research subagent code_search budget.'),
     focus: z
       .enum(['implementation', 'debugging', 'architecture', 'review'])
       .optional(),
@@ -100,33 +93,22 @@ interface RefinementState {
   agentAnswers?: RefinementAgentAnswer[];
 }
 
-interface ContextLayerSearchPlan {
-  codeResults: SearchResult[];
-  docsResults: SearchResult[];
-  handlerSearchCalls: number;
-  remainingSearchCalls: number;
-  exactPatterns: string[];
-  warnings: string[];
-}
-
 interface ContextLayerIterationResult {
   contextPackMarkdown: string;
   contextPackPath?: string;
   truncated: boolean;
   timeout: false;
   runtimeDurationMs: number;
-  fanoutRuntimeDurationMs: number;
+  fanoutRuntimeDurationMs: 0;
   aggregationRuntimeDurationMs: number;
-  fanoutFileCount: number;
-  fanoutCompletedCount: number;
-  fanoutFailedCount: number;
+  fanoutFileCount: 0;
+  fanoutCompletedCount: 0;
+  fanoutFailedCount: 0;
   handlerSearchCalls: number;
   remainingSearchCalls: number;
   exactPatterns: string[];
   searchWarnings: string[];
   iterations: number;
-  sufficient: boolean;
-  suggestedContextQueries: string[];
 }
 
 export async function contextLayerTool(
@@ -139,8 +121,6 @@ export async function contextLayerTool(
   let refinementSessionId = input.refinementSession;
   let promptRefinerRuntimeDurationMs: number | undefined;
   let researchRuntimeDurationMs: number | undefined;
-  let polishStarted = false;
-  let polishRuntimeDurationMs: number | undefined;
 
   incrementContextLayerCounter('context_layer_requested', { requestId });
 
@@ -253,73 +233,34 @@ export async function contextLayerTool(
 
     const timeoutMs = resolveContextLayerTimeoutMs();
     const maxOutputBytes = resolveContextLayerMaxOutputBytes();
-    const fileTimeoutMs = resolveContextLayerFileTimeoutMs();
-    const fileMaxOutputBytes = resolveContextLayerFileMaxOutputBytes();
-    const fanoutConcurrency = resolveContextLayerFanoutConcurrency();
-    const result = await runContextLayerResearchIterations({
+    const result = await runContextLayerResearch({
       requestId,
       workspacePath: workspaceContext.workspacePath,
       query: refiner.output.refinedQuery,
       originalQuery: refinementState.originalQuery,
       refinerAssumptions: refiner.output.assumptions,
       focus: refinementState.focus,
-      maxFiles: refinementState.maxFiles,
       maxSearchCalls: refinementState.maxSearchCalls,
       modelName: refinementState.model.name,
-      fileSummaryModelThinking: CONTEXT_LAYER_FILE_SUMMARY_THINKING,
-      aggregationModelThinking: CONTEXT_LAYER_AGGREGATION_THINKING,
-      fanoutConcurrency,
-      aggregationTimeoutMs: timeoutMs,
-      aggregationMaxOutputBytes: maxOutputBytes,
-      fileTimeoutMs,
-      fileMaxOutputBytes,
-    });
-    researchRuntimeDurationMs =
-      result.fanoutRuntimeDurationMs + result.aggregationRuntimeDurationMs;
-    const polishPrompt = buildContextLayerPolishPrompt({
-      workspacePath: workspaceContext.workspacePath,
-      query: refiner.output.refinedQuery,
-      originalQuery: refinementState.originalQuery,
-      focus: refinementState.focus,
-      aggregationContextPack: result.contextPackMarkdown,
-    });
-
-    incrementContextLayerCounter('context_layer_polish_started', {
-      requestId,
-      workspaceHash: hashWorkspacePath(workspaceContext.workspacePath),
-      timeoutMs,
-    });
-    polishStarted = true;
-    const polished = await runCodexSubagent({
-      workspacePath: workspaceContext.workspacePath,
-      prompt: polishPrompt,
-      modelName: refinementState.model.name,
-      modelThinking: CONTEXT_LAYER_POLISH_THINKING,
+      researchModelThinking: CONTEXT_LAYER_RESEARCH_THINKING,
       timeoutMs,
       maxOutputBytes,
     });
-    polishRuntimeDurationMs = polished.runtimeDurationMs;
-    const polishedSufficiency = parseSufficiency(polished.contextPackMarkdown);
-    incrementContextLayerCounter('context_layer_polish_completed', {
-      requestId,
-      durationMs: polished.runtimeDurationMs,
-      truncated: polished.truncated,
-    });
+    researchRuntimeDurationMs = result.runtimeDurationMs;
 
-    researchRuntimeDurationMs =
-      researchRuntimeDurationMs + polished.runtimeDurationMs;
+    const aggregationSufficiency = parseSufficiency(result.contextPackMarkdown);
 
-    if (result.truncated || polished.truncated) {
+    if (result.truncated) {
       incrementContextLayerCounter('context_layer_output_truncated', {
         requestId,
-        durationMs: result.runtimeDurationMs + polished.runtimeDurationMs,
+        durationMs: result.runtimeDurationMs,
       });
     }
     return {
       content: [
         {
           type: 'text',
-          text: appendContextLayerDebugLog(polished.contextPackMarkdown, result),
+          text: appendContextLayerDebugLog(result.contextPackMarkdown, result),
         },
       ],
       _meta: {
@@ -328,18 +269,20 @@ export async function contextLayerTool(
         model_name: refinementState.model.name,
         model_thinking: refinementState.model.thinking,
         prompt_refiner_model_thinking: CONTEXT_LAYER_PROMPT_REFINER_THINKING,
-        file_summary_model_thinking: CONTEXT_LAYER_FILE_SUMMARY_THINKING,
-        aggregation_model_thinking: CONTEXT_LAYER_AGGREGATION_THINKING,
-        polish_model_thinking: CONTEXT_LAYER_POLISH_THINKING,
+        research_model_thinking: CONTEXT_LAYER_RESEARCH_THINKING,
+        file_summary_model_thinking: CONTEXT_LAYER_RESEARCH_THINKING,
+        aggregation_model_thinking: CONTEXT_LAYER_RESEARCH_THINKING,
+        polish_model_thinking: CONTEXT_LAYER_RESEARCH_THINKING,
         max_search_calls: refinementState.maxSearchCalls,
         handler_search_calls: result.handlerSearchCalls,
         remaining_search_calls: result.remainingSearchCalls,
         handler_exact_patterns: result.exactPatterns,
         handler_search_warnings: result.searchWarnings,
         context_layer_iterations: result.iterations,
-        sufficient: polishedSufficiency.sufficient,
-        suggested_context_queries: polishedSufficiency.suggestedContextQueries,
-        context_pack_path: polished.contextPackPath ?? result.contextPackPath,
+        sufficient: aggregationSufficiency.sufficient,
+        suggested_context_queries:
+          aggregationSufficiency.suggestedContextQueries,
+        context_pack_path: result.contextPackPath,
         prompt_refiner_runtime_duration_ms: refiner.runtimeDurationMs,
         research_runtime_duration_ms: researchRuntimeDurationMs,
         fanout_file_count: result.fanoutFileCount,
@@ -347,10 +290,10 @@ export async function contextLayerTool(
         fanout_failed_count: result.fanoutFailedCount,
         fanout_runtime_duration_ms: result.fanoutRuntimeDurationMs,
         aggregation_runtime_duration_ms: result.aggregationRuntimeDurationMs,
-        polish_runtime_duration_ms: polished.runtimeDurationMs,
+        polish_runtime_duration_ms: 0,
         runtime_duration_ms: Date.now() - startedAt,
-        truncated: result.truncated || polished.truncated,
-        timeout: result.timeout || polished.timeout,
+        truncated: result.truncated,
+        timeout: result.timeout,
       },
     };
   } catch (error) {
@@ -363,8 +306,6 @@ export async function contextLayerTool(
       refinementSessionId,
       promptRefinerRuntimeDurationMs,
       researchRuntimeDurationMs,
-      polishStarted,
-      polishRuntimeDurationMs,
     });
   }
 }
@@ -378,8 +319,6 @@ function handleContextLayerError(input: {
   refinementSessionId: string | undefined;
   promptRefinerRuntimeDurationMs: number | undefined;
   researchRuntimeDurationMs: number | undefined;
-  polishStarted: boolean;
-  polishRuntimeDurationMs: number | undefined;
 }): ContextLayerResult {
   const normalized = normalizeContextLayerError(input.error);
   recordContextLayerErrorCounter({
@@ -402,11 +341,7 @@ function handleContextLayerError(input: {
       (isResearchRuntimeError(normalized.code)
         ? normalized.runtimeDurationMs
         : undefined),
-    polishRuntimeDurationMs:
-      input.polishRuntimeDurationMs ??
-      (input.polishStarted && isResearchRuntimeError(normalized.code)
-        ? normalized.runtimeDurationMs
-        : undefined),
+    polishRuntimeDurationMs: undefined,
     runtimeDurationMs: Date.now() - input.startedAt,
   });
 }
@@ -562,86 +497,50 @@ function additionalCallerContextForResume(
   return trimmed;
 }
 
-async function runContextLayerResearchIterations(input: {
+async function runContextLayerResearch(input: {
   requestId: string;
   workspacePath: string;
   query: string;
   originalQuery?: string;
   refinerAssumptions?: string[];
   focus: ContextLayerFocus;
-  maxFiles: number;
   maxSearchCalls: number;
   modelName: string;
-  fileSummaryModelThinking: ContextLayerThinking;
-  aggregationModelThinking: ContextLayerThinking;
-  fanoutConcurrency: number;
-  aggregationTimeoutMs: number;
-  aggregationMaxOutputBytes: number;
-  fileTimeoutMs: number;
-  fileMaxOutputBytes: number;
+  researchModelThinking: ContextLayerThinking;
+  timeoutMs: number;
+  maxOutputBytes: number;
 }): Promise<ContextLayerIterationResult> {
   const iteration = 1;
-  const searchPlan = await prepareContextLayerSearch({
-    query: input.query,
-    maxFiles: input.maxFiles,
-    maxSearchCalls: input.maxSearchCalls,
-  });
-  const fanoutTargets = buildFanoutTargets({
-    results: searchPlan.codeResults,
-    maxFiles: input.maxFiles,
-  });
-  const fanout = await runContextLayerFileSummaryFanout({
-    requestId: input.requestId,
-    workspacePath: input.workspacePath,
-    query: input.query,
-    originalQuery: input.originalQuery,
-    focus: input.focus,
-    targets: fanoutTargets,
-    modelName: input.modelName,
-    modelThinking: input.fileSummaryModelThinking,
-    concurrency: input.fanoutConcurrency,
-    timeoutMs: input.fileTimeoutMs,
-    maxOutputBytes: input.fileMaxOutputBytes,
-  });
-
-  const aggregationPrompt = buildContextLayerAggregatePrompt({
+  const researchPrompt = buildContextLayerResearchPrompt({
     workspacePath: input.workspacePath,
     query: input.query,
     originalQuery: input.originalQuery,
     refinerAssumptions: input.refinerAssumptions,
     focus: input.focus,
-    searchResults: searchPlan.codeResults,
-    docsResults: searchPlan.docsResults,
-    fileSummaries: fanout.summaries,
-    exactPatterns: searchPlan.exactPatterns,
-    searchWarnings: searchPlan.warnings,
-    currentIteration: iteration,
-    maxIterations: DEFAULT_CONTEXT_LAYER_MAX_ITERATIONS,
+    maxSearchCalls: input.maxSearchCalls,
   });
 
-  incrementContextLayerCounter('context_layer_aggregation_started', {
+  incrementContextLayerCounter('context_layer_subagent_started', {
     requestId: input.requestId,
     workspaceHash: hashWorkspacePath(input.workspacePath),
-    fileCount: fanoutTargets.length,
-    timeoutMs: input.aggregationTimeoutMs,
+    maxSearchCalls: input.maxSearchCalls,
+    timeoutMs: input.timeoutMs,
     iteration,
   });
   const result = await runCodexSubagent({
     workspacePath: input.workspacePath,
-    prompt: aggregationPrompt,
+    prompt: researchPrompt,
     modelName: input.modelName,
-    modelThinking: input.aggregationModelThinking,
-    timeoutMs: input.aggregationTimeoutMs,
-    maxOutputBytes: input.aggregationMaxOutputBytes,
+    modelThinking: input.researchModelThinking,
+    timeoutMs: input.timeoutMs,
+    maxOutputBytes: input.maxOutputBytes,
   });
 
-  incrementContextLayerCounter('context_layer_aggregation_completed', {
+  incrementContextLayerCounter('context_layer_subagent_completed', {
     requestId: input.requestId,
     durationMs: result.runtimeDurationMs,
     iteration,
   });
-
-  const sufficiency = parseSufficiency(result.contextPackMarkdown);
 
   return {
     contextPackMarkdown: result.contextPackMarkdown,
@@ -649,218 +548,18 @@ async function runContextLayerResearchIterations(input: {
     truncated: result.truncated,
     timeout: false,
     runtimeDurationMs: result.runtimeDurationMs,
-    fanoutRuntimeDurationMs: fanout.runtimeDurationMs,
+    fanoutRuntimeDurationMs: 0,
     aggregationRuntimeDurationMs: result.runtimeDurationMs,
-    fanoutFileCount: fanoutTargets.length,
-    fanoutCompletedCount: fanout.summaries.filter(
-      (summary) => 'summaryMarkdown' in summary,
-    ).length,
-    fanoutFailedCount: fanout.summaries.filter(
-      (summary) => !('summaryMarkdown' in summary),
-    ).length,
-    handlerSearchCalls: searchPlan.handlerSearchCalls,
-    remainingSearchCalls: searchPlan.remainingSearchCalls,
-    exactPatterns: searchPlan.exactPatterns,
-    searchWarnings: searchPlan.warnings,
+    fanoutFileCount: 0,
+    fanoutCompletedCount: 0,
+    fanoutFailedCount: 0,
+    handlerSearchCalls: 0,
+    remainingSearchCalls: input.maxSearchCalls,
+    exactPatterns: [],
+    searchWarnings: [],
     iterations: iteration,
-    sufficient: sufficiency.sufficient,
-    suggestedContextQueries: sufficiency.suggestedContextQueries,
   };
 }
-
-async function prepareContextLayerSearch(input: {
-  query: string;
-  maxFiles: number;
-  maxSearchCalls: number;
-}): Promise<ContextLayerSearchPlan> {
-  let handlerSearchCalls = 0;
-  const warnings: string[] = [];
-
-  const semanticCodeResults = await searchCodeForContextLayer({
-    query: input.query,
-    target: 'code',
-    limit: Math.min(input.maxFiles * 3, 100),
-  });
-  handlerSearchCalls += 1;
-
-  let docsResults: SearchResult[] = [];
-  if (handlerSearchCalls < input.maxSearchCalls) {
-    docsResults = await searchCodeForContextLayer({
-      query: input.query,
-      target: 'docs',
-      limit: Math.min(input.maxFiles, 20),
-    });
-    handlerSearchCalls += 1;
-  } else {
-    warnings.push(
-      'Docs pre-search skipped because handler retrieval budget was exhausted.',
-    );
-  }
-
-  const exactBudget = Math.min(
-    4,
-    Math.max(0, input.maxSearchCalls - handlerSearchCalls - 1),
-  );
-  const exactPatterns = extractExactSearchPatterns({
-    query: input.query,
-    results: semanticCodeResults,
-    maxPatterns: exactBudget,
-  });
-  const exactResults: SearchResult[] = [];
-
-  for (const pattern of exactPatterns) {
-    try {
-      const results = await searchCodeForContextLayer({
-        query: `Exact verification for ${pattern} related to: ${input.query}`,
-        target: 'code',
-        limit: Math.min(input.maxFiles * 2, 50),
-        exact: {
-          pattern,
-          caseSensitive: true,
-        },
-        contextLines: 4,
-      });
-      handlerSearchCalls += 1;
-      exactResults.push(...results);
-    } catch (error) {
-      handlerSearchCalls += 1;
-      warnings.push(
-        `Exact pre-search for "${pattern}" failed: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      );
-    }
-  }
-
-  return {
-    codeResults: mergeSearchResults(semanticCodeResults, exactResults),
-    docsResults,
-    handlerSearchCalls,
-    remainingSearchCalls: Math.max(
-      0,
-      input.maxSearchCalls - handlerSearchCalls,
-    ),
-    exactPatterns,
-    warnings,
-  };
-}
-
-async function searchCodeForContextLayer(input: {
-  query: string;
-  target: 'code' | 'docs';
-  limit: number;
-  exact?: { pattern: string; regex?: boolean; caseSensitive?: boolean };
-  contextLines?: number;
-}): Promise<Awaited<ReturnType<typeof searchCode>>['results']> {
-  try {
-    const response = await searchCode({
-      query: input.query,
-      target: input.target,
-      limit: input.limit,
-      exact: input.exact,
-      contextLines: input.contextLines,
-    });
-    return response.results;
-  } catch (error) {
-    throw new ContextLayerError(
-      'CODE_SEARCH_UNAVAILABLE',
-      error instanceof Error ? error.message : String(error),
-    );
-  }
-}
-
-function mergeSearchResults(...groups: SearchResult[][]): SearchResult[] {
-  const bySymbol = new Map<string, SearchResult>();
-  for (const result of groups.flat()) {
-    const key =
-      result.symbol.id ||
-      `${result.symbol.relativePath}:${result.symbol.startLine}:${result.symbol.endLine}:${result.symbol.name}`;
-    const existing = bySymbol.get(key);
-    if (existing == null || result.score > existing.score) {
-      bySymbol.set(key, result);
-    }
-  }
-
-  return [...bySymbol.values()].sort((a, b) => b.score - a.score);
-}
-
-function extractExactSearchPatterns(input: {
-  query: string;
-  results: SearchResult[];
-  maxPatterns: number;
-}): string[] {
-  if (input.maxPatterns <= 0) {
-    return [];
-  }
-
-  const candidates: string[] = [];
-  for (const match of input.query.matchAll(/`([^`\n]{2,120})`/g)) {
-    candidates.push(match[1] ?? '');
-  }
-  for (const match of input.query.matchAll(
-    /\b[A-Za-z_$][A-Za-z0-9_$./:-]{3,}\b/g,
-  )) {
-    candidates.push(match[0]);
-  }
-  for (const result of input.results.slice(0, 12)) {
-    candidates.push(result.symbol.name);
-    if (result.symbol.parentSymbol != null) {
-      candidates.push(result.symbol.parentSymbol);
-    }
-  }
-
-  const seen = new Set<string>();
-  const patterns: string[] = [];
-  for (const candidate of candidates) {
-    const normalized = normalizeExactPattern(candidate);
-    if (!isUsefulExactPattern(normalized) || seen.has(normalized)) {
-      continue;
-    }
-    seen.add(normalized);
-    patterns.push(normalized);
-    if (patterns.length >= input.maxPatterns) {
-      break;
-    }
-  }
-  return patterns;
-}
-
-function normalizeExactPattern(value: string): string {
-  return value.trim().replace(/^['"`]+|['"`]+$/g, '').trim();
-}
-
-function isUsefulExactPattern(pattern: string): boolean {
-  if (pattern.length < 4 || pattern.length > 120) {
-    return false;
-  }
-  if (COMMON_EXACT_PATTERN_STOPWORDS.has(pattern.toLowerCase())) {
-    return false;
-  }
-  return /[A-Z0-9_$./:-]/.test(pattern);
-}
-
-const COMMON_EXACT_PATTERN_STOPWORDS = new Set([
-  'architecture',
-  'artifact',
-  'artifacts',
-  'branch',
-  'calls',
-  'code',
-  'context',
-  'dedupe',
-  'deduplication',
-  'debugging',
-  'file',
-  'files',
-  'focus',
-  'implementation',
-  'ingestion',
-  'query',
-  'review',
-  'runtime',
-  'search',
-  'storage',
-]);
 
 function parseSufficiency(contextPackMarkdown: string): {
   sufficient: boolean;
@@ -890,10 +589,11 @@ function appendContextLayerDebugLog(
 ): string {
   const debugLine =
     `- Debug log: iterations=${result.iterations}; ` +
+    'research agents=1; ' +
     `fanout agents=${result.fanoutFileCount}; ` +
-    `aggregation agents=${result.iterations}; ` +
-    'polish agents=1; ' +
-    `completed=${result.fanoutCompletedCount}; ` +
+    'aggregation agents=0; ' +
+    'polish agents=0; ' +
+    'completed=1; ' +
     `failed=${result.fanoutFailedCount}.`;
   const codeContextHeading = '\n\n## Code Context';
   const index = contextPackMarkdown.indexOf(codeContextHeading);
@@ -987,13 +687,9 @@ function isResearchRuntimeError(code: ContextLayerErrorCode): boolean {
 }
 
 export function defaultContextLayerToolTimeoutSec(): number {
-  const fanoutConcurrency = resolveContextLayerFanoutConcurrency();
-  const fanoutBatches = Math.ceil(DEFAULT_MAX_FILES / fanoutConcurrency);
   return (
     Math.ceil(resolvePromptRefinerTimeoutMs() / 1000) +
-    fanoutBatches * Math.ceil(resolveContextLayerFileTimeoutMs() / 1000) +
-    (DEFAULT_CONTEXT_LAYER_MAX_ITERATIONS + 1) *
-      Math.ceil(resolveContextLayerTimeoutMs() / 1000) +
+    Math.ceil(resolveContextLayerTimeoutMs() / 1000) +
     DEFAULT_CONTEXT_LAYER_TOOL_TIMEOUT_BUFFER_SEC
   );
 }

@@ -14,6 +14,7 @@ export const CONTEXT_LAYER_PROMPT_REFINER_THINKING = 'medium';
 export const CONTEXT_LAYER_FILE_SUMMARY_THINKING = 'low';
 export const CONTEXT_LAYER_AGGREGATION_THINKING = 'low';
 export const CONTEXT_LAYER_POLISH_THINKING = 'medium';
+export const CONTEXT_LAYER_RESEARCH_THINKING = 'medium';
 
 export const CODEX_REASONING_EFFORT_BY_THINKING = {
   low: 'low',
