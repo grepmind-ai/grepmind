@@ -215,17 +215,6 @@ export async function contextLayerTool(
       });
     }
 
-    deleteRefinementSession(refinementState.session?.id);
-    if (refinementState.session != null) {
-      incrementContextLayerCounter(
-        'context_layer_refinement_session_completed',
-        {
-          requestId,
-          sessionHash: hashRefinementSessionId(refinementState.session.id),
-        },
-      );
-    }
-
     const timeoutMs = resolveContextLayerTimeoutMs();
     const maxOutputBytes = resolveContextLayerMaxOutputBytes();
     const result = await runContextLayerResearch({
@@ -242,6 +231,17 @@ export async function contextLayerTool(
       maxOutputBytes,
     });
     researchRuntimeDurationMs = result.runtimeDurationMs;
+
+    deleteRefinementSession(refinementState.session?.id);
+    if (refinementState.session != null) {
+      incrementContextLayerCounter(
+        'context_layer_refinement_session_completed',
+        {
+          requestId,
+          sessionHash: hashRefinementSessionId(refinementState.session.id),
+        },
+      );
+    }
 
     const aggregationSufficiency = parseSufficiency(result.contextPackMarkdown);
 
