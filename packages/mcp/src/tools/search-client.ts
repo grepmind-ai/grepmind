@@ -214,7 +214,7 @@ function normalizeAgentSearchError(
 
   if (isRuntimeUnavailableError(error)) {
     return new Error(
-      `Grepmind agent runtime stopped after MCP startup for ${workspaceContext.dataDir}. Restart this MCP server to prepare the bundled runtime again.`,
+      `Grepmind agent runtime stopped after MCP startup for ${workspaceContext.dataDir}. Start the agent runtime, then restart this MCP server.`,
     );
   }
 

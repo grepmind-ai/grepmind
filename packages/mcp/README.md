@@ -50,7 +50,6 @@ Manual project-local stdio configuration:
       "command": "npx",
       "args": ["-y", "@grepmind/mcp@0.1.1"],
       "env": {
-        "GREPMIND_AGENT_HOSTNAME": "app.grepmind.ai",
         "GREPMIND_MCP_STARTUP_TIMEOUT_MS": "120000"
       }
     }
@@ -146,8 +145,7 @@ Returns JSON diagnostics for the current MCP workspace:
 | Variable                          | Description                                                         |
 | --------------------------------- | ------------------------------------------------------------------- |
 | `GREPMIND_AGENT_DATA_DIR`         | Agent data directory. Defaults to `~/.grepmind-agent`.              |
-| `GREPMIND_AGENT_HOSTNAME`         | Grepmind hostname used when startup needs to run OAuth login.       |
-| `GREPMIND_MCP_STARTUP_TIMEOUT_MS` | Startup timeout for auth/runtime preparation. Defaults to `120000`. |
+| `GREPMIND_MCP_STARTUP_TIMEOUT_MS` | Startup timeout for runtime connection and registration. Defaults to `120000`. |
 
 The server also loads `.env` through `dotenv/config`.
 
