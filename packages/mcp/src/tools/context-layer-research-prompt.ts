@@ -51,7 +51,7 @@ Research protocol:
 3. Inspect files locally for decision-critical anchors and surrounding code.
 4. Build a draft answer from proven file:line evidence.
 5. Final pass in this same agent: audit the top 1-3 claims that determine the answer. Move claims without direct file:line support to Inferences or Gaps, downgrade confidence when coverage is weak, and remove unsupported details.
-6. Deduplicate repeated facts and repeated paths.
+6. Deduplicate repeated facts and repeated paths. Assign each evidence anchor exactly one evidence ID in Code Context or Docs Context, then cite only those IDs from Answer, Evidence Quality, Sufficiency, and Flow.
 7. Include docs context only if code_search or file inspection proves docs. Otherwise write exactly "No relevant docs found".
 8. In Sufficiency, decide whether this context is enough for the calling agent to answer the original query. If not enough, suggest 1-3 precise next context queries.
 
@@ -71,20 +71,26 @@ Use bullets and numbered lists inside sections.
 
 Compact but complete answer to the user query. Use these labels inside the
 section:
-- Proven: claims backed by nearby file:line anchors.
+- Proven: direct answer claims backed by evidence IDs such as [E1], [E2], or
+  [D1]. Do not include file:line anchors or snippets here.
 - Inferences: relationships that are reasoned from anchors but not directly
-  proven, or "None."
-- Gaps: missing files, failed searches, unclear call paths, or "None."
+  proven, with evidence IDs when useful, or "None."
+- Gaps: missing files, failed searches, unclear call paths, or "None." Cite gap
+  IDs such as [G1] when there are gaps.
 
 Use enough detail that the main agent can understand the result without
-rereading Code Context first, while avoiding repeated snippets.
+rereading Code Context first. Avoid repeating evidence text, snippets, or
+file:line anchors; cite evidence IDs instead.
 
 ## Evidence Quality
 
-- Proven anchors: concise count/list of the strongest file:line anchors.
-- Inferences: concise list or "None."
-- Gaps: missing or unverified coverage, especially failed, unavailable, or weak search coverage.
-- Failed or truncated summaries: use this label for compatibility. List failed/unavailable/weak searches and truncated file reads, or "None."
+- Proven anchors: concise count/list of the strongest evidence IDs, for example
+  "[E1]-[E8], [D1]". Do not repeat path:line anchors.
+- Inferences: concise list of inference IDs or "None."
+- Gaps: concise list of gap IDs, especially failed, unavailable, or weak search
+  coverage, or "None."
+- Failed or truncated summaries: use this label for compatibility. List
+  failed/unavailable/weak search IDs and truncated file-read IDs, or "None."
 - Confidence: high|medium|low; one sentence explaining why. Confidence must be
   "medium" or "low" when important failed, unavailable, or weak coverage remains
   unresolved.
@@ -92,26 +98,29 @@ rereading Code Context first, while avoiding repeated snippets.
 ## Sufficiency
 
 - Enough to answer: yes|no
-- Missing context: concise list or "None."
+- Missing context: concise list with gap IDs, or "None."
 - Suggested next context queries: "None." or 1-3 precise follow-up queries.
 - Stop reason: why the provided context is sufficient or which residual gap remains.
 
 ## Code Context
 
-- \`path/to/file.ts:123\` - verified fact and why this code matters. Evidence snippet: short snippet or paraphrase from code_search or file inspection.
-- \`path/to/other.ts:45\` - Inference: relationship to another verified anchor, if relevant.
+This is the single evidence register for code anchors. Each bullet must define a
+stable ID exactly once:
+- [E1] \`path/to/file.ts:123\` - verified fact and why this code matters. Evidence snippet: short snippet or paraphrase from code_search or file inspection.
+- [E2] \`path/to/other.ts:45\` - Inference: relationship to another verified anchor, if relevant.
+- [G1] Gap: missing code coverage, failed search, or unclear call path, if relevant.
 
 ## Docs Context
 
-- \`docs/path.md:45\` - relevant product, architecture, or API contract.
+- [D1] \`docs/path.md:45\` - relevant product, architecture, or API contract.
 - If there are no relevant docs after reviewing provided material: \`No relevant docs found\`.
 
 ## Flow
 
-1. Entry point: concrete caller, route, command, stage, or service, with file:line evidence snippet.
-2. Data movement: important objects, tables, IDs, keys, files, or events, with file:line evidence snippet.
-3. Validation or side effect: guards, permissions, status changes, writes, external calls, with file:line evidence snippet.
-4. Persistence or response: saved rows/files, returned DTOs, emitted output, cleanup, or retention, with file:line evidence snippet.
+1. Entry point: concrete caller, route, command, stage, or service, citing evidence IDs only.
+2. Data movement: important objects, tables, IDs, keys, files, or events, citing evidence IDs only.
+3. Validation or side effect: guards, permissions, status changes, writes, external calls, citing evidence IDs only.
+4. Persistence or response: saved rows/files, returned DTOs, emitted output, cleanup, or retention, citing evidence IDs only.
 `;
 }
 

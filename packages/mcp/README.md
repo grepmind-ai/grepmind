@@ -235,26 +235,28 @@ Expected response headings:
 
 ## Research Prompt After Refinement
 
-# context_pack
-
 ## Answer
 
-## Evidence Quality
+## Evidence
 
-## Sufficiency
+### Evidence Quality
 
-## Code Context
+### Sufficiency
 
-## Docs Context
+### Code Context
 
-## Flow
+### Docs Context
+
+### Flow
 ```
 
 The `context_layer_run` header includes the research model, reasoning effort,
 research token usage, truncation status, and the full `context_pack` path when the MCP
 response had to be compacted. The prompt block shown in the response contains
 only `Refined user query:` and the refined query passed into the read-only
-research subagent prompt.
+research subagent prompt. The rendered response separates the concise `Answer`
+from attached `Evidence`; it does not repeat the raw `# context_pack` or the
+`Answer` section inside the evidence block.
 
 Raw research subagent output is still validated against this `context_pack`
 contract before the handler adds the run header and refined research prompt:
@@ -297,9 +299,10 @@ Requirements and safety:
   truncated summaries, and an explicit `Confidence: high|medium|low` line.
   `Sufficiency` must include `Enough to answer: yes|no`, missing context, and
   suggested next context queries. The handler appends a short debug log there
-  with iteration and subagent counts. Evidence snippets from `code_search` are
-  embedded in the relevant sections. Gaps and suggested edit surfaces are
-  embedded beside the related code, docs, flow, or evidence quality items.
+  with iteration and subagent counts. `Code Context` and `Docs Context` are the
+  evidence registers: each code/doc anchor gets one stable ID such as `[E1]` or
+  `[D1]`, while `Answer`, `Evidence Quality`, `Sufficiency`, and `Flow` cite
+  those IDs instead of repeating file:line anchors or snippets.
 
 ### `grepmind_agent_status`
 

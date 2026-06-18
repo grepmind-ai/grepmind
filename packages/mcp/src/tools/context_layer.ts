@@ -50,6 +50,13 @@ export const DEFAULT_MAX_FILES = 30;
 export const DEFAULT_MAX_SEARCH_CALLS = 8;
 export const DEFAULT_FOCUS = 'implementation';
 export const DEFAULT_CONTEXT_LAYER_TOOL_TIMEOUT_BUFFER_SEC = 30;
+const ATTACHED_EVIDENCE_HEADINGS = [
+  '## Evidence Quality',
+  '## Sufficiency',
+  '## Code Context',
+  '## Docs Context',
+  '## Flow',
+] as const;
 
 export const contextLayerSchema = z
   .object({
@@ -574,6 +581,11 @@ function renderContextLayerResponse(input: {
     input.contextPackPath == null
       ? `- Output truncated: ${input.truncated ? 'yes' : 'no'}`
       : `- Output truncated: ${input.truncated ? 'yes' : 'no'}; full context_pack: ${input.contextPackPath}`;
+  const answer = extractContextPackSection(
+    input.contextPackMarkdown,
+    '## Answer',
+  );
+  const evidence = renderAttachedEvidence(input.contextPackMarkdown);
 
   return `# context_layer_run
 
@@ -590,7 +602,13 @@ Refined user query:
 ${input.refinedQuery.trim()}
 \`\`\`
 
-${input.contextPackMarkdown.trim()}`;
+## Answer
+
+${answer}
+
+## Evidence
+
+${evidence}`;
 }
 
 function formatTokenUsage(usage: CodexTokenUsage | undefined): string {
@@ -631,8 +649,9 @@ function parseSufficiency(contextPackMarkdown: string): {
     contextPackMarkdown,
     '## Sufficiency',
   );
-  const enoughMatch =
-    /(^|\n)\s*-?\s*Enough to answer:\s*(yes|no)\b/im.exec(content);
+  const enoughMatch = /(^|\n)\s*-?\s*Enough to answer:\s*(yes|no)\b/im.exec(
+    content,
+  );
   const suggestedBlockMatch =
     /(^|\n)\s*-?\s*Suggested next context queries:\s*([\s\S]*)$/im.exec(
       content,
@@ -679,6 +698,14 @@ function extractContextPackSection(markdown: string, heading: string): string {
   return sectionLines.join('\n').trim();
 }
 
+function renderAttachedEvidence(contextPackMarkdown: string): string {
+  return ATTACHED_EVIDENCE_HEADINGS.map((heading) => {
+    const label = heading.replace(/^##\s+/, '### ');
+    const content = extractContextPackSection(contextPackMarkdown, heading);
+    return `${label}\n\n${content || '[section missing]'}`;
+  }).join('\n\n');
+}
+
 function extractSuggestedContextQueries(block: string): string[] {
   const lines = block
     .split(/\r?\n/)
@@ -695,7 +722,7 @@ function extractSuggestedContextQueries(block: string): string[] {
     if (/^(None\.?|No(ne)?\.?)$/i.test(item)) {
       continue;
     }
-    if (!item || item.includes(':') && queries.length > 0) {
+    if (!item || (item.includes(':') && queries.length > 0)) {
       continue;
     }
     if (/^(Missing context|Stop reason):/i.test(item)) {
