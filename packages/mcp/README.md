@@ -142,9 +142,9 @@ Returns JSON diagnostics for the current MCP workspace:
 
 ## Environment Variables
 
-| Variable                          | Description                                                         |
-| --------------------------------- | ------------------------------------------------------------------- |
-| `GREPMIND_AGENT_DATA_DIR`         | Agent data directory. Defaults to `~/.grepmind-agent`.              |
+| Variable                          | Description                                                                    |
+| --------------------------------- | ------------------------------------------------------------------------------ |
+| `GREPMIND_AGENT_DATA_DIR`         | Agent data directory. Defaults to `~/.grepmind-agent`.                         |
 | `GREPMIND_MCP_STARTUP_TIMEOUT_MS` | Startup timeout for runtime connection and registration. Defaults to `120000`. |
 
 The server also loads `.env` through `dotenv/config`.

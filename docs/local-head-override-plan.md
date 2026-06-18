@@ -198,9 +198,9 @@ The existing `syncHead` endpoint remains responsible for clean real `HEAD` commi
 The backend should store overlay revisions as explicit local-source revisions:
 
 ```ts
-sourceKind: 'local_head_overlay'
-baseHeadCommitSha: string
-overrideFingerprint: string
+sourceKind: 'local_head_overlay';
+baseHeadCommitSha: string;
+overrideFingerprint: string;
 ```
 
 Materialization steps:
@@ -327,13 +327,13 @@ Add diagnostic fields to `agent_status`:
 
 ```ts
 localHead: {
-  branch,
-  headCommitSha,
-  dirty,
-  baseHeadCommitSha,
-  overrideFingerprint,
-  overlayFileCount,
-  overlayTotalBytes
+  (branch,
+    headCommitSha,
+    dirty,
+    baseHeadCommitSha,
+    overrideFingerprint,
+    overlayFileCount,
+    overlayTotalBytes);
 }
 ```
 
