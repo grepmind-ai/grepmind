@@ -92,19 +92,19 @@ config key, error text, import path, function name, or regex anchor, add
 
 Input fields:
 
-| Field          | Type               | Description                                                                       |
-| -------------- | ------------------ | --------------------------------------------------------------------------------- |
-| `query`        | `string`           | Natural-language search query.                                                    |
-| `target`       | `"code" \| "docs"` | Optional target. Defaults to `code`.                                              |
-| `limit`        | `number`           | Optional maximum result count. Defaults to `10`.                                  |
-| `threshold`    | `number`           | Optional semantic threshold from `0` to `1`. Defaults to `0.5`.                   |
-| `rerank`       | `boolean`          | Ignored. Semantic reranking is disabled and requests always send `rerank=false`.  |
-| `path`         | `string`           | Optional relative path prefix filter, such as `src/api`.                          |
-| `tags`         | `string[]`         | Optional docs tag filter.                                                         |
+| Field          | Type               | Description                                                                                                                  |
+| -------------- | ------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| `query`        | `string`           | Natural-language search query.                                                                                               |
+| `target`       | `"code" \| "docs"` | Optional target. Defaults to `code`.                                                                                         |
+| `limit`        | `number`           | Optional maximum result count. Defaults to `10`.                                                                             |
+| `threshold`    | `number`           | Optional semantic threshold from `0` to `1`. Defaults to `0.5`.                                                              |
+| `rerank`       | `boolean`          | Ignored. Semantic reranking is disabled and requests always send `rerank=false`.                                             |
+| `path`         | `string`           | Optional relative path prefix filter, such as `src/api`.                                                                     |
+| `tags`         | `string[]`         | Optional docs tag filter.                                                                                                    |
 | `exact`        | `object`           | Optional local exact search signal for `rg`: `pattern`, `regex`, `caseSensitive`. `pattern` may be a string or string array. |
-| `globs`        | `string[]`         | Optional local `rg` glob scopes. Not raw `rg` flags.                              |
-| `contextLines` | `number`           | Optional local `rg` context lines. Defaults to `2`, maximum `10`.                 |
-| `compact`      | `boolean`          | Optional compact output without full previews.                                    |
+| `globs`        | `string[]`         | Optional local `rg` glob scopes. Not raw `rg` flags.                                                                         |
+| `contextLines` | `number`           | Optional local `rg` context lines. Defaults to `2`, maximum `10`.                                                            |
+| `compact`      | `boolean`          | Optional compact output without full previews.                                                                               |
 
 `workspacePath` is not accepted. The repository scope always comes from the server-side `bindingId` resolved during MCP startup.
 
@@ -145,11 +145,11 @@ Returns JSON diagnostics for the current MCP workspace:
 
 ## Environment Variables
 
-| Variable                                           | Description                                                             |
-| -------------------------------------------------- | ----------------------------------------------------------------------- |
-| `GREPMIND_AGENT_DATA_DIR`                          | Agent data directory. Defaults to `~/.grepmind-agent`.                  |
-| `GREPMIND_AGENT_HOSTNAME`                          | Grepmind hostname used when startup needs to run OAuth login.           |
-| `GREPMIND_MCP_STARTUP_TIMEOUT_MS`                  | Startup timeout for auth/runtime preparation. Defaults to `120000`.     |
+| Variable                          | Description                                                         |
+| --------------------------------- | ------------------------------------------------------------------- |
+| `GREPMIND_AGENT_DATA_DIR`         | Agent data directory. Defaults to `~/.grepmind-agent`.              |
+| `GREPMIND_AGENT_HOSTNAME`         | Grepmind hostname used when startup needs to run OAuth login.       |
+| `GREPMIND_MCP_STARTUP_TIMEOUT_MS` | Startup timeout for auth/runtime preparation. Defaults to `120000`. |
 
 The server also loads `.env` through `dotenv/config`.
 

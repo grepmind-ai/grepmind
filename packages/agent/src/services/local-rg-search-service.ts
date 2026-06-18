@@ -77,9 +77,7 @@ export class LocalRgSearchService {
   }
 }
 
-function createEmptyRgResult(input: {
-  warning?: string;
-}): LocalRgSearchResult {
+function createEmptyRgResult(input: { warning?: string }): LocalRgSearchResult {
   return {
     items: [],
     stats: {

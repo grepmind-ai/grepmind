@@ -504,7 +504,12 @@ function collectSemanticExactSearchPaths(
 }
 
 function normalizeWorkspaceRelativePath(value: string | undefined): string {
-  return value?.trim().replaceAll(/^[/\\]+/g, '').replaceAll('\\', '/') ?? '';
+  return (
+    value
+      ?.trim()
+      .replaceAll(/^[/\\]+/g, '')
+      .replaceAll('\\', '/') ?? ''
+  );
 }
 
 function isRelativePathWithinFilter(

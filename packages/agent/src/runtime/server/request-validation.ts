@@ -528,7 +528,10 @@ function normalizeExactPatternValue(value: unknown, label: string): string[] {
   return validateExactPatternEntries(value, label);
 }
 
-function validateExactPatternEntries(value: unknown[], label: string): string[] {
+function validateExactPatternEntries(
+  value: unknown[],
+  label: string,
+): string[] {
   if (value.length > MAX_EXACT_PATTERN_COUNT) {
     throw new AgentRpcRequestError({
       code: 'INVALID_REQUEST',
