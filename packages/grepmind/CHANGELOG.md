@@ -1,5 +1,16 @@
 # grepmind
 
+## 0.6.0
+
+### Minor Changes
+
+- c6681f3: Replace the MCP context_layer tool with expanded code_search exact matching, including multiple patterns and scoped paths.
+
+### Patch Changes
+
+- Updated dependencies [c6681f3]
+  - @grepmind/agent@0.3.0
+
 ## 0.5.0
 
 ### Minor Changes

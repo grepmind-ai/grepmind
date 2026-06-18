@@ -1,5 +1,11 @@
 # @grepmind/agent-rpc
 
+## 0.4.0
+
+### Minor Changes
+
+- c6681f3: Replace the MCP context_layer tool with expanded code_search exact matching, including multiple patterns and scoped paths.
+
 ## 0.3.0
 
 ### Minor Changes
