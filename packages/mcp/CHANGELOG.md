@@ -1,5 +1,13 @@
 # @grepmind/mcp
 
+## 0.3.2
+
+### Patch Changes
+
+- 91fc03e: Revert path-scoped search filtering and restore the previous MCP search behavior.
+- Updated dependencies [91fc03e]
+  - @grepmind/agent@0.3.2
+
 ## 0.3.1
 
 ### Patch Changes
