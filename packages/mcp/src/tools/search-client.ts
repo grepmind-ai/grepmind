@@ -91,16 +91,16 @@ export async function searchCode(params: {
     }
 
     const requestedLimit = params.limit ?? DEFAULT_SEARCH_LIMIT;
-    const searchLimit =
-      params.exact != null
-        ? Math.min(
-            Math.max(
-              requestedLimit * FILTER_OVERFETCH_MULTIPLIER,
-              MIN_FILTER_OVERFETCH_LIMIT,
-            ),
-            MAX_FILTER_OVERFETCH_LIMIT,
-          )
-        : requestedLimit;
+    let searchLimit = requestedLimit;
+    if (params.exact != null) {
+      searchLimit = Math.min(
+        Math.max(
+          requestedLimit * FILTER_OVERFETCH_MULTIPLIER,
+          MIN_FILTER_OVERFETCH_LIMIT,
+        ),
+        MAX_FILTER_OVERFETCH_LIMIT,
+      );
+    }
     const response = await client.searchHead({
       bindingId: workspaceContext.bindingId,
       query: params.query,
