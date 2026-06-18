@@ -155,8 +155,7 @@ The research subagent returns a `Sufficiency` decision and may suggest precise
 next queries, but the MCP handler does not automatically run another retrieval
 iteration. The final result is a curated map of code, docs, flow, sufficiency,
 evidence quality, risks, and suggested edit surfaces. The prompt-refiner is
-instructed not to inspect the repository and runs with a dedicated Codex
-profile.
+instructed not to inspect the repository and runs with Grepmind MCP disabled.
 
 All context-layer Codex subagents use the fixed `gpt-5.5` model. The first
 prompt-refiner subagent and the research subagent use medium reasoning effort.
@@ -242,8 +241,6 @@ Requirements and safety:
 
 - Codex CLI must be installed or `GREPMIND_CONTEXT_LAYER_CODEX_BIN` must point
   to a compatible binary.
-- `$CODEX_HOME/grepmind-context-layer-refiner.config.toml` must be configured
-  as a valid profile for prompt refinement.
 - `$CODEX_HOME/grepmind-context-layer-subagent.config.toml` must exist.
 - The research subagent may call Grepmind `code_search`. `context_layer` is not
   registered inside context-layer subagent processes.

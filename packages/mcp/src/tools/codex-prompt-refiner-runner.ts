@@ -11,10 +11,6 @@ import {
 } from './context-layer-model-config.js';
 import { buildContextLayerPromptRefinerPrompt } from './context-layer-prompt-refiner.js';
 import type { ContextLayerPromptRefinerInput } from './context-layer-prompt-refiner.js';
-import {
-  CONTEXT_LAYER_REFINER_PROFILE,
-  verifyContextLayerRefinerProfile,
-} from './context-layer-refiner-profile.js';
 import { parsePromptRefinerOutput } from './prompt-refiner-output.js';
 import type { PromptRefinerOutput } from './prompt-refiner-output.js';
 
@@ -39,7 +35,6 @@ export async function runPromptRefinerSubagent(
   const startedAt = Date.now();
   const codexBin = await resolveCodexCliPath();
   await verifyCodexCliShape(codexBin);
-  await verifyContextLayerRefinerProfile(codexBin, input.workspacePath);
 
   const args = buildPromptRefinerExecArgs({
     workspacePath: input.workspacePath,
@@ -132,8 +127,6 @@ function buildPromptRefinerExecArgs(input: {
     '--ask-for-approval',
     'never',
     'exec',
-    '--profile',
-    CONTEXT_LAYER_REFINER_PROFILE,
     '--model',
     input.modelName,
     '--config',
