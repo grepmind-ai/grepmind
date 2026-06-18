@@ -179,23 +179,25 @@ function validateInput(input: LocalRgSearchInput): string[] {
 }
 
 function normalizeExactPatterns(exact: SearchExactQuery): string[] {
-  const patterns = [
-    ...(exact.pattern ? [exact.pattern] : []),
-    ...(exact.patterns ?? []),
-  ];
+  const patterns =
+    exact.pattern == null
+      ? []
+      : Array.isArray(exact.pattern)
+        ? exact.pattern
+        : [exact.pattern];
   const normalizedPatterns: string[] = [];
   for (const patternInput of patterns) {
     const pattern = patternInput.trim();
     if (!pattern) {
       throw new LocalRgSearchError(
         'RG_INVALID_INPUT',
-        'exact.pattern and exact.patterns entries must be non-empty strings',
+        'exact.pattern entries must be non-empty strings',
       );
     }
     if (pattern.length > MAX_RG_PATTERN_LENGTH) {
       throw new LocalRgSearchError(
         'RG_INVALID_INPUT',
-        `exact.patterns entries must be at most ${MAX_RG_PATTERN_LENGTH} characters`,
+        `exact.pattern entries must be at most ${MAX_RG_PATTERN_LENGTH} characters`,
       );
     }
 
@@ -206,13 +208,13 @@ function normalizeExactPatterns(exact: SearchExactQuery): string[] {
   if (dedupedPatterns.length === 0) {
     throw new LocalRgSearchError(
       'RG_INVALID_INPUT',
-      'exact.pattern or exact.patterns must be provided',
+      'exact.pattern must contain at least one entry',
     );
   }
   if (dedupedPatterns.length > MAX_RG_PATTERN_COUNT) {
     throw new LocalRgSearchError(
       'RG_INVALID_INPUT',
-      `exact.patterns must contain at most ${MAX_RG_PATTERN_COUNT} entries`,
+      `exact.pattern must contain at most ${MAX_RG_PATTERN_COUNT} entries`,
     );
   }
 

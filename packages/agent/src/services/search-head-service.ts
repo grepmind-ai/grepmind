@@ -223,7 +223,7 @@ export class SearchHeadService {
       target,
       limit,
       threshold,
-      rerank: input.rerank ?? true,
+      rerank: false,
       tags,
     };
     if (input.exact == null) {

@@ -1,6 +1,6 @@
 [mcp_servers.grepmind]
-command = "npx"
-args = ["-y", "@grepmind/mcp@latest"]
+command = "node"
+args = ["packages/mcp/dist/index.js"]
 cwd = "/Users/phl/Projects/zaytra/grepmind-public"
 startup_timeout_sec = 120
 tool_timeout_sec = 210

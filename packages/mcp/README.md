@@ -88,7 +88,7 @@ This MCP server exposes `code_search` and `grepmind_agent_status`.
 Finds code or documentation in the startup workspace. Use `query` to describe
 intent in natural language. When you know a concrete identifier, string, route,
 config key, error text, import path, function name, or regex anchor, add
-`exact.patterns` as an additional local signal.
+`exact.pattern` as an additional local signal.
 
 Input fields:
 
@@ -98,10 +98,10 @@ Input fields:
 | `target`       | `"code" \| "docs"` | Optional target. Defaults to `code`.                                              |
 | `limit`        | `number`           | Optional maximum result count. Defaults to `10`.                                  |
 | `threshold`    | `number`           | Optional semantic threshold from `0` to `1`. Defaults to `0.5`.                   |
-| `rerank`       | `boolean`          | Optional semantic reranking. Defaults to `false`.                                 |
+| `rerank`       | `boolean`          | Ignored. Semantic reranking is disabled and requests always send `rerank=false`.  |
 | `path`         | `string`           | Optional relative path prefix filter, such as `src/api`.                          |
 | `tags`         | `string[]`         | Optional docs tag filter.                                                         |
-| `exact`        | `object`           | Optional local exact search signal for `rg`: `patterns`, `pattern`, `regex`, `caseSensitive`. |
+| `exact`        | `object`           | Optional local exact search signal for `rg`: `pattern`, `regex`, `caseSensitive`. `pattern` may be a string or string array. |
 | `globs`        | `string[]`         | Optional local `rg` glob scopes. Not raw `rg` flags.                              |
 | `contextLines` | `number`           | Optional local `rg` context lines. Defaults to `2`, maximum `10`.                 |
 | `compact`      | `boolean`          | Optional compact output without full previews.                                    |
@@ -114,7 +114,7 @@ Example tool input:
 {
   "query": "where repository settings are validated before save",
   "exact": {
-    "patterns": ["safeParse", "z.object", "validate"]
+    "pattern": ["safeParse", "z.object", "validate"]
   },
   "target": "code",
   "path": "packages/app/src",
@@ -124,7 +124,7 @@ Example tool input:
 
 Exact search is handled by the local agent runtime with system `rg` after the
 current workspace HEAD has been resolved to an indexed revision. The backend
-receives the semantic query only; it does not receive `exact.patterns`, `globs`,
+receives the semantic query only; it does not receive `exact.pattern`, `globs`,
 local working tree context, or local `rg` matches. Exact search runs only inside
 paths returned by semantic search and is added back as evidence on semantic
 results. When `tags` are provided, local `rg` is skipped because tags are

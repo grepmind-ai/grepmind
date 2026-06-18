@@ -106,7 +106,7 @@ export async function searchCode(params: {
       target: params.target ?? 'code',
       limit: searchLimit,
       threshold: params.threshold,
-      rerank: params.rerank ?? false,
+      rerank: false,
       tags: normalizeTags(params.tags),
       exact: params.exact,
       path: params.path,
