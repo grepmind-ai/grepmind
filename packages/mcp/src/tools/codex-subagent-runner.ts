@@ -3,6 +3,10 @@ import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { resolveCodexCliPath, verifyCodexCliShape } from './codex-cli.js';
+import {
+  getResearchSubagentDisableFeatureArgs,
+  getResearchSubagentMcpConfigArgs,
+} from './codex-feature-flags.js';
 import { formatDiagnosticTail } from './context-layer-diagnostics.js';
 import { ContextLayerError } from './context-layer-errors.js';
 import {
@@ -183,8 +187,10 @@ export function buildCodexExecArgs(input: {
   const args = [
     '--ask-for-approval',
     'never',
+    ...getResearchSubagentDisableFeatureArgs(),
     'exec',
     '--json',
+    '--ignore-rules',
     '--profile',
     CONTEXT_LAYER_SUBAGENT_PROFILE,
     '--model',
@@ -193,10 +199,7 @@ export function buildCodexExecArgs(input: {
     `model_reasoning_effort=${JSON.stringify(
       toCodexReasoningEffort(input.modelThinking),
     )}`,
-    '--config',
-    'mcp_servers.node_repl.enabled=false',
-    '--config',
-    'mcp_servers.playwright.enabled=false',
+    ...getResearchSubagentMcpConfigArgs(),
     '--cd',
     input.workspacePath,
     '--sandbox',

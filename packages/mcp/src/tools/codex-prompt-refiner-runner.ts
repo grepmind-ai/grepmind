@@ -3,6 +3,10 @@ import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { resolveCodexCliPath, verifyCodexCliShape } from './codex-cli.js';
+import {
+  getPromptRefinerDisableFeatureArgs,
+  getPromptRefinerMcpConfigArgs,
+} from './codex-feature-flags.js';
 import { formatDiagnosticTail } from './context-layer-diagnostics.js';
 import { ContextLayerError } from './context-layer-errors.js';
 import {
@@ -131,19 +135,16 @@ function buildPromptRefinerExecArgs(input: {
   return [
     '--ask-for-approval',
     'never',
+    ...getPromptRefinerDisableFeatureArgs(),
     'exec',
+    '--ignore-rules',
     '--model',
     input.modelName,
     '--config',
     `model_reasoning_effort=${JSON.stringify(
       toCodexReasoningEffort(input.modelThinking),
     )}`,
-    '--config',
-    'mcp_servers.grepmind.enabled=false',
-    '--config',
-    'mcp_servers.node_repl.enabled=false',
-    '--config',
-    'mcp_servers.playwright.enabled=false',
+    ...getPromptRefinerMcpConfigArgs(),
     '--cd',
     input.workspacePath,
     '--sandbox',

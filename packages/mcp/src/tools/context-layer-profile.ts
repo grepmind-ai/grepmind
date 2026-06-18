@@ -3,6 +3,10 @@ import { access, readFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
+import {
+  getResearchSubagentDisableFeatureArgs,
+  getResearchSubagentMcpConfigArgs,
+} from './codex-feature-flags.js';
 import { ContextLayerError } from './context-layer-errors.js';
 
 export const CONTEXT_LAYER_SUBAGENT_PROFILE = 'grepmind-context-layer-subagent';
@@ -108,6 +112,8 @@ async function readCodexMcpList(
     const result = await execFileAsync(
       codexBin,
       [
+        ...getResearchSubagentDisableFeatureArgs(),
+        ...getResearchSubagentMcpConfigArgs(),
         '--profile',
         CONTEXT_LAYER_SUBAGENT_PROFILE,
         '--cd',
