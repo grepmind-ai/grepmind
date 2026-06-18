@@ -99,11 +99,6 @@ interface ContextLayerIterationResult {
   truncated: boolean;
   timeout: false;
   runtimeDurationMs: number;
-  fanoutRuntimeDurationMs: 0;
-  aggregationRuntimeDurationMs: number;
-  fanoutFileCount: 0;
-  fanoutCompletedCount: 0;
-  fanoutFailedCount: 0;
   handlerSearchCalls: number;
   remainingSearchCalls: number;
   exactPatterns: string[];
@@ -270,9 +265,6 @@ export async function contextLayerTool(
         model_thinking: refinementState.model.thinking,
         prompt_refiner_model_thinking: CONTEXT_LAYER_PROMPT_REFINER_THINKING,
         research_model_thinking: CONTEXT_LAYER_RESEARCH_THINKING,
-        file_summary_model_thinking: CONTEXT_LAYER_RESEARCH_THINKING,
-        aggregation_model_thinking: CONTEXT_LAYER_RESEARCH_THINKING,
-        polish_model_thinking: CONTEXT_LAYER_RESEARCH_THINKING,
         max_search_calls: refinementState.maxSearchCalls,
         handler_search_calls: result.handlerSearchCalls,
         remaining_search_calls: result.remainingSearchCalls,
@@ -285,12 +277,6 @@ export async function contextLayerTool(
         context_pack_path: result.contextPackPath,
         prompt_refiner_runtime_duration_ms: refiner.runtimeDurationMs,
         research_runtime_duration_ms: researchRuntimeDurationMs,
-        fanout_file_count: result.fanoutFileCount,
-        fanout_completed_count: result.fanoutCompletedCount,
-        fanout_failed_count: result.fanoutFailedCount,
-        fanout_runtime_duration_ms: result.fanoutRuntimeDurationMs,
-        aggregation_runtime_duration_ms: result.aggregationRuntimeDurationMs,
-        polish_runtime_duration_ms: 0,
         runtime_duration_ms: Date.now() - startedAt,
         truncated: result.truncated,
         timeout: result.timeout,
@@ -341,7 +327,6 @@ function handleContextLayerError(input: {
       (isResearchRuntimeError(normalized.code)
         ? normalized.runtimeDurationMs
         : undefined),
-    polishRuntimeDurationMs: undefined,
     runtimeDurationMs: Date.now() - input.startedAt,
   });
 }
@@ -548,11 +533,6 @@ async function runContextLayerResearch(input: {
     truncated: result.truncated,
     timeout: false,
     runtimeDurationMs: result.runtimeDurationMs,
-    fanoutRuntimeDurationMs: 0,
-    aggregationRuntimeDurationMs: result.runtimeDurationMs,
-    fanoutFileCount: 0,
-    fanoutCompletedCount: 0,
-    fanoutFailedCount: 0,
     handlerSearchCalls: 0,
     remainingSearchCalls: input.maxSearchCalls,
     exactPatterns: [],
@@ -590,11 +570,7 @@ function appendContextLayerDebugLog(
   const debugLine =
     `- Debug log: iterations=${result.iterations}; ` +
     'research agents=1; ' +
-    `fanout agents=${result.fanoutFileCount}; ` +
-    'aggregation agents=0; ' +
-    'polish agents=0; ' +
-    'completed=1; ' +
-    `failed=${result.fanoutFailedCount}.`;
+    'completed=1.';
   const codeContextHeading = '\n\n## Code Context';
   const index = contextPackMarkdown.indexOf(codeContextHeading);
   if (index < 0) {

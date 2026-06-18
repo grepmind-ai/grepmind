@@ -1,9 +1,6 @@
 import { ContextLayerError } from './context-layer-errors.js';
 import type { ContextLayerErrorCode } from './context-layer-errors.js';
 import {
-  CONTEXT_LAYER_AGGREGATION_THINKING,
-  CONTEXT_LAYER_FILE_SUMMARY_THINKING,
-  CONTEXT_LAYER_POLISH_THINKING,
   CONTEXT_LAYER_PROMPT_REFINER_THINKING,
   CONTEXT_LAYER_RESEARCH_THINKING,
   DEFAULT_CONTEXT_LAYER_CODEX_MODEL,
@@ -24,9 +21,6 @@ export interface ContextLayerSuccessResult {
     model_thinking: ContextLayerThinking;
     prompt_refiner_model_thinking: ContextLayerThinking;
     research_model_thinking: ContextLayerThinking;
-    file_summary_model_thinking: ContextLayerThinking;
-    aggregation_model_thinking: ContextLayerThinking;
-    polish_model_thinking: ContextLayerThinking;
     max_search_calls: number;
     handler_search_calls: number;
     remaining_search_calls: number;
@@ -38,12 +32,6 @@ export interface ContextLayerSuccessResult {
     context_pack_path?: string;
     prompt_refiner_runtime_duration_ms: number;
     research_runtime_duration_ms: number;
-    fanout_file_count: number;
-    fanout_completed_count: number;
-    fanout_failed_count: number;
-    fanout_runtime_duration_ms: number;
-    aggregation_runtime_duration_ms: number;
-    polish_runtime_duration_ms: number;
     runtime_duration_ms: number;
     truncated: boolean;
     timeout: boolean;
@@ -79,13 +67,9 @@ export interface ContextLayerErrorResult {
     model_thinking?: ContextLayerThinking;
     prompt_refiner_model_thinking?: ContextLayerThinking;
     research_model_thinking?: ContextLayerThinking;
-    file_summary_model_thinking?: ContextLayerThinking;
-    aggregation_model_thinking?: ContextLayerThinking;
-    polish_model_thinking?: ContextLayerThinking;
     max_search_calls?: number;
     prompt_refiner_runtime_duration_ms?: number;
     research_runtime_duration_ms?: number;
-    polish_runtime_duration_ms?: number;
     runtime_duration_ms: number;
     truncated: false;
     timeout: boolean;
@@ -137,7 +121,6 @@ export function toErrorResult(
     refinementSession: string | undefined;
     promptRefinerRuntimeDurationMs: number | undefined;
     researchRuntimeDurationMs: number | undefined;
-    polishRuntimeDurationMs: number | undefined;
     runtimeDurationMs: number;
   },
 ): ContextLayerErrorResult {
@@ -159,14 +142,10 @@ export function toErrorResult(
         context.model?.thinking ?? DEFAULT_CONTEXT_LAYER_CODEX_THINKING,
       prompt_refiner_model_thinking: CONTEXT_LAYER_PROMPT_REFINER_THINKING,
       research_model_thinking: CONTEXT_LAYER_RESEARCH_THINKING,
-      file_summary_model_thinking: CONTEXT_LAYER_FILE_SUMMARY_THINKING,
-      aggregation_model_thinking: CONTEXT_LAYER_AGGREGATION_THINKING,
-      polish_model_thinking: CONTEXT_LAYER_POLISH_THINKING,
       max_search_calls: context.maxSearchCalls,
       prompt_refiner_runtime_duration_ms:
         context.promptRefinerRuntimeDurationMs,
       research_runtime_duration_ms: context.researchRuntimeDurationMs,
-      polish_runtime_duration_ms: context.polishRuntimeDurationMs,
       runtime_duration_ms: context.runtimeDurationMs,
       truncated: false,
       timeout: error.timeout,
