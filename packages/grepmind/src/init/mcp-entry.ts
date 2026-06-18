@@ -19,13 +19,7 @@ export interface WriteDecision {
   preservedCommand: boolean;
 }
 
-const DEFAULT_PROMPT_REFINER_TIMEOUT_MS = 45_000;
-const DEFAULT_CONTEXT_LAYER_TIMEOUT_MS = 300_000;
-const DEFAULT_CONTEXT_LAYER_TOOL_TIMEOUT_BUFFER_SEC = 30;
-const DEFAULT_MCP_TOOL_TIMEOUT_SEC =
-  Math.ceil(DEFAULT_PROMPT_REFINER_TIMEOUT_MS / 1000) +
-  Math.ceil(DEFAULT_CONTEXT_LAYER_TIMEOUT_MS / 1000) +
-  DEFAULT_CONTEXT_LAYER_TOOL_TIMEOUT_BUFFER_SEC;
+const DEFAULT_MCP_TOOL_TIMEOUT_SEC = 120;
 
 export function createGeneratedMcpEntry(input: {
   hostname: string;
