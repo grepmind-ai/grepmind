@@ -1,11 +1,13 @@
 [mcp_servers.grepmind]
-command = "npx"
-args = ["-y", "@grepmind/mcp@latest"]
+command = "node"
+args = ["packages/mcp/dist/index.js"]
 cwd = "/Users/phl/Projects/zaytra/grepmind-public"
 startup_timeout_sec = 120
-tool_timeout_sec = 210
+tool_timeout_sec = 120
 
 [mcp_servers.grepmind.env]
 GREPMIND_AGENT_HOSTNAME = "app.grepmind.ai"
 GREPMIND_MCP_STARTUP_TIMEOUT_MS = "120000"
-GREPMIND_CONTEXT_LAYER_CODEX_MODEL = "gpt-5.5"
+
+[mcp_servers.grepmind.tools.code_search]
+approval_mode = "approve"

@@ -82,10 +82,9 @@ export async function agentStatusTool(): Promise<{
         pid: runtime.pid,
         dataDir: runtime.dataDir,
       },
-      project,
+      project: omitActiveBranch(project),
       lastSyncStatus: {
         lastSyncedAt: project.lastSyncedAt,
-        activeBranch: project.activeBranch,
         defaultBranch: project.defaultBranch,
         localHead,
         localHeadSnapshot: localHeadStatus,
@@ -119,7 +118,7 @@ export async function agentStatusTool(): Promise<{
             running: false,
             error: error instanceof Error ? error.message : String(error),
           },
-          project: context.project,
+          project: omitActiveBranch(context.project),
           lastSyncStatus: {
             localHead,
           },
@@ -130,6 +129,14 @@ export async function agentStatusTool(): Promise<{
 
     throw error;
   }
+}
+
+function omitActiveBranch<T extends { activeBranch?: unknown }>(
+  project: T,
+): Omit<T, 'activeBranch'> {
+  const result: Partial<T> = { ...project };
+  delete result.activeBranch;
+  return result as Omit<T, 'activeBranch'>;
 }
 
 async function readLocalHead(workspacePath: string): Promise<{

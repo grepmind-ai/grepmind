@@ -8,6 +8,7 @@ import {
 import { AgentRpcRequestError } from './rpc-errors.js';
 
 const MAX_EXACT_PATTERN_LENGTH = 500;
+const MAX_EXACT_PATTERN_COUNT = 20;
 const MAX_GLOB_COUNT = 20;
 const MAX_GLOB_LENGTH = 200;
 const MAX_CONTEXT_LINES = 10;
@@ -481,21 +482,76 @@ function optionalSearchExactQuery(
   }
 
   const record = requireRecord(value, label);
-  const pattern = requiredNonEmptyString(record.pattern, `${label}.pattern`);
-  if (pattern.length > MAX_EXACT_PATTERN_LENGTH) {
+  const normalizedPatterns = normalizeExactPatternValue(
+    record.pattern,
+    `${label}.pattern`,
+  );
+  if (normalizedPatterns.length === 0) {
+    return undefined;
+  }
+  if (normalizedPatterns.length > MAX_EXACT_PATTERN_COUNT) {
     throw new AgentRpcRequestError({
       code: 'INVALID_REQUEST',
-      message: `${label}.pattern must be at most ${MAX_EXACT_PATTERN_LENGTH} characters`,
+      message: `${label}.pattern must contain at most ${MAX_EXACT_PATTERN_COUNT} entries`,
       retryable: false,
     });
   }
 
   return {
-    pattern,
+    pattern:
+      normalizedPatterns.length === 1
+        ? normalizedPatterns[0]
+        : normalizedPatterns,
     regex: optionalBoolean(record.regex, `${label}.regex`),
     caseSensitive: optionalBoolean(
       record.caseSensitive,
       `${label}.caseSensitive`,
     ),
   };
+}
+
+function normalizeExactPatternValue(value: unknown, label: string): string[] {
+  if (value == null) {
+    return [];
+  }
+  if (typeof value === 'string') {
+    return validateExactPatternEntries([value], label);
+  }
+  if (!Array.isArray(value)) {
+    throw new AgentRpcRequestError({
+      code: 'INVALID_REQUEST',
+      message: `${label} must be a string or an array of strings`,
+      retryable: false,
+    });
+  }
+
+  return validateExactPatternEntries(value, label);
+}
+
+function validateExactPatternEntries(
+  value: unknown[],
+  label: string,
+): string[] {
+  if (value.length > MAX_EXACT_PATTERN_COUNT) {
+    throw new AgentRpcRequestError({
+      code: 'INVALID_REQUEST',
+      message: `${label} must contain at most ${MAX_EXACT_PATTERN_COUNT} entries`,
+      retryable: false,
+    });
+  }
+
+  const normalized = value.map((entry, index) => {
+    const item = requiredNonEmptyString(entry, `${label}[${index}]`);
+    if (item.length > MAX_EXACT_PATTERN_LENGTH) {
+      throw new AgentRpcRequestError({
+        code: 'INVALID_REQUEST',
+        message: `${label}[${index}] must be at most ${MAX_EXACT_PATTERN_LENGTH} characters`,
+        retryable: false,
+      });
+    }
+
+    return item;
+  });
+
+  return [...new Set(normalized)];
 }

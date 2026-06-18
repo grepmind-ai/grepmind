@@ -8,13 +8,28 @@ import {
   type ResponseMeta,
 } from './search-client.js';
 import { ensureMcpRuntimePrepared } from '../runtime-context.js';
+import type { SearchExactQuery } from '@grepmind/agent-rpc';
 
 const DEFAULT_SEARCH_LIMIT = 10;
 const MAX_SEARCH_LIMIT = 100;
 const MAX_EXACT_PATTERN_LENGTH = 500;
+const MAX_EXACT_PATTERN_COUNT = 20;
 const MAX_GLOB_COUNT = 20;
 const MAX_GLOB_LENGTH = 200;
 const MAX_CONTEXT_LINES = 10;
+
+const exactPatternSchema = z.union([
+  z.string().min(1).max(MAX_EXACT_PATTERN_LENGTH),
+  z
+    .array(z.string().min(1).max(MAX_EXACT_PATTERN_LENGTH))
+    .max(MAX_EXACT_PATTERN_COUNT),
+]);
+
+const exactSearchSchema = z.object({
+  pattern: exactPatternSchema.optional(),
+  regex: z.boolean().optional(),
+  caseSensitive: z.boolean().optional(),
+});
 
 export const codeSearchSchema = z
   .object({
@@ -22,7 +37,7 @@ export const codeSearchSchema = z
       .string()
       .min(1)
       .describe(
-        'Describe the code or docs you need. Add exact.pattern when you know an identifier, string, route, config key, error text, import path, function name, or regex anchor.',
+        'Describe the code or docs you need. Add exact.pattern when you know identifiers, strings, routes, config keys, error text, imports, function names, or regex anchors. Use an array for multiple values.',
       ),
     target: z
       .enum(['code', 'docs'])
@@ -43,6 +58,12 @@ export const codeSearchSchema = z
       .max(1)
       .optional()
       .describe('Min semantic score 0-1 (default: 0.5). Lower = more results'),
+    rerank: z
+      .boolean()
+      .optional()
+      .describe(
+        'Ignored. Semantic reranking is disabled and code_search always sends rerank=false.',
+      ),
     path: z
       .string()
       .optional()
@@ -51,15 +72,10 @@ export const codeSearchSchema = z
       .array(z.string())
       .optional()
       .describe('Filter docs by tags (e.g., ["architecture", "guide"])'),
-    exact: z
-      .object({
-        pattern: z.string().min(1).max(MAX_EXACT_PATTERN_LENGTH),
-        regex: z.boolean().optional(),
-        caseSensitive: z.boolean().optional(),
-      })
+    exact: exactSearchSchema
       .optional()
       .describe(
-        'Optional exact local rg signal. Use pattern for identifiers, strings, routes, config keys, imports, error text, or regex anchors.',
+        'Optional local rg evidence signal scoped to semantic result paths. Use pattern as a string for one value or an array for a batch of identifiers, strings, routes, config keys, imports, error text, or regex anchors.',
       ),
     globs: z
       .array(z.string().min(1).max(MAX_GLOB_LENGTH))
@@ -144,6 +160,38 @@ function formatFullResult(r: SearchResult, index: number): string {
   return text;
 }
 
+function normalizeExactInput(
+  exact: CodeSearchInput['exact'],
+): SearchExactQuery | undefined {
+  if (exact == null || exact.pattern == null) {
+    return undefined;
+  }
+
+  if (Array.isArray(exact.pattern)) {
+    const pattern = [...new Set(exact.pattern.map((value) => value.trim()))];
+    if (pattern.length === 0) {
+      return undefined;
+    }
+
+    return {
+      pattern,
+      regex: exact.regex,
+      caseSensitive: exact.caseSensitive,
+    };
+  }
+
+  const pattern = exact.pattern.trim();
+  if (!pattern) {
+    return undefined;
+  }
+
+  return {
+    pattern,
+    regex: exact.regex,
+    caseSensitive: exact.caseSensitive,
+  };
+}
+
 export async function codeSearchTool(input: CodeSearchInput): Promise<{
   content: Array<{ type: 'text'; text: string }>;
   isError?: boolean;
@@ -156,9 +204,10 @@ export async function codeSearchTool(input: CodeSearchInput): Promise<{
       target: input.target,
       limit: input.limit ?? DEFAULT_SEARCH_LIMIT,
       threshold: input.threshold ?? 0.5,
+      rerank: false,
       path: input.path,
       tags: input.tags,
-      exact: input.exact,
+      exact: normalizeExactInput(input.exact),
       globs: input.globs,
       contextLines: input.contextLines,
     });
@@ -168,7 +217,7 @@ export async function codeSearchTool(input: CodeSearchInput): Promise<{
         content: [
           {
             type: 'text',
-            text: 'No local agent HEAD results found. Try rephrasing, lowering threshold, adjusting path/tags, or adding exact.pattern when you know a concrete identifier or string.',
+            text: 'No local agent HEAD results found. Try rephrasing, lowering threshold, adjusting path/tags, or adding exact.pattern when you know concrete identifiers or strings.',
           },
         ],
         _meta: toResponseMeta('', results.length, input.limit, meta),

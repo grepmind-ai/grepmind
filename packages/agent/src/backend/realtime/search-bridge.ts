@@ -122,7 +122,7 @@ export function normalizeSearchRequestPayload(
       target: target ?? undefined,
       limit: limit ?? undefined,
       threshold: threshold ?? undefined,
-      rerank: data.rerank,
+      rerank: false,
       tags: tags ?? undefined,
     },
   };

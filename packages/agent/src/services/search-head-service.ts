@@ -3,6 +3,7 @@ import path from 'node:path';
 import type {
   SearchRequestPayload,
   SearchResponsePayload,
+  SearchResultItem,
   SearchTarget,
 } from '../backend/contracts/index.js';
 import type { LocalProjectRecord } from '../db/schema.js';
@@ -12,16 +13,11 @@ import { LocalHeadService } from './local-head-service.js';
 import {
   DEFAULT_RG_TIMEOUT_MS,
   LocalRgSearchService,
-  type LocalRgSearchResult,
 } from './local-rg-search-service.js';
 import type { ProjectRegistryService } from './project-registry-service.js';
 import {
-  chooseSearchHeadError,
-  createNoUsableExactSearchError,
   createRgWarning,
-  createSearchWarning,
   guardSearchSignal,
-  isExactSearchUserFixableError,
   isFatalLocalRgError,
   normalizeContextLines,
   normalizeLimit,
@@ -30,7 +26,6 @@ import {
   normalizeTarget,
   normalizeThreshold,
   withScope,
-  type GuardedSearchSignal,
 } from './search-head-exact-helpers.js';
 import { mergeSearchResults } from './search-result-merge.js';
 
@@ -228,7 +223,7 @@ export class SearchHeadService {
       target,
       limit,
       threshold,
-      rerank: input.rerank ?? true,
+      rerank: false,
       tags,
     };
     if (input.exact == null) {
@@ -246,46 +241,63 @@ export class SearchHeadService {
       });
     }
 
-    const rgSkippedWarning =
+    let rgSkippedWarning =
       tags != null && tags.length > 0
         ? 'Local exact rg search is skipped when docs tags are provided; tags are semantic metadata.'
         : undefined;
     const rgEligible = rgSkippedWarning == null;
-    const remainingMs = getRemainingSearchBudgetMs(
+    const semanticRemainingMs = getRemainingSearchBudgetMs(
       startedAt,
       options.timeoutMs,
     );
-    if (remainingMs < MIN_SEARCH_SIGNAL_BUDGET_MS) {
+    if (semanticRemainingMs < MIN_SEARCH_SIGNAL_BUDGET_MS) {
       throw new Error(
         'search-head timeout budget was exhausted before search could run for the resolved local HEAD',
       );
     }
 
-    const signalOptions = { timeoutMs: remainingMs };
-    const rgTimeoutMs = Math.min(DEFAULT_RG_TIMEOUT_MS, remainingMs);
-    const semanticPromise = guardSearchSignal(() =>
-      this.options.searchTransport.search(semanticPayload, signalOptions),
+    const semanticResult = await guardSearchSignal(() =>
+      this.options.searchTransport.search(semanticPayload, {
+        timeoutMs: semanticRemainingMs,
+      }),
     );
-    const rgPromise = rgEligible
-      ? guardSearchSignal(() =>
-          this.localRgSearchService.search({
-            workspacePath: project.workspacePath,
-            branch: observedHead.branch,
-            target: effectiveTarget,
-            exact: input.exact!,
-            path: input.path,
-            globs: input.globs,
-            contextLines,
-            limit: limit ?? DEFAULT_SEARCH_HEAD_LIMIT,
-            timeoutMs: rgTimeoutMs,
-          }),
-        )
-      : Promise.resolve<GuardedSearchSignal<LocalRgSearchResult> | null>(null);
+    if (!semanticResult.ok) {
+      throw semanticResult.error;
+    }
 
-    const [semanticResult, rgResult] = await Promise.all([
-      semanticPromise,
-      rgPromise,
-    ]);
+    const exactSearchPaths = collectSemanticExactSearchPaths(
+      semanticResult.value.items,
+      input.path,
+    );
+    const rgRemainingMs = getRemainingSearchBudgetMs(
+      startedAt,
+      options.timeoutMs,
+    );
+    if (
+      rgEligible &&
+      exactSearchPaths.length > 0 &&
+      rgRemainingMs < MIN_SEARCH_SIGNAL_BUDGET_MS
+    ) {
+      rgSkippedWarning =
+        'Local exact rg search is skipped because the search timeout budget was exhausted by semantic search.';
+    }
+    const rgResult =
+      rgSkippedWarning == null && exactSearchPaths.length > 0
+        ? await guardSearchSignal(() =>
+            this.localRgSearchService.search({
+              workspacePath: project.workspacePath,
+              branch: observedHead.branch,
+              target: effectiveTarget,
+              exact: input.exact!,
+              path: input.path,
+              paths: exactSearchPaths,
+              globs: input.globs,
+              contextLines,
+              limit: limit ?? DEFAULT_SEARCH_HEAD_LIMIT,
+              timeoutMs: Math.min(DEFAULT_RG_TIMEOUT_MS, rgRemainingMs),
+            }),
+          )
+        : null;
 
     if (rgResult && !rgResult.ok && isFatalLocalRgError(rgResult.error)) {
       throw rgResult.error;
@@ -295,58 +307,12 @@ export class SearchHeadService {
     const rgItems = rgResult?.ok ? rgResult.value.items : [];
     const rgWasUsed = rgEligible && rgResult?.ok === true;
 
-    if (!semanticResult.ok) {
-      if (rgItems.length === 0) {
-        throw chooseSearchHeadError({
-          rgResult,
-          semanticError: semanticResult.error,
-        });
-      }
-
-      const items = rgItems.slice(0, limit ?? DEFAULT_SEARCH_HEAD_LIMIT);
-      return withScope(
-        {
-          requestId,
-          items,
-          meta: {
-            bindingId: project.bindingId,
-            revisionId,
-            durationMs: Date.now() - startedAt,
-            totalResults: items.length,
-            semanticResults: 0,
-            rgResults: rgResult?.ok ? rgResult.value.stats.matchCount : 0,
-            rgTruncated: rgResult?.ok
-              ? rgResult.value.stats.truncated
-              : undefined,
-            rgSource: rgWasUsed ? 'working_tree' : undefined,
-            rgWarning,
-            semanticWarning: createSearchWarning(semanticResult.error),
-          },
-        },
-        {
-          bindingId: project.bindingId,
-          workspacePath: project.workspacePath,
-          branch: observedHead.branch,
-          headCommitSha: observedHead.headCommitSha,
-          revisionId,
-        },
-      );
-    }
-
     const mergedItems = mergeSearchResults({
       semanticItems: semanticResult.value.items,
       rgItems,
       limit: limit ?? DEFAULT_SEARCH_HEAD_LIMIT,
       contextLines,
     });
-    if (
-      semanticResult.value.items.length === 0 &&
-      rgResult &&
-      !rgResult.ok &&
-      isExactSearchUserFixableError(rgResult.error)
-    ) {
-      throw createNoUsableExactSearchError(rgResult.error);
-    }
 
     return withScope(
       {
@@ -511,6 +477,48 @@ function createRepairDeadlineMs(timeoutMs: number | undefined): number {
     requestTimeoutMs - SEARCH_HEAD_REPAIR_TIMEOUT_RESERVE_MS,
   );
   return Date.now() + repairBudgetMs;
+}
+
+function collectSemanticExactSearchPaths(
+  items: SearchResultItem[],
+  pathFilter: string | undefined,
+): string[] {
+  const normalizedPathFilter = normalizeWorkspaceRelativePath(pathFilter);
+  const paths = new Set<string>();
+  for (const item of items) {
+    const relativePath = normalizeWorkspaceRelativePath(item.relativePath);
+    if (!relativePath) {
+      continue;
+    }
+    if (
+      normalizedPathFilter &&
+      !isRelativePathWithinFilter(relativePath, normalizedPathFilter)
+    ) {
+      continue;
+    }
+
+    paths.add(relativePath);
+  }
+
+  return [...paths];
+}
+
+function normalizeWorkspaceRelativePath(value: string | undefined): string {
+  return (
+    value
+      ?.trim()
+      .replaceAll(/^[/\\]+/g, '')
+      .replaceAll('\\', '/') ?? ''
+  );
+}
+
+function isRelativePathWithinFilter(
+  relativePath: string,
+  pathFilter: string,
+): boolean {
+  return (
+    relativePath === pathFilter || relativePath.startsWith(`${pathFilter}/`)
+  );
 }
 
 function getRemainingSearchBudgetMs(

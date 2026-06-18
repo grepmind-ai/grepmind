@@ -75,6 +75,7 @@ export async function searchCode(params: {
   target?: 'code' | 'docs';
   limit?: number;
   threshold?: number;
+  rerank?: boolean;
   path?: string;
   tags?: string[];
   exact?: SearchExactQuery;
@@ -105,7 +106,7 @@ export async function searchCode(params: {
       target: params.target ?? 'code',
       limit: searchLimit,
       threshold: params.threshold,
-      rerank: true,
+      rerank: false,
       tags: normalizeTags(params.tags),
       exact: params.exact,
       path: params.path,
@@ -178,8 +179,16 @@ function toSearchResponse(
   };
 }
 
-function shouldOverfetch(params: { path?: string; tags?: string[] }): boolean {
-  return Boolean(params.path?.trim()) || normalizeTags(params.tags).length > 0;
+function shouldOverfetch(params: {
+  exact?: SearchExactQuery;
+  path?: string;
+  tags?: string[];
+}): boolean {
+  return (
+    params.exact != null ||
+    Boolean(params.path?.trim()) ||
+    normalizeTags(params.tags).length > 0
+  );
 }
 
 function toSearchResult(item: SearchResultItem): SearchResult {

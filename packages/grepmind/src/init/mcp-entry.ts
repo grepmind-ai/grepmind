@@ -19,7 +19,7 @@ export interface WriteDecision {
   preservedCommand: boolean;
 }
 
-const DEFAULT_MCP_TOOL_TIMEOUT_SEC = 210;
+const DEFAULT_MCP_TOOL_TIMEOUT_SEC = 120;
 
 export function createGeneratedMcpEntry(input: {
   hostname: string;

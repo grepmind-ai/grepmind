@@ -13,8 +13,11 @@ export { LocalRgSearchError, type LocalRgSearchResult };
 
 export const DEFAULT_RG_TIMEOUT_MS = 7_500;
 const MAX_RG_PATTERN_LENGTH = 500;
+const MAX_RG_PATTERN_COUNT = 20;
 const MAX_RG_GLOB_COUNT = 20;
 const MAX_RG_GLOB_LENGTH = 200;
+const MAX_RG_PATH_COUNT = 200;
+const MAX_RG_PATH_LENGTH = 500;
 const DEFAULT_CONTEXT_LINES = 2;
 const MAX_CONTEXT_LINES = 10;
 const MAX_ABSOLUTE_MATCHES = 200;
@@ -25,6 +28,7 @@ export interface LocalRgSearchInput {
   target?: SearchTarget;
   exact: SearchExactQuery;
   path?: string;
+  paths?: string[];
   globs?: string[];
   contextLines?: number;
   limit: number;
@@ -39,24 +43,22 @@ interface ResolvedScope {
 
 export class LocalRgSearchService {
   async search(input: LocalRgSearchInput): Promise<LocalRgSearchResult> {
-    validateInput(input);
+    const exactPatterns = validateInput(input);
     const scope = await resolveScope(input.workspacePath, input.path);
     if (!scope.exists) {
-      return {
-        items: [],
-        stats: {
-          matchCount: 0,
-          fileCount: 0,
-          truncated: false,
-          durationMs: 0,
-        },
+      return createEmptyRgResult({
         warning: `Local rg path does not exist: ${input.path}`,
-      };
+      });
+    }
+
+    const searchPaths = await resolveSearchPaths(scope, input.paths);
+    if (searchPaths.length === 0) {
+      return createEmptyRgResult({});
     }
 
     const target = input.target ?? 'code';
     return runRg({
-      args: buildRgArgs(input, scope.searchPath, target),
+      args: buildRgArgs(input, exactPatterns, searchPaths, target),
       branch: input.branch,
       regex: input.exact.regex === true,
       target,
@@ -75,26 +77,146 @@ export class LocalRgSearchService {
   }
 }
 
-function validateInput(input: LocalRgSearchInput): void {
-  validateExactPattern(input.exact.pattern);
-  validateContextLines(input.contextLines);
-  validateGlobs(input.globs);
+function createEmptyRgResult(input: { warning?: string }): LocalRgSearchResult {
+  return {
+    items: [],
+    stats: {
+      matchCount: 0,
+      fileCount: 0,
+      truncated: false,
+      durationMs: 0,
+    },
+    warning: input.warning,
+  };
 }
 
-function validateExactPattern(patternInput: string): void {
-  const pattern = patternInput.trim();
-  if (!pattern) {
+async function resolveSearchPaths(
+  scope: ResolvedScope,
+  paths: string[] | undefined,
+): Promise<string[]> {
+  if (paths == null) {
+    return [scope.searchPath];
+  }
+
+  const normalizedPaths = normalizeSearchPaths(paths);
+  const resolvedPaths: string[] = [];
+  for (const normalizedPath of normalizedPaths) {
+    const searchPath = path.resolve(scope.workspaceRoot, normalizedPath);
+    if (!isPathWithin(scope.workspaceRoot, searchPath)) {
+      throw new LocalRgSearchError(
+        'RG_PATH_OUTSIDE_WORKSPACE',
+        'paths entries must stay inside the workspace',
+      );
+    }
+
+    const resolved = await resolveExistingSearchPath(searchPath);
+    if (!resolved) {
+      continue;
+    }
+    if (!isPathWithin(scope.workspaceRoot, resolved)) {
+      throw new LocalRgSearchError(
+        'RG_PATH_OUTSIDE_WORKSPACE',
+        'paths entries resolve outside the workspace',
+      );
+    }
+    if (!isPathWithin(scope.searchPath, resolved)) {
+      continue;
+    }
+
+    resolvedPaths.push(resolved);
+  }
+
+  return [...new Set(resolvedPaths)];
+}
+
+function normalizeSearchPaths(paths: string[]): string[] {
+  const normalizedPaths: string[] = [];
+  for (const candidate of paths) {
+    const rawPath = candidate.trim();
+    if (!rawPath) {
+      continue;
+    }
+    if (path.isAbsolute(rawPath)) {
+      throw new LocalRgSearchError(
+        'RG_PATH_OUTSIDE_WORKSPACE',
+        'paths entries must be relative to the workspace',
+      );
+    }
+    const normalizedPath = rawPath
+      .replaceAll(/^[/\\]+/g, '')
+      .replaceAll('\\', '/');
+    if (normalizedPath) {
+      normalizedPaths.push(normalizedPath);
+    }
+  }
+
+  return [...new Set(normalizedPaths)];
+}
+
+async function resolveExistingSearchPath(
+  searchPath: string,
+): Promise<string | null> {
+  try {
+    return await realpath(searchPath);
+  } catch (error) {
+    if (isNotFoundError(error)) {
+      return null;
+    }
+
+    throw error;
+  }
+}
+
+function validateInput(input: LocalRgSearchInput): string[] {
+  const exactPatterns = normalizeExactPatterns(input.exact);
+  validateContextLines(input.contextLines);
+  validateGlobs(input.globs);
+  validatePaths(input.paths);
+
+  return exactPatterns;
+}
+
+function normalizeExactPatterns(exact: SearchExactQuery): string[] {
+  const patterns =
+    exact.pattern == null
+      ? []
+      : Array.isArray(exact.pattern)
+        ? exact.pattern
+        : [exact.pattern];
+  const normalizedPatterns: string[] = [];
+  for (const patternInput of patterns) {
+    const pattern = patternInput.trim();
+    if (!pattern) {
+      throw new LocalRgSearchError(
+        'RG_INVALID_INPUT',
+        'exact.pattern entries must be non-empty strings',
+      );
+    }
+    if (pattern.length > MAX_RG_PATTERN_LENGTH) {
+      throw new LocalRgSearchError(
+        'RG_INVALID_INPUT',
+        `exact.pattern entries must be at most ${MAX_RG_PATTERN_LENGTH} characters`,
+      );
+    }
+
+    normalizedPatterns.push(pattern);
+  }
+
+  const dedupedPatterns = [...new Set(normalizedPatterns)];
+  if (dedupedPatterns.length === 0) {
     throw new LocalRgSearchError(
       'RG_INVALID_INPUT',
-      'exact.pattern must be a non-empty string',
+      'exact.pattern must contain at least one entry',
     );
   }
-  if (pattern.length > MAX_RG_PATTERN_LENGTH) {
+  if (dedupedPatterns.length > MAX_RG_PATTERN_COUNT) {
     throw new LocalRgSearchError(
       'RG_INVALID_INPUT',
-      `exact.pattern must be at most ${MAX_RG_PATTERN_LENGTH} characters`,
+      `exact.pattern must contain at most ${MAX_RG_PATTERN_COUNT} entries`,
     );
   }
+
+  return dedupedPatterns;
 }
 
 function validateContextLines(contextLines: number | undefined): void {
@@ -133,6 +255,27 @@ function validateGlobs(globs: string[] | undefined): void {
       throw new LocalRgSearchError(
         'RG_INVALID_INPUT',
         `globs entries must be non-empty and at most ${MAX_RG_GLOB_LENGTH} characters`,
+      );
+    }
+  }
+}
+
+function validatePaths(paths: string[] | undefined): void {
+  if (paths == null) {
+    return;
+  }
+  if (paths.length > MAX_RG_PATH_COUNT) {
+    throw new LocalRgSearchError(
+      'RG_INVALID_INPUT',
+      `paths must contain at most ${MAX_RG_PATH_COUNT} entries`,
+    );
+  }
+  for (const pathEntry of paths) {
+    const normalizedPath = pathEntry.trim();
+    if (!normalizedPath || pathEntry.length > MAX_RG_PATH_LENGTH) {
+      throw new LocalRgSearchError(
+        'RG_INVALID_INPUT',
+        `paths entries must be non-empty and at most ${MAX_RG_PATH_LENGTH} characters`,
       );
     }
   }
@@ -212,7 +355,8 @@ async function resolveExistingScope(
 
 function buildRgArgs(
   input: LocalRgSearchInput,
-  searchPath: string,
+  exactPatterns: string[],
+  searchPaths: string[],
   target: SearchTarget,
 ): string[] {
   const args = [
@@ -250,8 +394,11 @@ function buildRgArgs(
   for (const glob of target === 'docs' ? [] : (input.globs ?? [])) {
     args.push('--glob', glob);
   }
+  for (const pattern of exactPatterns) {
+    args.push('--regexp', pattern);
+  }
 
-  args.push('--', input.exact.pattern, searchPath);
+  args.push('--', ...searchPaths);
   return args;
 }
 
