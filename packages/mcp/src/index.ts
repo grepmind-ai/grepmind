@@ -5,7 +5,6 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { startMcpRuntimePreparation } from './runtime-context.js';
 import { agentStatusSchema, agentStatusTool } from './tools/agent_status.js';
 import { codeSearchSchema, codeSearchTool } from './tools/code_search.js';
-import { contextLayerSchema, contextLayerTool } from './tools/context_layer.js';
 import { parseMcpCliArgs, resolveWorkspaceRoot } from './workspace.js';
 
 async function main(): Promise<void> {
@@ -33,18 +32,6 @@ async function main(): Promise<void> {
     },
     agentStatusTool,
   );
-
-  if (process.env.GREPMIND_CONTEXT_LAYER_SUBAGENT !== '1') {
-    server.registerTool(
-      'context_layer',
-      {
-        description:
-          'Prepare a read-only multi-file and multi-doc context_pack with evidence quality for a coding agent using a mandatory Codex prompt-refiner stage and one read-only research subagent that performs bounded Grepmind code_search retrieval and final aggregation. The tool may first return agent_questions with a refinementSession; answer them by calling context_layer again with refinementSession and agentAnswers.',
-        inputSchema: contextLayerSchema,
-      },
-      contextLayerTool,
-    );
-  }
 
   parseMcpCliArgs(process.argv.slice(2));
   const workspacePath = await resolveWorkspaceRoot();
