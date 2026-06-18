@@ -5,6 +5,7 @@ import {
   runCodexSubagent,
   resolveContextLayerMaxOutputBytes,
   resolveContextLayerTimeoutMs,
+  type CodexTokenUsage,
 } from './codex-subagent-runner.js';
 import {
   resolvePromptRefinerTimeoutMs,
@@ -104,6 +105,8 @@ interface ContextLayerIterationResult {
   exactPatterns: string[];
   searchWarnings: string[];
   iterations: number;
+  refinedQuery: string;
+  tokenUsage?: CodexTokenUsage;
 }
 
 export async function contextLayerTool(
@@ -255,7 +258,19 @@ export async function contextLayerTool(
       content: [
         {
           type: 'text',
-          text: appendContextLayerDebugLog(result.contextPackMarkdown, result),
+          text: renderContextLayerResponse({
+            contextPackMarkdown: appendContextLayerDebugLog(
+              result.contextPackMarkdown,
+              result,
+            ),
+            modelName: refinementState.model.name,
+            modelThinking: refinementState.model.thinking,
+            researchModelThinking: CONTEXT_LAYER_RESEARCH_THINKING,
+            tokenUsage: result.tokenUsage,
+            refinedQuery: result.refinedQuery,
+            contextPackPath: result.contextPackPath,
+            truncated: result.truncated,
+          }),
         },
       ],
       _meta: {
@@ -271,6 +286,8 @@ export async function contextLayerTool(
         handler_exact_patterns: result.exactPatterns,
         handler_search_warnings: result.searchWarnings,
         context_layer_iterations: result.iterations,
+        research_token_usage: result.tokenUsage,
+        research_total_tokens: totalCodexTokens(result.tokenUsage),
         sufficient: aggregationSufficiency.sufficient,
         suggested_context_queries:
           aggregationSufficiency.suggestedContextQueries,
@@ -538,7 +555,72 @@ async function runContextLayerResearch(input: {
     exactPatterns: [],
     searchWarnings: [],
     iterations: iteration,
+    refinedQuery: input.query,
+    tokenUsage: result.tokenUsage,
   };
+}
+
+function renderContextLayerResponse(input: {
+  contextPackMarkdown: string;
+  modelName: string;
+  modelThinking: ContextLayerThinking;
+  researchModelThinking: ContextLayerThinking;
+  tokenUsage?: CodexTokenUsage;
+  refinedQuery: string;
+  contextPackPath?: string;
+  truncated: boolean;
+}): string {
+  const outputLine =
+    input.contextPackPath == null
+      ? `- Output truncated: ${input.truncated ? 'yes' : 'no'}`
+      : `- Output truncated: ${input.truncated ? 'yes' : 'no'}; full context_pack: ${input.contextPackPath}`;
+
+  return `# context_layer_run
+
+- Model: ${input.modelName}
+- Model thinking: ${input.modelThinking}
+- Research model thinking: ${input.researchModelThinking}
+- Research tokens: ${formatTokenUsage(input.tokenUsage)}
+${outputLine}
+
+## Research Prompt After Refinement
+
+\`\`\`text
+Refined user query:
+${input.refinedQuery.trim()}
+\`\`\`
+
+${input.contextPackMarkdown.trim()}`;
+}
+
+function formatTokenUsage(usage: CodexTokenUsage | undefined): string {
+  if (usage == null) {
+    return 'unavailable';
+  }
+
+  const total = totalCodexTokens(usage);
+  const parts = [
+    `total=${total ?? 'unknown'}`,
+    `input=${usage.input_tokens ?? 'unknown'}`,
+    `cached_input=${usage.cached_input_tokens ?? 'unknown'}`,
+    `output=${usage.output_tokens ?? 'unknown'}`,
+    `reasoning_output=${usage.reasoning_output_tokens ?? 'unknown'}`,
+  ];
+  return parts.join('; ');
+}
+
+function totalCodexTokens(
+  usage: CodexTokenUsage | undefined,
+): number | undefined {
+  if (usage == null) {
+    return undefined;
+  }
+
+  return (
+    (usage.input_tokens ?? 0) +
+    (usage.output_tokens ?? 0) +
+    (usage.reasoning_output_tokens ?? 0)
+  );
 }
 
 function parseSufficiency(contextPackMarkdown: string): {

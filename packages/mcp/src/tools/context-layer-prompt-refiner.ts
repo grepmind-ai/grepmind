@@ -32,6 +32,7 @@ Instruction:
 - Return at most 3 questions.
 - Each question id must be stable and short, such as "q1".
 - The refined query or refined query draft must be ready for the next prompt-refiner attempt or for research.
+- Always write refinedQuery and refinedQueryDraft in English, regardless of the original query language. Preserve file paths, identifiers, exact strings, routes, config keys, and error messages literally when they are evidence anchors.
 - Preserve evidence requirements from the original query. If the caller asks to trace behavior, strengthen the refined query to require file:line anchors, proven vs inferred claims, gaps, and exact call-path boundaries.
 
 Clarification examples:

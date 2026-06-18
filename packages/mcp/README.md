@@ -151,14 +151,23 @@ retrieval, including optional exact local `rg` signal through `exact`, `globs`,
 and `contextLines`, reads repository files as needed, and performs the final
 verification/aggregation pass before returning the `context_pack`.
 
+The handler runs Codex with JSONL stdout and `--output-last-message` together:
+the final subagent answer is read from the output file so large answers are not
+read from a truncated diagnostic tail, while token usage is collected from the
+`turn.completed.usage` JSONL event.
+
 The research subagent returns a `Sufficiency` decision and may suggest precise
 next queries, but the MCP handler does not automatically run another retrieval
 iteration. The final result is a curated map of code, docs, flow, sufficiency,
 evidence quality, risks, and suggested edit surfaces. The prompt-refiner is
 instructed not to inspect the repository and runs with Grepmind MCP disabled.
+The prompt-refiner writes `refinedQuery` and `refinedQueryDraft` in English
+regardless of the caller's language, while preserving literal identifiers,
+paths, routes, config keys, exact strings, and error messages.
 
-All context-layer Codex subagents use the fixed `gpt-5.5` model. The first
-prompt-refiner subagent and the research subagent use medium reasoning effort.
+All context-layer Codex subagents use the fixed `gpt-5.5` model. The
+prompt-refiner subagent uses medium reasoning effort, and the research subagent
+uses low reasoning effort.
 
 Input fields:
 
@@ -219,7 +228,36 @@ returns the cached `agent_questions` result without running the refiner again.
 Refinement sessions are in-memory, expire after 30 minutes by default, and do
 not survive MCP process restarts.
 
-Expected output headings:
+Expected response headings:
+
+```md
+# context_layer_run
+
+## Research Prompt After Refinement
+
+# context_pack
+
+## Answer
+
+## Evidence Quality
+
+## Sufficiency
+
+## Code Context
+
+## Docs Context
+
+## Flow
+```
+
+The `context_layer_run` header includes the research model, reasoning effort,
+research token usage, truncation status, and the full `context_pack` path when the MCP
+response had to be compacted. The prompt block shown in the response contains
+only `Refined user query:` and the refined query passed into the read-only
+research subagent prompt.
+
+Raw research subagent output is still validated against this `context_pack`
+contract before the handler adds the run header and refined research prompt:
 
 ```md
 # context_pack
@@ -245,7 +283,7 @@ Requirements and safety:
 - The research subagent may call Grepmind `code_search`. `context_layer` is not
   registered inside context-layer subagent processes.
 - Before launching the LLM subagent, the runner checks the profile file directly.
-- The runner starts Codex with `--sandbox read-only`, `--ephemeral`,
+- The runner starts Codex with `--json`, `--sandbox read-only`, `--ephemeral`,
   `--ask-for-approval never`, and `GREPMIND_CONTEXT_LAYER_SUBAGENT=1`.
 - The prompt-refiner still runs with Grepmind MCP disabled; only the research
   subagent can use `code_search`.

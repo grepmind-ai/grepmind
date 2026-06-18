@@ -11,7 +11,7 @@ export const DEFAULT_CONTEXT_LAYER_MODEL_PROVIDER = 'codex';
 export const DEFAULT_CONTEXT_LAYER_CODEX_MODEL = 'gpt-5.5';
 export const DEFAULT_CONTEXT_LAYER_CODEX_THINKING = 'low';
 export const CONTEXT_LAYER_PROMPT_REFINER_THINKING = 'medium';
-export const CONTEXT_LAYER_RESEARCH_THINKING = 'medium';
+export const CONTEXT_LAYER_RESEARCH_THINKING = 'low';
 
 export const CODEX_REASONING_EFFORT_BY_THINKING = {
   low: 'low',

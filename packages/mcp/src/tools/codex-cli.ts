@@ -58,6 +58,7 @@ export async function verifyCodexCliShape(codexBin: string): Promise<void> {
 
   const execHelp = await runCodexHelpCommand(codexBin, ['exec', '--help']);
   const missingExecFlags = [
+    '--json',
     '--sandbox',
     '--cd',
     '--ephemeral',

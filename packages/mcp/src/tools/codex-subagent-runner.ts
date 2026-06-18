@@ -24,6 +24,13 @@ export const DEFAULT_CONTEXT_LAYER_MAX_OUTPUT_BYTES = 400_000;
 export const MIN_CONTEXT_LAYER_MAX_OUTPUT_BYTES = 8_000;
 export const DIAGNOSTIC_TAIL_BYTES = 16_000;
 
+export interface CodexTokenUsage {
+  input_tokens?: number;
+  cached_input_tokens?: number;
+  output_tokens?: number;
+  reasoning_output_tokens?: number;
+}
+
 export interface CodexSubagentRunInput {
   workspacePath: string;
   prompt: string;
@@ -47,6 +54,7 @@ export interface CodexSubagentRunResult {
   contextPackMarkdown: string;
   contextPackPath?: string;
   runtimeDurationMs: number;
+  tokenUsage?: CodexTokenUsage;
   truncated: boolean;
   timeout: false;
 }
@@ -116,6 +124,7 @@ export async function runCodexSubagent(
       }),
       contextPackPath: outputPath,
       runtimeDurationMs,
+      tokenUsage: processResult.tokenUsage,
       truncated: true,
       timeout: false,
     };
@@ -125,6 +134,7 @@ export async function runCodexSubagent(
   return {
     contextPackMarkdown,
     runtimeDurationMs,
+    tokenUsage: processResult.tokenUsage,
     truncated: false,
     timeout: false,
   };
@@ -174,6 +184,7 @@ export function buildCodexExecArgs(input: {
     '--ask-for-approval',
     'never',
     'exec',
+    '--json',
     '--profile',
     CONTEXT_LAYER_SUBAGENT_PROFILE,
     '--model',
@@ -213,11 +224,14 @@ function runCodexProcess(input: {
   timedOut: boolean;
   stdoutTail: string;
   stderrTail: string;
+  tokenUsage?: CodexTokenUsage;
   error?: Error;
 }> {
   return new Promise((resolve) => {
     let settled = false;
     let timedOut = false;
+    let stdoutRemainder = '';
+    let tokenUsage: CodexTokenUsage | undefined;
     const stdout = new TailBuffer(DIAGNOSTIC_TAIL_BYTES);
     const stderr = new TailBuffer(DIAGNOSTIC_TAIL_BYTES);
     const child = spawn(input.codexBin, input.args, {
@@ -229,6 +243,7 @@ function runCodexProcess(input: {
       },
       stdio: ['pipe', 'pipe', 'pipe'],
     });
+    child.stdout.setEncoding('utf8');
 
     const timeout = setTimeout(() => {
       timedOut = true;
@@ -240,7 +255,12 @@ function runCodexProcess(input: {
       }, 2_000).unref();
     }, input.timeoutMs);
 
-    child.stdout.on('data', (chunk: Buffer) => stdout.append(chunk));
+    child.stdout.on('data', (chunk: string) => {
+      stdout.append(Buffer.from(chunk));
+      stdoutRemainder = processJsonlStdout(chunk, stdoutRemainder, (usage) => {
+        tokenUsage = usage;
+      });
+    });
     child.stderr.on('data', (chunk: Buffer) => stderr.append(chunk));
     child.stdin.on('error', () => {
       // The process can exit before stdin is fully written on startup failures.
@@ -259,6 +279,7 @@ function runCodexProcess(input: {
         timedOut,
         stdoutTail: stdout.text(),
         stderrTail: stderr.text(),
+        tokenUsage,
         error,
       });
     });
@@ -269,15 +290,80 @@ function runCodexProcess(input: {
       }
       settled = true;
       clearTimeout(timeout);
+      if (stdoutRemainder.trim()) {
+        processJsonlLine(stdoutRemainder, (usage) => {
+          tokenUsage = usage;
+        });
+      }
       resolve({
         exitCode,
         signal,
         timedOut,
         stdoutTail: stdout.text(),
         stderrTail: stderr.text(),
+        tokenUsage,
       });
     });
   });
+}
+
+function processJsonlStdout(
+  chunk: string,
+  previousRemainder: string,
+  onUsage: (usage: CodexTokenUsage) => void,
+): string {
+  let buffer = `${previousRemainder}${chunk}`;
+
+  while (true) {
+    const newline = buffer.indexOf('\n');
+    if (newline < 0) {
+      return buffer;
+    }
+
+    const line = buffer.slice(0, newline);
+    buffer = buffer.slice(newline + 1);
+    processJsonlLine(line, onUsage);
+  }
+}
+
+function processJsonlLine(
+  line: string,
+  onUsage: (usage: CodexTokenUsage) => void,
+): void {
+  const trimmed = line.trim();
+  if (!trimmed) {
+    return;
+  }
+
+  try {
+    const event = JSON.parse(trimmed) as {
+      type?: unknown;
+      usage?: unknown;
+    };
+    if (event.type === 'turn.completed' && isTokenUsage(event.usage)) {
+      onUsage(event.usage);
+    }
+  } catch {
+    // Keep stdout parsing best-effort; the final answer is read from
+    // --output-last-message and stderr still carries diagnostics.
+  }
+}
+
+function isTokenUsage(value: unknown): value is CodexTokenUsage {
+  if (value == null || typeof value !== 'object') {
+    return false;
+  }
+  const usage = value as Record<string, unknown>;
+  return (
+    isOptionalNumber(usage.input_tokens) &&
+    isOptionalNumber(usage.cached_input_tokens) &&
+    isOptionalNumber(usage.output_tokens) &&
+    isOptionalNumber(usage.reasoning_output_tokens)
+  );
+}
+
+function isOptionalNumber(value: unknown): boolean {
+  return value == null || typeof value === 'number';
 }
 
 async function readLastMessage(

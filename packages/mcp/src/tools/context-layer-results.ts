@@ -9,6 +9,7 @@ import {
   type ContextLayerThinking,
 } from './context-layer-model-config.js';
 import type { RefinementSession } from './context-layer-refinement-session.js';
+import type { CodexTokenUsage } from './codex-subagent-runner.js';
 import type { PromptRefinerQuestion } from './prompt-refiner-output.js';
 
 export interface ContextLayerSuccessResult {
@@ -27,6 +28,8 @@ export interface ContextLayerSuccessResult {
     handler_exact_patterns: string[];
     handler_search_warnings: string[];
     context_layer_iterations: number;
+    research_token_usage?: CodexTokenUsage;
+    research_total_tokens?: number;
     sufficient: boolean;
     suggested_context_queries: string[];
     context_pack_path?: string;
