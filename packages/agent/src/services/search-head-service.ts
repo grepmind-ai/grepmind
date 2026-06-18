@@ -190,6 +190,7 @@ export class SearchHeadService {
     const effectiveTarget = target ?? 'code';
     const limit = normalizeLimit(input.limit);
     const threshold = normalizeThreshold(input.threshold);
+    const pathFilter = normalizeWorkspaceRelativePath(input.path);
     const tags = normalizeTags(input.tags);
     const contextLines = normalizeContextLines(input.contextLines, {
       defaultValue: DEFAULT_RG_CONTEXT_LINES,
@@ -224,6 +225,7 @@ export class SearchHeadService {
       limit,
       threshold,
       rerank: false,
+      path: pathFilter || undefined,
       tags,
     };
     if (input.exact == null) {
@@ -267,7 +269,7 @@ export class SearchHeadService {
 
     const exactSearchPaths = collectSemanticExactSearchPaths(
       semanticResult.value.items,
-      input.path,
+      pathFilter,
     );
     const rgRemainingMs = getRemainingSearchBudgetMs(
       startedAt,
@@ -289,7 +291,7 @@ export class SearchHeadService {
               branch: observedHead.branch,
               target: effectiveTarget,
               exact: input.exact!,
-              path: input.path,
+              path: pathFilter || undefined,
               paths: exactSearchPaths,
               globs: input.globs,
               contextLines,

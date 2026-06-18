@@ -13,8 +13,9 @@ Project-local MCP server for Grepmind-backed code and docs search.
 - Node.js 18 or newer.
 - A project-local MCP client configuration.
 - A Git workspace with an `origin` remote when the workspace is not registered yet.
+- A running Grepmind agent runtime for the same `GREPMIND_AGENT_DATA_DIR`.
 
-The MCP package includes the compatible `@grepmind/agent` runtime and starts it through the bundled package entrypoint. It does not depend on a global `grepmind-agent` binary.
+The MCP package does not start the Grepmind agent runtime. Start the agent before starting the MCP client.
 
 ## Install
 
@@ -37,9 +38,8 @@ project-local MCP client config without writing OAuth secrets or binding ids to
 project files. `.grepmind.json` stores the backend hostname and optional
 code/docs indexing rules only; generated files omit `code` and `docs` until you
 add custom rules. MCP package, startup timeout, command, args, env, and
-client-specific fields belong to the MCP client config. It starts or reuses the
-local Grepmind agent runtime and registers or reuses the current workspace
-unless `--dry-run` is passed.
+client-specific fields belong to the MCP client config. It registers or reuses
+the current workspace unless `--dry-run` is passed.
 
 Manual project-local stdio configuration:
 
@@ -50,7 +50,6 @@ Manual project-local stdio configuration:
       "command": "npx",
       "args": ["-y", "@grepmind/mcp@0.1.1"],
       "env": {
-        "GREPMIND_AGENT_HOSTNAME": "app.grepmind.ai",
         "GREPMIND_MCP_STARTUP_TIMEOUT_MS": "120000"
       }
     }
@@ -68,14 +67,12 @@ To update the package used by MCP client config, rerun `grepmind init --force
 The MCP client is connected only after startup has completed all required preparation:
 
 1. Resolve the Git workspace root from the project-local launch directory.
-2. Resolve the bundled `@grepmind/agent` CLI entrypoint.
-3. Ensure Grepmind agent authentication.
-4. Start or reuse the local agent runtime.
-5. Register the workspace if needed.
-6. Resolve exactly one local project `bindingId`.
-7. Connect stdio transport.
+2. Connect to the already running local agent runtime.
+3. Register the workspace if needed.
+4. Resolve exactly one local project `bindingId`.
+5. Connect stdio transport.
 
-If login is required, set `GREPMIND_AGENT_HOSTNAME` so MCP startup can open the OAuth flow. Startup is bounded by `GREPMIND_MCP_STARTUP_TIMEOUT_MS` and reports a pre-login command if OAuth or runtime startup takes too long. `grepmind init --yes --no-open` can be used to verify fully non-interactive readiness before starting an MCP client.
+If the agent is not running, MCP startup fails with a command you can run manually, such as `grepmind agent run --detach --data-dir ~/.grepmind-agent`. Use `grepmind agent auth login --hostname <host>` before starting the agent when login or account selection is required.
 
 Workspace registration happens only during startup. Tool calls do not choose repositories, run OAuth, start runtime, or register workspaces.
 
@@ -145,11 +142,10 @@ Returns JSON diagnostics for the current MCP workspace:
 
 ## Environment Variables
 
-| Variable                          | Description                                                         |
-| --------------------------------- | ------------------------------------------------------------------- |
-| `GREPMIND_AGENT_DATA_DIR`         | Agent data directory. Defaults to `~/.grepmind-agent`.              |
-| `GREPMIND_AGENT_HOSTNAME`         | Grepmind hostname used when startup needs to run OAuth login.       |
-| `GREPMIND_MCP_STARTUP_TIMEOUT_MS` | Startup timeout for auth/runtime preparation. Defaults to `120000`. |
+| Variable                          | Description                                                                    |
+| --------------------------------- | ------------------------------------------------------------------------------ |
+| `GREPMIND_AGENT_DATA_DIR`         | Agent data directory. Defaults to `~/.grepmind-agent`.                         |
+| `GREPMIND_MCP_STARTUP_TIMEOUT_MS` | Startup timeout for runtime connection and registration. Defaults to `120000`. |
 
 The server also loads `.env` through `dotenv/config`.
 

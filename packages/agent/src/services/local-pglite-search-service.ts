@@ -47,40 +47,58 @@ export class LocalPgliteSearchService {
     }
 
     const tableName = target === 'docs' ? 'docs_chunks' : 'code_chunks';
+    const joinClauses: string[] = [];
     const params: Array<number | string> = [
       request.bindingId,
       request.revisionId,
       vectorLiteral,
     ];
-    const whereClauses = ['binding_id = $1', 'revision_id = $2'];
+    const whereClauses = ['chunks.binding_id = $1', 'chunks.revision_id = $2'];
+
+    if (request.query.filters.path) {
+      joinClauses.push(
+        `INNER JOIN project_revision_files files
+          ON files.binding_id = chunks.binding_id
+            AND files.revision_id = chunks.revision_id
+            AND files.file_id = chunks.file_id`,
+      );
+      params.push(request.query.filters.path);
+      const exactPathPlaceholder = `$${params.length}`;
+      params.push(`${escapeLikePattern(request.query.filters.path)}/%`);
+      const childPathPlaceholder = `$${params.length}`;
+      whereClauses.push(
+        `(files.path = ${exactPathPlaceholder} OR files.path LIKE ${childPathPlaceholder} ESCAPE '~')`,
+      );
+    }
 
     if (target === 'docs' && request.query.filters.tags.length > 0) {
-      const tagPlaceholders = request.query.filters.tags.map((tag) => {
+      for (const tag of request.query.filters.tags) {
         params.push(tag);
-        return `$${params.length}`;
-      });
-      whereClauses.push(
-        `EXISTS (
-          SELECT 1
-          FROM docs_chunk_tags dct
-          WHERE dct.row_id = ${tableName}.row_id
-            AND dct.tag IN (${tagPlaceholders.join(', ')})
-        )`,
-      );
+        const tagPlaceholder = `$${params.length}`;
+        whereClauses.push(
+          `EXISTS (
+            SELECT 1
+            FROM docs_chunk_tags dct
+            WHERE dct.row_id = chunks.row_id
+              AND dct.tag = ${tagPlaceholder}
+          )`,
+        );
+      }
     }
 
     params.push(limit);
     const rows = await this.db.query<SearchRow>(
       `
       SELECT
-        binding_id,
-        revision_id,
-        file_id,
-        chunk_id,
-        1 - (embedding <=> CAST($3 AS vector)) AS score
-      FROM ${tableName}
+        chunks.binding_id AS binding_id,
+        chunks.revision_id AS revision_id,
+        chunks.file_id AS file_id,
+        chunks.chunk_id AS chunk_id,
+        1 - (chunks.embedding <=> CAST($3 AS vector)) AS score
+      FROM ${tableName} chunks
+      ${joinClauses.join('\n')}
       WHERE ${whereClauses.join(' AND ')}
-      ORDER BY embedding <=> CAST($3 AS vector) ASC
+      ORDER BY chunks.embedding <=> CAST($3 AS vector) ASC
       LIMIT $${params.length}
       `,
       params,
@@ -136,6 +154,7 @@ interface ValidatedSearchQuery extends Omit<
   filters: {
     bindingId: number;
     revisionId: number;
+    path: string;
     tags: string[];
   };
 }
@@ -191,9 +210,21 @@ function validateSearchQuery(
     filters: {
       bindingId: filtersBindingId,
       revisionId: filtersRevisionId,
+      path: normalizePathFilter(query.filters?.path),
       tags: normalizeTags(query.filters?.tags),
     },
   };
+}
+
+function normalizePathFilter(value: unknown): string {
+  if (typeof value !== 'string') {
+    return '';
+  }
+
+  return value
+    .trim()
+    .replace(/^[/\\]+/, '')
+    .replaceAll('\\', '/');
 }
 
 function normalizeTags(value: string[] | undefined): string[] {
@@ -222,4 +253,11 @@ function requirePositiveInteger(value: unknown, field: string): number {
 
 function toVectorLiteral(vector: number[]): string {
   return `[${vector.join(',')}]`;
+}
+
+function escapeLikePattern(value: string): string {
+  return value
+    .replaceAll('~', '~~')
+    .replaceAll('%', '~%')
+    .replaceAll('_', '~_');
 }
