@@ -179,8 +179,16 @@ function toSearchResponse(
   };
 }
 
-function shouldOverfetch(params: { path?: string; tags?: string[] }): boolean {
-  return Boolean(params.path?.trim()) || normalizeTags(params.tags).length > 0;
+function shouldOverfetch(params: {
+  exact?: SearchExactQuery;
+  path?: string;
+  tags?: string[];
+}): boolean {
+  return (
+    params.exact != null ||
+    Boolean(params.path?.trim()) ||
+    normalizeTags(params.tags).length > 0
+  );
 }
 
 function toSearchResult(item: SearchResultItem): SearchResult {

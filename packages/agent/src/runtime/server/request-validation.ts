@@ -8,6 +8,7 @@ import {
 import { AgentRpcRequestError } from './rpc-errors.js';
 
 const MAX_EXACT_PATTERN_LENGTH = 500;
+const MAX_EXACT_PATTERN_COUNT = 20;
 const MAX_GLOB_COUNT = 20;
 const MAX_GLOB_LENGTH = 200;
 const MAX_CONTEXT_LINES = 10;
@@ -481,17 +482,41 @@ function optionalSearchExactQuery(
   }
 
   const record = requireRecord(value, label);
-  const pattern = requiredNonEmptyString(record.pattern, `${label}.pattern`);
-  if (pattern.length > MAX_EXACT_PATTERN_LENGTH) {
+  const pattern = optionalNonEmptyString(record.pattern, `${label}.pattern`);
+  if (pattern != null && pattern.length > MAX_EXACT_PATTERN_LENGTH) {
     throw new AgentRpcRequestError({
       code: 'INVALID_REQUEST',
       message: `${label}.pattern must be at most ${MAX_EXACT_PATTERN_LENGTH} characters`,
       retryable: false,
     });
   }
+  const patterns = optionalLimitedStringArray(
+    record.patterns,
+    `${label}.patterns`,
+    MAX_EXACT_PATTERN_COUNT,
+    MAX_EXACT_PATTERN_LENGTH,
+  );
+  const normalizedPatterns = [
+    ...new Set([...(pattern ? [pattern] : []), ...(patterns ?? [])]),
+  ];
+  if (normalizedPatterns.length === 0) {
+    throw new AgentRpcRequestError({
+      code: 'INVALID_REQUEST',
+      message: `${label}.pattern or ${label}.patterns must be provided`,
+      retryable: false,
+    });
+  }
+  if (normalizedPatterns.length > MAX_EXACT_PATTERN_COUNT) {
+    throw new AgentRpcRequestError({
+      code: 'INVALID_REQUEST',
+      message: `${label}.patterns must contain at most ${MAX_EXACT_PATTERN_COUNT} entries`,
+      retryable: false,
+    });
+  }
 
   return {
-    pattern,
+    pattern: normalizedPatterns[0],
+    patterns: normalizedPatterns,
     regex: optionalBoolean(record.regex, `${label}.regex`),
     caseSensitive: optionalBoolean(
       record.caseSensitive,

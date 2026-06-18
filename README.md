@@ -99,8 +99,9 @@ Use Grepmind code_search to find where user input is validated before saving
 settings. Return the files and line ranges before proposing a code change.
 ```
 
-When you know a concrete identifier or string, ask the agent to include it as
-`exact.pattern` so Grepmind can combine semantic search with local `rg` matches.
+When you know concrete identifiers or strings, ask the agent to include them as
+`exact.patterns` so Grepmind can combine semantic search with local `rg`
+matches.
 
 ## Install
 

@@ -22,7 +22,7 @@ Instruction:
 - Use at most ${input.maxSearchCalls} total code_search calls.
 - The first code_search call must search code for the refined query.
 - Spend one code_search call on docs when docs, architecture notes, README content, or product contracts may affect the answer.
-- Use exact.pattern, globs, path, and contextLines when identifiers, routes, config keys, error text, imports, file names, or regex anchors are known.
+- Use exact.patterns, globs, path, and contextLines when identifiers, routes, config keys, error text, imports, file names, or regex anchors are known.
 - Read repository files directly when code_search evidence needs verification or surrounding context.
 - Do not call context_layer, grepmind_agent_status, or nested agents.
 - Do not modify files.

@@ -9,3 +9,6 @@ tool_timeout_sec = 210
 GREPMIND_AGENT_HOSTNAME = "app.grepmind.ai"
 GREPMIND_MCP_STARTUP_TIMEOUT_MS = "120000"
 GREPMIND_CONTEXT_LAYER_CODEX_MODEL = "gpt-5.5"
+
+[mcp_servers.grepmind.tools.code_search]
+approval_mode = "approve"

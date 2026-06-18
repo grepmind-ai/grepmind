@@ -2,14 +2,26 @@ import type { SearchResultItem } from '../backend/contracts/index.js';
 
 const MERGED_BOOST = 0.12;
 const NEARBY_BOOST = 0.06;
+const SAME_FILE_EVIDENCE_BOOST = 0.03;
 const NEARBY_BASE_DISTANCE = 3;
 const SEMANTIC_HIGH_SCORE = 0.75;
-const RG_REGEX_SCORE = 0.88;
 const MAX_MERGED_PREVIEW_CHARS = 4_000;
 
 type RankedSearchResultItem = SearchResultItem & {
   readonly __rankBucket?: number;
 };
+
+interface RgEvidenceAttachment {
+  boost: number;
+  rgItems: SearchResultItem[];
+}
+
+interface SemanticEvidenceMatch {
+  boost: number;
+  distance: number;
+  index: number;
+  priority: number;
+}
 
 export function mergeSearchResults(input: {
   semanticItems: SearchResultItem[];
@@ -21,57 +33,142 @@ export function mergeSearchResults(input: {
     return input.semanticItems.slice(0, input.limit);
   }
   if (input.semanticItems.length === 0) {
-    return sortRankedItems(
-      dedupeExactItems(input.rgItems).map((item) => rankItem(item)),
-    ).slice(0, input.limit);
+    return [];
   }
 
   const mergedSemanticItems: RankedSearchResultItem[] = input.semanticItems.map(
     (item) => ({ ...item }),
   );
-  const consumedRgKeys = new Set<string>();
-  for (const [index, semanticItem] of mergedSemanticItems.entries()) {
-    const insideRgItems = input.rgItems.filter((rgItem) =>
-      isRgItemInsideSemanticItem(rgItem, semanticItem),
-    );
-    if (insideRgItems.length > 0) {
-      mergedSemanticItems[index] = mergeIntoSemanticItem({
-        boost: MERGED_BOOST,
-        rankBucket: 0,
-        rgItems: insideRgItems,
-        semanticItem,
-      });
-      for (const matchingRgItem of insideRgItems) {
-        consumedRgKeys.add(createExactKey(matchingRgItem));
-      }
-
+  const attachments = collectRgEvidenceAttachments({
+    contextLines: input.contextLines,
+    rgItems: input.rgItems,
+    semanticItems: mergedSemanticItems,
+  });
+  for (const [index, attachment] of attachments.entries()) {
+    const semanticItem = mergedSemanticItems[index];
+    if (!semanticItem) {
       continue;
     }
 
-    const nearbyRgItems = input.rgItems.filter((rgItem) =>
-      isRgItemNearSemanticItem(rgItem, semanticItem, input.contextLines),
-    );
-    if (nearbyRgItems.length > 0) {
-      mergedSemanticItems[index] = mergeIntoSemanticItem({
-        boost: NEARBY_BOOST,
-        rankBucket: 0,
-        rgItems: nearbyRgItems,
-        semanticItem,
-      });
-      for (const matchingRgItem of nearbyRgItems) {
-        consumedRgKeys.add(createExactKey(matchingRgItem));
-      }
-    }
+    mergedSemanticItems[index] = mergeIntoSemanticItem({
+      boost: attachment.boost,
+      rankBucket: 0,
+      rgItems: attachment.rgItems,
+      semanticItem,
+    });
   }
 
-  const rgOnlyItems = input.rgItems
-    .filter((item) => !consumedRgKeys.has(createExactKey(item)))
-    .map((item) => rankItem(item));
   const rankedSemanticItems = mergedSemanticItems.map((item) =>
     rankItem(item, item.__rankBucket),
   );
-  const deduped = dedupeExactItems([...rankedSemanticItems, ...rgOnlyItems]);
+  const deduped = dedupeExactItems(rankedSemanticItems);
   return sortRankedItems(deduped).slice(0, input.limit);
+}
+
+function collectRgEvidenceAttachments(input: {
+  contextLines: number;
+  rgItems: SearchResultItem[];
+  semanticItems: SearchResultItem[];
+}): Map<number, RgEvidenceAttachment> {
+  const attachments = new Map<number, RgEvidenceAttachment>();
+  for (const rgItem of dedupeExactItems(input.rgItems)) {
+    const match = findBestSemanticEvidenceMatch({
+      contextLines: input.contextLines,
+      rgItem,
+      semanticItems: input.semanticItems,
+    });
+    if (!match) {
+      continue;
+    }
+
+    const attachment = attachments.get(match.index) ?? {
+      boost: 0,
+      rgItems: [],
+    };
+    attachment.boost = Math.max(attachment.boost, match.boost);
+    attachment.rgItems.push(rgItem);
+    attachments.set(match.index, attachment);
+  }
+
+  return attachments;
+}
+
+function findBestSemanticEvidenceMatch(input: {
+  contextLines: number;
+  rgItem: SearchResultItem;
+  semanticItems: SearchResultItem[];
+}): SemanticEvidenceMatch | null {
+  let bestMatch: SemanticEvidenceMatch | null = null;
+  for (const [index, semanticItem] of input.semanticItems.entries()) {
+    const match = createSemanticEvidenceMatch({
+      contextLines: input.contextLines,
+      index,
+      rgItem: input.rgItem,
+      semanticItem,
+    });
+    if (!match) {
+      continue;
+    }
+    if (!bestMatch || compareEvidenceMatch(match, bestMatch) < 0) {
+      bestMatch = match;
+    }
+  }
+
+  return bestMatch;
+}
+
+function createSemanticEvidenceMatch(input: {
+  contextLines: number;
+  index: number;
+  rgItem: SearchResultItem;
+  semanticItem: SearchResultItem;
+}): SemanticEvidenceMatch | null {
+  if (input.rgItem.relativePath !== input.semanticItem.relativePath) {
+    return null;
+  }
+
+  if (isRgItemInsideSemanticItem(input.rgItem, input.semanticItem)) {
+    return {
+      boost: MERGED_BOOST,
+      distance: 0,
+      index: input.index,
+      priority: 0,
+    };
+  }
+
+  const distance = distanceFromSemanticItem(input.rgItem, input.semanticItem);
+  if (distance <= input.contextLines + NEARBY_BASE_DISTANCE) {
+    return {
+      boost: NEARBY_BOOST,
+      distance,
+      index: input.index,
+      priority: 1,
+    };
+  }
+
+  return {
+    boost: SAME_FILE_EVIDENCE_BOOST,
+    distance,
+    index: input.index,
+    priority: 2,
+  };
+}
+
+function compareEvidenceMatch(
+  left: SemanticEvidenceMatch,
+  right: SemanticEvidenceMatch,
+): number {
+  const priorityDelta = left.priority - right.priority;
+  if (priorityDelta !== 0) {
+    return priorityDelta;
+  }
+
+  const distanceDelta = left.distance - right.distance;
+  if (distanceDelta !== 0) {
+    return distanceDelta;
+  }
+
+  return left.index - right.index;
 }
 
 function mergeIntoSemanticItem(input: {
@@ -119,20 +216,15 @@ function isRgItemInsideSemanticItem(
   );
 }
 
-function isRgItemNearSemanticItem(
+function distanceFromSemanticItem(
   rgItem: SearchResultItem,
   semanticItem: SearchResultItem,
-  contextLines: number,
-): boolean {
-  if (rgItem.relativePath !== semanticItem.relativePath) {
-    return false;
+): number {
+  if (rgItem.symbol.startLine < semanticItem.symbol.startLine) {
+    return semanticItem.symbol.startLine - rgItem.symbol.startLine;
   }
 
-  const distance =
-    rgItem.symbol.startLine < semanticItem.symbol.startLine
-      ? semanticItem.symbol.startLine - rgItem.symbol.startLine
-      : rgItem.symbol.startLine - semanticItem.symbol.endLine;
-  return distance > 0 && distance <= contextLines + NEARBY_BASE_DISTANCE;
+  return rgItem.symbol.startLine - semanticItem.symbol.endLine;
 }
 
 function createExactKey(item: SearchResultItem): string {
@@ -174,10 +266,6 @@ function rankItem(
 }
 
 function inferRankBucket(item: SearchResultItem): number {
-  if (isRgItem(item)) {
-    return item.score <= RG_REGEX_SCORE ? 3 : 1;
-  }
-
   return item.score >= SEMANTIC_HIGH_SCORE ? 2 : 4;
 }
 
@@ -201,8 +289,4 @@ function sortRankedItems(items: RankedSearchResultItem[]): SearchResultItem[] {
 function stripRankBucket(item: RankedSearchResultItem): SearchResultItem {
   const { __rankBucket: _rankBucket, ...rest } = item;
   return rest;
-}
-
-function isRgItem(item: SearchResultItem): boolean {
-  return item.chunkId.startsWith('rg:') || item.symbol.id.startsWith('rg:');
 }

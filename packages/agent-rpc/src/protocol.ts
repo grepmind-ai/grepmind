@@ -244,7 +244,8 @@ export interface SearchResponsePayload {
 }
 
 export interface SearchExactQuery {
-  pattern: string;
+  pattern?: string;
+  patterns?: string[];
   regex?: boolean;
   caseSensitive?: boolean;
 }

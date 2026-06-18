@@ -17,7 +17,7 @@ async function main(): Promise<void> {
     'code_search',
     {
       description:
-        'Code and docs search over the current workspace. Describe intent in query. Optionally add exact.pattern for identifiers, strings, routes, config keys, error text, imports, or regex anchors that should appear in relevant files.',
+        'Code and docs search over the current workspace. Describe intent in query. Optionally add exact.patterns as local rg evidence scoped to semantic result paths for identifiers, strings, routes, config keys, error text, imports, or regex anchors.',
       inputSchema: codeSearchSchema,
     },
     codeSearchTool,

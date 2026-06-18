@@ -88,7 +88,7 @@ This MCP server exposes `code_search` and `grepmind_agent_status`.
 Finds code or documentation in the startup workspace. Use `query` to describe
 intent in natural language. When you know a concrete identifier, string, route,
 config key, error text, import path, function name, or regex anchor, add
-`exact.pattern` as an additional local signal.
+`exact.patterns` as an additional local signal.
 
 Input fields:
 
@@ -101,7 +101,7 @@ Input fields:
 | `rerank`       | `boolean`          | Optional semantic reranking. Defaults to `false`.                                 |
 | `path`         | `string`           | Optional relative path prefix filter, such as `src/api`.                          |
 | `tags`         | `string[]`         | Optional docs tag filter.                                                         |
-| `exact`        | `object`           | Optional local exact search signal for `rg`: `pattern`, `regex`, `caseSensitive`. |
+| `exact`        | `object`           | Optional local exact search signal for `rg`: `patterns`, `pattern`, `regex`, `caseSensitive`. |
 | `globs`        | `string[]`         | Optional local `rg` glob scopes. Not raw `rg` flags.                              |
 | `contextLines` | `number`           | Optional local `rg` context lines. Defaults to `2`, maximum `10`.                 |
 | `compact`      | `boolean`          | Optional compact output without full previews.                                    |
@@ -114,8 +114,7 @@ Example tool input:
 {
   "query": "where repository settings are validated before save",
   "exact": {
-    "pattern": "safeParse|z\\.object|validate",
-    "regex": true
+    "patterns": ["safeParse", "z.object", "validate"]
   },
   "target": "code",
   "path": "packages/app/src",
@@ -125,11 +124,12 @@ Example tool input:
 
 Exact search is handled by the local agent runtime with system `rg` after the
 current workspace HEAD has been resolved to an indexed revision. The backend
-receives the semantic query only; it does not receive `exact.pattern`, `globs`,
-local working tree context, or local `rg` matches. When `tags` are provided,
-local `rg` is skipped because tags are semantic/docs chunk metadata. Exact
-search is case-insensitive by default; set `exact.caseSensitive` to `true` for a
-case-sensitive local `rg` signal.
+receives the semantic query only; it does not receive `exact.patterns`, `globs`,
+local working tree context, or local `rg` matches. Exact search runs only inside
+paths returned by semantic search and is added back as evidence on semantic
+results. When `tags` are provided, local `rg` is skipped because tags are
+semantic/docs chunk metadata. Exact search is case-insensitive by default; set
+`exact.caseSensitive` to `true` for a case-sensitive local `rg` signal.
 
 ### `grepmind_agent_status`
 

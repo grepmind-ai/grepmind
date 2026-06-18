@@ -12,9 +12,41 @@ import { ensureMcpRuntimePrepared } from '../runtime-context.js';
 const DEFAULT_SEARCH_LIMIT = 10;
 const MAX_SEARCH_LIMIT = 100;
 const MAX_EXACT_PATTERN_LENGTH = 500;
+const MAX_EXACT_PATTERN_COUNT = 20;
 const MAX_GLOB_COUNT = 20;
 const MAX_GLOB_LENGTH = 200;
 const MAX_CONTEXT_LINES = 10;
+
+const exactSearchSchema = z
+  .object({
+    pattern: z.string().min(1).max(MAX_EXACT_PATTERN_LENGTH).optional(),
+    patterns: z
+      .array(z.string().min(1).max(MAX_EXACT_PATTERN_LENGTH))
+      .max(MAX_EXACT_PATTERN_COUNT)
+      .optional(),
+    regex: z.boolean().optional(),
+    caseSensitive: z.boolean().optional(),
+  })
+  .superRefine((exact, context) => {
+    const patterns = [
+      ...new Set([
+        ...(exact.pattern ? [exact.pattern] : []),
+        ...(exact.patterns ?? []),
+      ]),
+    ];
+    if (patterns.length === 0) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'exact.pattern or exact.patterns must be provided',
+      });
+    }
+    if (patterns.length > MAX_EXACT_PATTERN_COUNT) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `exact.patterns must contain at most ${MAX_EXACT_PATTERN_COUNT} entries`,
+      });
+    }
+  });
 
 export const codeSearchSchema = z
   .object({
@@ -22,7 +54,7 @@ export const codeSearchSchema = z
       .string()
       .min(1)
       .describe(
-        'Describe the code or docs you need. Add exact.pattern when you know an identifier, string, route, config key, error text, import path, function name, or regex anchor.',
+        'Describe the code or docs you need. Add exact.patterns when you know identifiers, strings, routes, config keys, error text, imports, function names, or regex anchors.',
       ),
     target: z
       .enum(['code', 'docs'])
@@ -57,15 +89,10 @@ export const codeSearchSchema = z
       .array(z.string())
       .optional()
       .describe('Filter docs by tags (e.g., ["architecture", "guide"])'),
-    exact: z
-      .object({
-        pattern: z.string().min(1).max(MAX_EXACT_PATTERN_LENGTH),
-        regex: z.boolean().optional(),
-        caseSensitive: z.boolean().optional(),
-      })
+    exact: exactSearchSchema
       .optional()
       .describe(
-        'Optional exact local rg signal. Use pattern for identifiers, strings, routes, config keys, imports, error text, or regex anchors.',
+        'Optional local rg evidence signal scoped to semantic result paths. Use patterns for a batch of identifiers, strings, routes, config keys, imports, error text, or regex anchors. pattern remains supported for one value.',
       ),
     globs: z
       .array(z.string().min(1).max(MAX_GLOB_LENGTH))
@@ -175,7 +202,7 @@ export async function codeSearchTool(input: CodeSearchInput): Promise<{
         content: [
           {
             type: 'text',
-            text: 'No local agent HEAD results found. Try rephrasing, lowering threshold, adjusting path/tags, or adding exact.pattern when you know a concrete identifier or string.',
+            text: 'No local agent HEAD results found. Try rephrasing, lowering threshold, adjusting path/tags, or adding exact.patterns when you know concrete identifiers or strings.',
           },
         ],
         _meta: toResponseMeta('', results.length, input.limit, meta),
