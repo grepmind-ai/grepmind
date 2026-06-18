@@ -36,13 +36,6 @@
       "when": 1775306551188,
       "tag": "0004_brisk_kraken",
       "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "7",
-      "when": 1781790911079,
-      "tag": "0005_search_path_filters",
-      "breakpoints": true
     }
   ]
 }

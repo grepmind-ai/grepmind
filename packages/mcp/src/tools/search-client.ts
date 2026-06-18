@@ -91,16 +91,15 @@ export async function searchCode(params: {
     }
 
     const requestedLimit = params.limit ?? DEFAULT_SEARCH_LIMIT;
-    let searchLimit = requestedLimit;
-    if (params.exact != null) {
-      searchLimit = Math.min(
-        Math.max(
-          requestedLimit * FILTER_OVERFETCH_MULTIPLIER,
-          MIN_FILTER_OVERFETCH_LIMIT,
-        ),
-        MAX_FILTER_OVERFETCH_LIMIT,
-      );
-    }
+    const searchLimit = shouldOverfetch(params)
+      ? Math.min(
+          Math.max(
+            requestedLimit * FILTER_OVERFETCH_MULTIPLIER,
+            MIN_FILTER_OVERFETCH_LIMIT,
+          ),
+          MAX_FILTER_OVERFETCH_LIMIT,
+        )
+      : requestedLimit;
     const response = await client.searchHead({
       bindingId: workspaceContext.bindingId,
       query: params.query,
@@ -115,7 +114,11 @@ export async function searchCode(params: {
       contextLines: params.contextLines,
     });
 
-    return toSearchResponse(response, requestedLimit);
+    return toSearchResponse(response, {
+      path: params.path,
+      tags: params.tags,
+      limit: requestedLimit,
+    });
   } catch (error) {
     throw normalizeAgentSearchError(error, workspaceContext);
   }
@@ -151,10 +154,18 @@ async function requireSearchHeadExactCapability(
 
 function toSearchResponse(
   response: SearchHeadRpcResult,
-  limit: number,
+  filters: {
+    path?: string;
+    tags?: string[];
+    limit: number;
+  },
 ): SearchResponse {
   return {
-    results: response.items.slice(0, limit).map(toSearchResult),
+    results: response.items
+      .filter((item) => matchesPathFilter(item, filters.path))
+      .filter((item) => matchesTagsFilter(item, filters.tags))
+      .slice(0, filters.limit)
+      .map(toSearchResult),
     meta: {
       semanticResults: response.meta.semanticResults,
       rgResults: response.meta.rgResults,
@@ -166,6 +177,18 @@ function toSearchResponse(
       durationMs: response.meta.durationMs,
     },
   };
+}
+
+function shouldOverfetch(params: {
+  exact?: SearchExactQuery;
+  path?: string;
+  tags?: string[];
+}): boolean {
+  return (
+    params.exact != null ||
+    Boolean(params.path?.trim()) ||
+    normalizeTags(params.tags).length > 0
+  );
 }
 
 function toSearchResult(item: SearchResultItem): SearchResult {
@@ -186,6 +209,34 @@ function toSearchResult(item: SearchResultItem): SearchResult {
     score: item.score,
     content: item.previewText,
   };
+}
+
+function matchesPathFilter(
+  item: SearchResultItem,
+  pathFilter: string | undefined,
+): boolean {
+  const normalized = pathFilter?.trim().replace(/^\/+/, '');
+  if (!normalized) {
+    return true;
+  }
+
+  return (
+    item.relativePath === normalized ||
+    item.relativePath.startsWith(`${normalized}/`)
+  );
+}
+
+function matchesTagsFilter(
+  item: SearchResultItem,
+  tagsFilter: string[] | undefined,
+): boolean {
+  const normalized = normalizeTags(tagsFilter);
+  if (normalized.length === 0) {
+    return true;
+  }
+
+  const itemTags = new Set(item.tags.map((tag) => tag.toLowerCase()));
+  return normalized.every((tag) => itemTags.has(tag));
 }
 
 function normalizeTags(tags: string[] | undefined): string[] {
@@ -214,7 +265,7 @@ function normalizeAgentSearchError(
 
   if (isRuntimeUnavailableError(error)) {
     return new Error(
-      `Grepmind agent runtime stopped after MCP startup for ${workspaceContext.dataDir}. Start the agent runtime, then restart this MCP server.`,
+      `Grepmind agent runtime stopped after MCP startup for ${workspaceContext.dataDir}. Restart this MCP server to prepare the bundled runtime again.`,
     );
   }
 

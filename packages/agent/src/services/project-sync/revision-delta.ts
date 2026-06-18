@@ -244,32 +244,22 @@ async function upsertRevisionFile(
       binding_id,
       revision_id,
       file_id,
-      path,
       artifact_ref,
       updated_at
     )
-    VALUES ($1, $2, $3, $4, $5, $6)
+    VALUES ($1, $2, $3, $4, $5)
     ON CONFLICT (binding_id, revision_id, file_id) DO UPDATE
-    SET path = excluded.path,
-        artifact_ref = excluded.artifact_ref,
+    SET artifact_ref = excluded.artifact_ref,
         updated_at = excluded.updated_at
     `,
     [
       bindingId,
       revisionId,
       file.fileId,
-      normalizeRevisionFilePath(file.path),
       file.artifactRef ?? null,
       new Date().toISOString(),
     ],
   );
-}
-
-function normalizeRevisionFilePath(value: string): string {
-  return value
-    .trim()
-    .replace(/^[/\\]+/, '')
-    .replaceAll('\\', '/');
 }
 
 async function persistAttachmentState(
