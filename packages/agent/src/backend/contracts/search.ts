@@ -5,7 +5,6 @@ export interface SearchFilters {
   connectionId?: number;
   bindingId: number;
   revisionId: number;
-  path?: string;
   tags?: string[];
 }
 
@@ -64,7 +63,6 @@ export interface SearchRequestPayload {
   limit?: number;
   threshold?: number;
   rerank?: boolean;
-  path?: string;
   tags?: string[];
 }
 

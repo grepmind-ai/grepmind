@@ -1,11 +1,14 @@
+import { access, readFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import process from 'node:process';
 import {
   AgentRuntimeClient,
   AgentRuntimeClientError,
+  ensureAgentReady,
   ensureWorkspaceRegistered,
-  isRuntimeUnavailableError,
   resolveAgentDataDir,
+  type AgentControlCommand,
   type LocalProjectRecord,
 } from '@grepmind/agent-rpc';
 
@@ -16,6 +19,11 @@ export interface McpWorkspaceContext {
   bindingId: number;
   dataDir: string;
   project: LocalProjectRecord;
+  agentEntrypointPath: string;
+}
+
+interface BundledAgentCommand extends AgentControlCommand {
+  entrypointPath: string;
 }
 
 let cachedContext: McpWorkspaceContext | null = null;
@@ -28,18 +36,28 @@ export async function prepareMcpRuntime(options: {
   const workspacePath = path.resolve(options.workspacePath);
   const dataDir = resolveAgentDataDir(process.env.GREPMIND_AGENT_DATA_DIR);
   const startupTimeoutMs = resolveMcpStartupTimeoutMs();
-  const client = new AgentRuntimeClient(dataDir);
+  const agentCommand = await resolveBundledAgentCommand();
+  const hostname = process.env.GREPMIND_AGENT_HOSTNAME?.trim() || undefined;
 
   try {
-    await client.ping();
+    await ensureAgentReady({
+      dataDir,
+      hostname,
+      noOpen: false,
+      timeoutMs: startupTimeoutMs,
+      command: agentCommand,
+    });
   } catch (error) {
     throw normalizeStartupPreparationError(error, {
       workspacePath,
       dataDir,
       startupTimeoutMs,
+      agentEntrypointPath: agentCommand.entrypointPath,
+      hostname,
     });
   }
 
+  const client = new AgentRuntimeClient(dataDir);
   const project = await ensureWorkspaceRegistered({
     client,
     workspacePath,
@@ -53,6 +71,7 @@ export async function prepareMcpRuntime(options: {
     bindingId: project.bindingId,
     dataDir,
     project,
+    agentEntrypointPath: agentCommand.entrypointPath,
   };
 
   return cachedContext;
@@ -102,6 +121,51 @@ export function getReadyAgentRuntimeClient(): AgentRuntimeClient {
   return cachedRuntimeClient;
 }
 
+export async function resolveBundledAgentCommand(): Promise<BundledAgentCommand> {
+  let packageJsonPath: string;
+  try {
+    packageJsonPath = createRequire(import.meta.url).resolve(
+      '@grepmind/agent/package.json',
+    );
+  } catch (error) {
+    throw new Error(
+      `Grepmind MCP installation is incomplete: bundled @grepmind/agent package was not found. Reinstall @grepmind/mcp. ${formatError(error)}`,
+    );
+  }
+
+  const packageRoot = path.dirname(packageJsonPath);
+  const packageJson = JSON.parse(
+    await readFile(packageJsonPath, 'utf8'),
+  ) as Partial<{
+    bin: Record<string, string> | string;
+  }>;
+  const bin =
+    typeof packageJson.bin === 'string'
+      ? packageJson.bin
+      : packageJson.bin?.['grepmind-agent'];
+
+  if (!bin || typeof bin !== 'string') {
+    throw new Error(
+      'Grepmind MCP installation is incomplete: bundled @grepmind/agent does not declare a grepmind-agent bin. Reinstall @grepmind/mcp.',
+    );
+  }
+
+  const entrypointPath = path.resolve(packageRoot, bin);
+  try {
+    await access(entrypointPath);
+  } catch (error) {
+    throw new Error(
+      `Grepmind MCP installation is incomplete: bundled agent entrypoint was not found at ${entrypointPath}. Reinstall @grepmind/mcp. ${formatError(error)}`,
+    );
+  }
+
+  return {
+    command: process.execPath,
+    baseArgs: [entrypointPath],
+    entrypointPath,
+  };
+}
+
 export function resolveMcpStartupTimeoutMs(): number {
   const raw = process.env.GREPMIND_MCP_STARTUP_TIMEOUT_MS?.trim();
   if (!raw) {
@@ -124,14 +188,10 @@ function normalizeStartupPreparationError(
     workspacePath: string;
     dataDir: string;
     startupTimeoutMs: number;
+    agentEntrypointPath: string;
+    hostname?: string;
   },
 ): Error {
-  if (isRuntimeUnavailableError(error)) {
-    return new Error(
-      `Grepmind agent runtime is not running for ${context.dataDir}. Start it before starting MCP with "${formatAgentRunCommand(context.dataDir)}". MCP no longer starts the agent runtime automatically.`,
-    );
-  }
-
   if (error instanceof AgentRuntimeClientError) {
     const stableError = normalizeStableStartupError(error, context);
     if (stableError) {
@@ -142,7 +202,7 @@ function normalizeStartupPreparationError(
   const message = formatError(error);
   if (/timed out|timeout|RUNTIME_START_TIMEOUT/i.test(message)) {
     return new Error(
-      `Grepmind MCP startup timed out after ${context.startupTimeoutMs}ms while connecting to the agent runtime for ${context.workspacePath}. Start the agent before starting MCP with "${formatAgentRunCommand(context.dataDir)}". Original error: ${message}`,
+      `Grepmind MCP startup timed out after ${context.startupTimeoutMs}ms while preparing the bundled agent runtime for ${context.workspacePath}. If your MCP client has a short startup timeout, pre-login with "${formatAgentLoginCommand(context.agentEntrypointPath, context.dataDir, context.hostname ?? '<host>')}" and retry. Original error: ${message}`,
     );
   }
 
@@ -152,12 +212,12 @@ function normalizeStartupPreparationError(
     )
   ) {
     return new Error(
-      `Grepmind agent authentication and account selection are required before MCP can connect. Run "grepmind agent auth login --hostname <host> --data-dir ${quoteShellArg(context.dataDir)}" before starting the agent and MCP. Original error: ${message}`,
+      `Grepmind agent authentication and account selection are required before MCP can connect. Set GREPMIND_AGENT_HOSTNAME so startup can open OAuth/account selection, or pre-login with "${formatAgentLoginCommand(context.agentEntrypointPath, context.dataDir, context.hostname ?? '<host>')}". Original error: ${message}`,
     );
   }
 
   return new Error(
-    `Grepmind MCP could not connect to the agent runtime for ${context.workspacePath}: ${message}`,
+    `Grepmind MCP could not prepare the bundled agent runtime for ${context.workspacePath}: ${message}`,
   );
 }
 
@@ -167,6 +227,8 @@ function normalizeStableStartupError(
     workspacePath: string;
     dataDir: string;
     startupTimeoutMs: number;
+    agentEntrypointPath: string;
+    hostname?: string;
   },
 ): Error | null {
   switch (error.code) {
@@ -178,7 +240,7 @@ function normalizeStableStartupError(
     case 'AGENT_ACCOUNT_SESSION_REVOKED':
     case 'AGENT_UPGRADE_REQUIRED':
       return new Error(
-        `Grepmind agent authentication and account selection are required before MCP can connect. Run "grepmind agent auth login --hostname <host> --data-dir ${quoteShellArg(context.dataDir)}" before starting the agent and MCP.`,
+        `Grepmind agent authentication and account selection are required before MCP can connect. Set GREPMIND_AGENT_HOSTNAME so startup can open OAuth/account selection, or pre-login with "${formatAgentLoginCommand(context.agentEntrypointPath, context.dataDir, context.hostname ?? '<host>')}".`,
       );
     case 'ACCOUNT_SUSPENDED':
       return new Error(
@@ -202,12 +264,18 @@ function normalizeStableStartupError(
   }
 }
 
-function formatAgentRunCommand(dataDir: string): string {
+function formatAgentLoginCommand(
+  agentEntrypointPath: string,
+  dataDir: string,
+  hostname: string,
+): string {
   return formatCommand([
-    'grepmind',
-    'agent',
-    'run',
-    '--detach',
+    process.execPath,
+    agentEntrypointPath,
+    'auth',
+    'login',
+    '--hostname',
+    hostname,
     '--data-dir',
     dataDir,
   ]);

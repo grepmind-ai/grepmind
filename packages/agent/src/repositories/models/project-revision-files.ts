@@ -6,7 +6,6 @@ export const projectRevisionFiles = pgTable(
     bindingId: bigint('binding_id', { mode: 'number' }).notNull(),
     revisionId: bigint('revision_id', { mode: 'number' }).notNull(),
     fileId: bigint('file_id', { mode: 'number' }).notNull(),
-    path: text('path').notNull().default(''),
     artifactRef: text('artifact_ref'),
     updatedAt: text('updated_at').notNull(),
   },
@@ -20,11 +19,6 @@ export const projectRevisionFiles = pgTable(
       table.bindingId,
       table.revisionId,
       table.artifactRef,
-    ),
-    index('project_revision_files_binding_revision_path_idx').on(
-      table.bindingId,
-      table.revisionId,
-      table.path,
     ),
   ],
 );

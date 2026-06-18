@@ -107,11 +107,6 @@ export function normalizeSearchRequestPayload(
     return { ok: false, error: 'rerank must be a boolean' };
   }
 
-  const path = normalizePathFilter(data.path);
-  if (path === null) {
-    return { ok: false, error: 'path must be a string' };
-  }
-
   const tags = normalizeTags(data.tags);
   if (data.tags != null && tags == null) {
     return { ok: false, error: 'tags must be an array of strings' };
@@ -128,7 +123,6 @@ export function normalizeSearchRequestPayload(
       limit: limit ?? undefined,
       threshold: threshold ?? undefined,
       rerank: false,
-      path: path ?? undefined,
       tags: tags ?? undefined,
     },
   };
@@ -314,18 +308,11 @@ function normalizeSearchQuery(
   const revisionId = normalizePositiveInteger(
     (filtersValue as { revisionId?: unknown }).revisionId,
   );
-  const path = normalizePathFilter((filtersValue as { path?: unknown }).path);
   const tags = normalizeTags((filtersValue as { tags?: unknown }).tags);
   if (bindingId == null || revisionId == null) {
     return {
       ok: false,
       error: 'query.filters.bindingId and revisionId must be positive integers',
-    };
-  }
-  if (path === null) {
-    return {
-      ok: false,
-      error: 'query.filters.path must be a string',
     };
   }
   if ((filtersValue as { tags?: unknown }).tags != null && tags == null) {
@@ -352,7 +339,6 @@ function normalizeSearchQuery(
       filters: {
         bindingId,
         revisionId,
-        path: path ?? undefined,
         tags: tags ?? undefined,
       },
       fuzziness: normalizeOptionalFiniteNumber(
@@ -459,21 +445,6 @@ function normalizeOptionalString(value: unknown): string | undefined {
   }
 
   return typeof value === 'string' ? value : undefined;
-}
-
-function normalizePathFilter(value: unknown): string | null | undefined {
-  if (value == null) {
-    return undefined;
-  }
-  if (typeof value !== 'string') {
-    return null;
-  }
-
-  const normalized = value
-    .trim()
-    .replace(/^[/\\]+/, '')
-    .replaceAll('\\', '/');
-  return normalized || undefined;
 }
 
 function normalizeSearchTarget(value: unknown): SearchTarget | null {
