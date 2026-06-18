@@ -1,5 +1,11 @@
 # @grepmind/mcp
 
+## 0.3.1
+
+### Patch Changes
+
+- f8c6c0c: Add path-scoped search filtering and make MCP require an already running agent runtime.
+
 ## 0.3.0
 
 ### Minor Changes
