@@ -37,12 +37,13 @@ export function normalizeContextPackMarkdown(
 export function summarizeContextPackForLimit(input: {
   contextPackMarkdown: string;
   maxOutputBytes: number;
+  fullContextPackPath: string;
   runtimeDurationMs?: number;
 }): string {
   const parsed = parseContextPackMarkdown(input.contextPackMarkdown, {
     runtimeDurationMs: input.runtimeDurationMs,
   });
-  const suffix = '\n\n[context_layer output truncated.]';
+  const suffix = `\n\n[context_layer output truncated. Full context_pack saved at ${input.fullContextPackPath}.]`;
   const suffixBytes = byteLength(suffix);
   const minimal = renderContextPack(
     parsed.sections.map((section) => ({
@@ -50,7 +51,7 @@ export function summarizeContextPackForLimit(input: {
       content:
         section.heading === '# context_pack'
           ? ''
-          : '[section omitted because output exceeded the response limit.]',
+          : '[section omitted. See full context_pack path below.]',
     })),
   );
 

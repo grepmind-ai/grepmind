@@ -62,7 +62,7 @@ export async function verifyCodexCliShape(codexBin: string): Promise<void> {
     '--cd',
     '--ephemeral',
     '--color',
-    '--json',
+    '--output-last-message',
     '--profile',
   ].filter((flag) => !execHelp.output.includes(flag));
   if (!execHelp.ok || missingExecFlags.length > 0) {

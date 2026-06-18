@@ -1,9 +1,9 @@
 import { spawn } from 'node:child_process';
+import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import { resolveCodexCliPath, verifyCodexCliShape } from './codex-cli.js';
-import {
-  formatDiagnosticTail,
-  formatProcessDiagnosticTail,
-} from './context-layer-diagnostics.js';
+import { formatDiagnosticTail } from './context-layer-diagnostics.js';
 import { ContextLayerError } from './context-layer-errors.js';
 import {
   toCodexReasoningEffort,
@@ -38,6 +38,7 @@ export interface CodexSubagentRunInput {
   truncateOutput?: (input: {
     output: string;
     maxOutputBytes: number;
+    outputPath: string;
     runtimeDurationMs: number;
   }) => string;
 }
@@ -58,8 +59,11 @@ export async function runCodexSubagent(
   await verifyCodexCliShape(codexBin);
   await verifyContextLayerSubagentProfile(codexBin, input.workspacePath);
 
+  const runDir = await createRunDir();
+  const outputPath = path.join(runDir, 'last-message.md');
   const args = buildCodexExecArgs({
     workspacePath: input.workspacePath,
+    outputPath,
     modelName: input.modelName,
     modelThinking: input.modelThinking,
   });
@@ -69,10 +73,6 @@ export async function runCodexSubagent(
     prompt: input.prompt,
     cwd: input.workspacePath,
     timeoutMs: input.timeoutMs,
-    stdoutMaxBytes: Math.max(
-      DIAGNOSTIC_TAIL_BYTES,
-      input.maxOutputBytes + 64_000,
-    ),
   });
   const runtimeDurationMs = Date.now() - startedAt;
 
@@ -100,28 +100,28 @@ export async function runCodexSubagent(
     );
   }
 
-  const contextPackMarkdown = readLastMessageFromStdout(
-    processResult.stdoutTail,
-    {
-      runtimeDurationMs,
-      stderrTail: processResult.stderrTail,
-      normalizeOutput: input.normalizeOutput,
-    },
-  );
+  const contextPackMarkdown = await readLastMessage(outputPath, {
+    runtimeDurationMs,
+    stderrTail: processResult.stderrTail,
+    normalizeOutput: input.normalizeOutput,
+  });
   const outputBytes = Buffer.byteLength(contextPackMarkdown, 'utf8');
   if (outputBytes > input.maxOutputBytes) {
     return {
       contextPackMarkdown: (input.truncateOutput ?? truncateContextPack)({
         output: contextPackMarkdown,
         maxOutputBytes: input.maxOutputBytes,
+        outputPath,
         runtimeDurationMs,
       }),
+      contextPackPath: outputPath,
       runtimeDurationMs,
       truncated: true,
       timeout: false,
     };
   }
 
+  void rm(runDir, { recursive: true, force: true });
   return {
     contextPackMarkdown,
     runtimeDurationMs,
@@ -166,6 +166,7 @@ export function resolveContextLayerMaxOutputBytes(): number {
 
 export function buildCodexExecArgs(input: {
   workspacePath: string;
+  outputPath: string;
   modelName: string;
   modelThinking: ContextLayerThinking;
 }): string[] {
@@ -192,7 +193,8 @@ export function buildCodexExecArgs(input: {
     '--ephemeral',
     '--color',
     'never',
-    '--json',
+    '--output-last-message',
+    input.outputPath,
     '-',
   ];
 
@@ -205,7 +207,6 @@ function runCodexProcess(input: {
   prompt: string;
   cwd: string;
   timeoutMs: number;
-  stdoutMaxBytes?: number;
 }): Promise<{
   exitCode: number | null;
   signal: NodeJS.Signals | null;
@@ -217,9 +218,7 @@ function runCodexProcess(input: {
   return new Promise((resolve) => {
     let settled = false;
     let timedOut = false;
-    const stdout = new TailBuffer(
-      input.stdoutMaxBytes ?? DIAGNOSTIC_TAIL_BYTES,
-    );
+    const stdout = new TailBuffer(DIAGNOSTIC_TAIL_BYTES);
     const stderr = new TailBuffer(DIAGNOSTIC_TAIL_BYTES);
     const child = spawn(input.codexBin, input.args, {
       cwd: input.cwd,
@@ -281,8 +280,8 @@ function runCodexProcess(input: {
   });
 }
 
-function readLastMessageFromStdout(
-  stdoutTail: string,
+async function readLastMessage(
+  outputPath: string,
   context: {
     runtimeDurationMs: number;
     stderrTail: string;
@@ -291,47 +290,34 @@ function readLastMessageFromStdout(
       context: { runtimeDurationMs: number; stderrTail: string },
     ) => string;
   },
-): string {
-  const lines = stdoutTail.split(/\r?\n/).filter(Boolean);
-  for (let index = lines.length - 1; index >= 0; index -= 1) {
-    const line = lines[index]?.trim();
-    if (!line?.startsWith('{')) {
-      continue;
-    }
-    try {
-      const event = JSON.parse(line) as {
-        type?: string;
-        item?: { type?: string; text?: unknown };
-      };
-      if (
-        event.type === 'item.completed' &&
-        event.item?.type === 'agent_message' &&
-        typeof event.item.text === 'string'
-      ) {
-        return (context.normalizeOutput ?? normalizeContextPackMarkdown)(
-          event.item.text,
-          context,
-        );
-      }
-    } catch {
-      // Ignore non-event JSON fragments from Codex diagnostics.
-    }
+): Promise<string> {
+  let raw: string;
+  try {
+    raw = await readFile(outputPath, 'utf8');
+  } catch {
+    throw new ContextLayerError(
+      'CODEX_SUBAGENT_EMPTY_OUTPUT',
+      `Codex context_layer subagent did not write an output message. ${formatDiagnosticTail(context.stderrTail)}`,
+      { runtimeDurationMs: context.runtimeDurationMs },
+    );
   }
-  throw new ContextLayerError(
-    'CODEX_SUBAGENT_EMPTY_OUTPUT',
-    `Codex context_layer subagent did not return an output message in stdout JSON events. ${formatDiagnosticTail(context.stderrTail)}`,
-    { runtimeDurationMs: context.runtimeDurationMs },
+
+  return (context.normalizeOutput ?? normalizeContextPackMarkdown)(
+    raw,
+    context,
   );
 }
 
 function truncateContextPack(input: {
   output: string;
   maxOutputBytes: number;
+  outputPath: string;
   runtimeDurationMs: number;
 }): string {
   return summarizeContextPackForLimit({
     contextPackMarkdown: input.output,
     maxOutputBytes: input.maxOutputBytes,
+    fullContextPackPath: input.outputPath,
     runtimeDurationMs: input.runtimeDurationMs,
   });
 }
@@ -339,12 +325,17 @@ function truncateContextPack(input: {
 function formatFailedExitMessage(result: {
   exitCode: number | null;
   signal: NodeJS.Signals | null;
-  stdoutTail: string;
   stderrTail: string;
 }): string {
   const exit =
     result.exitCode == null ? `signal ${result.signal}` : result.exitCode;
-  return `Codex context_layer subagent exited with ${exit}. ${formatProcessDiagnosticTail(result)}`;
+  return `Codex context_layer subagent exited with ${exit}. ${formatDiagnosticTail(result.stderrTail)}`;
+}
+
+async function createRunDir(): Promise<string> {
+  const root = path.join(os.tmpdir(), 'grepmind-context-layer');
+  await mkdir(root, { recursive: true });
+  return mkdtemp(path.join(root, 'run-'));
 }
 
 class TailBuffer {

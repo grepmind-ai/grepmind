@@ -1,9 +1,9 @@
 import { spawn } from 'node:child_process';
+import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import { resolveCodexCliPath, verifyCodexCliShape } from './codex-cli.js';
-import {
-  formatDiagnosticTail,
-  formatProcessDiagnosticTail,
-} from './context-layer-diagnostics.js';
+import { formatDiagnosticTail } from './context-layer-diagnostics.js';
 import { ContextLayerError } from './context-layer-errors.js';
 import {
   toCodexReasoningEffort,
@@ -36,8 +36,11 @@ export async function runPromptRefinerSubagent(
   const codexBin = await resolveCodexCliPath();
   await verifyCodexCliShape(codexBin);
 
+  const runDir = await createRunDir();
+  const outputPath = path.join(runDir, 'last-message.json');
   const args = buildPromptRefinerExecArgs({
     workspacePath: input.workspacePath,
+    outputPath,
     modelName: input.modelName,
     modelThinking: input.modelThinking,
   });
@@ -74,7 +77,7 @@ export async function runPromptRefinerSubagent(
     );
   }
 
-  const rawOutput = readLastMessageFromStdout(processResult.stdoutTail, {
+  const rawOutput = await readLastMessage(outputPath, {
     runtimeDurationMs,
     stderrTail: processResult.stderrTail,
   });
@@ -91,6 +94,7 @@ export async function runPromptRefinerSubagent(
     throw error;
   }
 
+  void rm(runDir, { recursive: true, force: true });
   return {
     output,
     runtimeDurationMs,
@@ -120,6 +124,7 @@ export function resolvePromptRefinerTimeoutMs(): number {
 
 function buildPromptRefinerExecArgs(input: {
   workspacePath: string;
+  outputPath: string;
   modelName: string;
   modelThinking: ContextLayerThinking;
 }): string[] {
@@ -146,7 +151,8 @@ function buildPromptRefinerExecArgs(input: {
     '--ephemeral',
     '--color',
     'never',
-    '--json',
+    '--output-last-message',
+    input.outputPath,
     '-',
   ];
 }
@@ -230,48 +236,35 @@ function runCodexProcess(input: {
   });
 }
 
-function readLastMessageFromStdout(
-  stdoutTail: string,
+async function readLastMessage(
+  outputPath: string,
   context: { runtimeDurationMs: number; stderrTail: string },
-): string {
-  const lines = stdoutTail.split(/\r?\n/).filter(Boolean);
-  for (let index = lines.length - 1; index >= 0; index -= 1) {
-    const line = lines[index]?.trim();
-    if (!line?.startsWith('{')) {
-      continue;
-    }
-    try {
-      const event = JSON.parse(line) as {
-        type?: string;
-        item?: { type?: string; text?: unknown };
-      };
-      if (
-        event.type === 'item.completed' &&
-        event.item?.type === 'agent_message' &&
-        typeof event.item.text === 'string'
-      ) {
-        return event.item.text;
-      }
-    } catch {
-      // Ignore non-event JSON fragments from Codex diagnostics.
-    }
+): Promise<string> {
+  try {
+    return await readFile(outputPath, 'utf8');
+  } catch {
+    throw new ContextLayerError(
+      'PROMPT_REFINER_EMPTY_OUTPUT',
+      `Codex prompt-refiner did not write an output message. ${formatDiagnosticTail(context.stderrTail)}`,
+      { runtimeDurationMs: context.runtimeDurationMs },
+    );
   }
-  throw new ContextLayerError(
-    'PROMPT_REFINER_EMPTY_OUTPUT',
-    `Codex prompt-refiner did not return an output message in stdout JSON events. ${formatDiagnosticTail(context.stderrTail)}`,
-    { runtimeDurationMs: context.runtimeDurationMs },
-  );
 }
 
 function formatFailedExitMessage(result: {
   exitCode: number | null;
   signal: NodeJS.Signals | null;
-  stdoutTail: string;
   stderrTail: string;
 }): string {
   const exit =
     result.exitCode == null ? `signal ${result.signal}` : result.exitCode;
-  return `Codex prompt-refiner exited with ${exit}. ${formatProcessDiagnosticTail(result)}`;
+  return `Codex prompt-refiner exited with ${exit}. ${formatDiagnosticTail(result.stderrTail)}`;
+}
+
+async function createRunDir(): Promise<string> {
+  const root = path.join(os.tmpdir(), 'grepmind-context-layer-prompt-refiner');
+  await mkdir(root, { recursive: true });
+  return mkdtemp(path.join(root, 'run-'));
 }
 
 class TailBuffer {

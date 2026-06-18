@@ -22,24 +22,6 @@ export function formatDiagnosticTail(value: string | undefined): string {
     : 'No safe stderr diagnostics were produced.';
 }
 
-export function formatProcessDiagnosticTail(input: {
-  stderrTail?: string;
-  stdoutTail?: string;
-}): string {
-  const stderrText = safeDiagnosticText(input.stderrTail);
-  const stdoutText = safeDiagnosticText(input.stdoutTail);
-  const parts: string[] = [];
-  if (stderrText) {
-    parts.push(`stderr tail: ${stderrText}`);
-  }
-  if (stdoutText) {
-    parts.push(`stdout tail: ${stdoutText}`);
-  }
-  return parts.length > 0
-    ? parts.join('\n')
-    : 'No safe process diagnostics were produced.';
-}
-
 export function safeDiagnosticText(value: string | undefined): string {
   const lines = stripAnsi(value ?? '')
     .split(/\r?\n/)
